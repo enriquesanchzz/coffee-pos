@@ -1,0 +1,851 @@
+// =========================================================================
+// Nomada Café POS — Fase 0
+// Schema base derivado de ADR-001 + Respuestas Fase 0 (modelo de datos)
+// =========================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =========================================================================
+// ENUMS
+// =========================================================================
+
+enum UnitOfMeasure {
+  KG // kilogramo
+  G // gramo
+  L // litro
+  ML // mililitro
+  PUMP // pump de jarabe
+  PIEZA // unidad/pieza
+  CUCHARADA // cucharada (topping)
+  ESPRESSO_SHOT // unidad de espresso (18g)
+}
+
+enum IngredientCategory {
+  CAFE
+  JARABES
+  LECHE
+  TOPPINGS
+  INSUMOS // vasos, tapas, popotes, servilletas, etc.
+}
+
+enum IngredientKind {
+  ATOMICO // se compra directo a proveedor
+  COMPUESTO // se arma con otros ingredientes vía Recipe, pero no se
+  // descuenta directo del inventario — ver Recipe.kind = COMPUESTO
+}
+
+enum ProductType {
+  RECETA // pasa por el modelo de receta/inventario por ingrediente
+  REVENTA_DIRECTA // ej. merch, café en bolsa, postres, bebidas de aparador
+}
+
+enum RecipeKind {
+  PRODUCTO_VENDIBLE // receta final de un ProductVariant
+  INGREDIENTE_COMPUESTO // ej. jarabe casero, usado dentro de otras recetas
+}
+
+enum RoleName {
+  ADMINISTRADOR
+  GERENTE
+  BARISTA
+  AUXILIAR
+}
+
+// Catálogo abierto de permisos atómicos, para no hardcodear reglas de rol
+// en código. Se asignan permisos a roles vía RolePermission.
+enum Permission {
+  VENTA_REALIZAR
+  VENTA_CANCELAR
+  DESCUENTO_APLICAR_CODIGO
+  DESCUENTO_MANUAL
+  PRECIO_MODIFICAR
+  DESCUENTO_CODIGO_CREAR
+  INVENTARIO_CONSULTAR
+  INVENTARIO_AJUSTAR
+  INVENTARIO_CREAR_ITEM
+  PRODUCTO_CREAR
+  RECETA_CREAR
+  RECETA_MODIFICAR
+  COMPRA_REGISTRAR
+  ORDEN_COMPRA_CREAR
+  DEVOLUCION_REALIZAR
+  CAJA_ABRIR
+  CAJA_CERRAR
+  CAJA_CORTE_AUTORIZAR
+  CAJA_CHICA_MODIFICAR
+  EMPLEADO_CREAR
+  EMPLEADO_MODIFICAR
+  EMPLEADO_ELIMINAR
+  REPORTE_UTILIDAD_VER
+  REPORTE_UTILIDAD_CREAR
+  REPORTE_INVENTARIO_VER
+  REPORTE_INVENTARIO_CREAR
+  ESTADISTICAS_GESTIONAR
+  CLIENTE_CONFIGURAR
+  ASISTENCIA_CHECAR
+  MENU_CONSULTAR
+  // Exclusivos de ADMINISTRADOR — ningún otro rol los recibe en el seed.
+  SUCURSAL_GESTIONAR // crear, editar o cerrar sucursales
+  REPORTE_CONSOLIDADO_VER // reportes agregados de TODAS las sucursales
+  CONFIGURACION_SISTEMA_GESTIONAR // impuestos, día operativo, config global
+}
+
+enum MovementType {
+  VENTA
+  COMPRA
+  TRANSFERENCIA_ENTRADA
+  TRANSFERENCIA_SALIDA
+  MERMA
+  AJUSTE_MANUAL
+  MUESTRA_GRATIS
+  CONTEO_FISICO_AJUSTE
+}
+
+enum ShiftType {
+  MATUTINO
+  VESPERTINO
+}
+
+enum ShiftStatus {
+  ABIERTO
+  CERRADO
+}
+
+enum PaymentMethod {
+  EFECTIVO
+  TARJETA
+  TRANSFERENCIA
+}
+
+enum CashMovementType {
+  RETIRO
+  INGRESO
+}
+
+enum SaleStatus {
+  COMPLETADA
+  CANCELADA
+}
+
+enum DiscountType {
+  PORCENTAJE
+  MONTO_FIJO
+}
+
+enum StockLocationType {
+  BODEGA_CENTRAL
+  SUCURSAL
+}
+
+enum PhysicalCountStatus {
+  ABIERTO
+  PENDIENTE_APROBACION
+  APROBADO
+  RECHAZADO
+}
+
+// =========================================================================
+// SUCURSALES / UBICACIONES
+// =========================================================================
+
+model Branch {
+  id        String   @id @default(cuid())
+  name      String
+  address   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employeeBranches EmployeeBranch[]
+  branchProducts   BranchProduct[]
+  stockLocations   StockLocation[]
+  shifts           Shift[]
+  sales            Sale[]
+  purchaseOrders   PurchaseOrder[]
+  movements        InventoryMovement[] @relation("MovementBranch")
+  transfersOut     InventoryMovement[] @relation("TransferOutBranch")
+  transfersIn      InventoryMovement[] @relation("TransferInBranch")
+  physicalCounts   PhysicalCount[]
+
+  @@map("branches")
+}
+
+// Cada sucursal tiene su propia ubicación de stock; además existe UNA
+// ubicación tipo BODEGA_CENTRAL (branchId nulo) que surte a las sucursales.
+model StockLocation {
+  id       String            @id @default(cuid())
+  type     StockLocationType
+  name     String
+  branchId String?
+  branch   Branch?           @relation(fields: [branchId], references: [id])
+
+  stocks    InventoryStock[]
+  batches   IngredientBatch[]
+  movements InventoryMovement[]
+
+  @@map("stock_locations")
+}
+
+// =========================================================================
+// INGREDIENTES / INSUMOS
+// =========================================================================
+
+model Ingredient {
+  id                String             @id @default(cuid())
+  name              String
+  category          IngredientCategory
+  kind              IngredientKind     @default(ATOMICO)
+  baseUnit          UnitOfMeasure // unidad en la que se descuenta del inventario
+  purchaseUnit      UnitOfMeasure // unidad en la que normalmente se compra
+  tracksExpiration  Boolean            @default(true)
+  isActive          Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  suppliers          IngredientSupplier[]
+  batches            IngredientBatch[]
+  stocks             InventoryStock[]
+  recipeItems        RecipeIngredient[]
+  modifierOptions    ModifierOption[]
+  movements          InventoryMovement[]
+  purchaseOrderItems PurchaseOrderItem[]
+  physicalCountLines PhysicalCountLine[]
+
+  @@map("ingredients")
+}
+
+model Supplier {
+  id        String   @id @default(cuid())
+  name      String
+  contact   String?
+  phone     String?
+  email     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  ingredientLinks IngredientSupplier[]
+  purchaseOrders  PurchaseOrder[]
+
+  @@map("suppliers")
+}
+
+// Un ingrediente puede tener varios proveedores, cada uno con su propio
+// costo. `isSelected` marca cuál costo se usa para calcular costo de receta.
+model IngredientSupplier {
+  id           String     @id @default(cuid())
+  ingredientId String
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
+  supplierId   String
+  supplier     Supplier   @relation(fields: [supplierId], references: [id])
+  cost         Decimal    @db.Decimal(10, 4)
+  costUnit     UnitOfMeasure
+  isSelected   Boolean    @default(false) // costo "activo" para cálculo
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([ingredientId, supplierId])
+  @@map("ingredient_suppliers")
+}
+
+// Lotes por caducidad — el saldo agregado vive en InventoryStock; el lote
+// permite trazabilidad y alertas de caducidad.
+model IngredientBatch {
+  id              String        @id @default(cuid())
+  ingredientId    String
+  ingredient      Ingredient    @relation(fields: [ingredientId], references: [id])
+  stockLocationId String
+  stockLocation   StockLocation @relation(fields: [stockLocationId], references: [id])
+  quantity        Decimal       @db.Decimal(12, 4)
+  unit            UnitOfMeasure
+  expirationDate  DateTime?
+  receivedAt      DateTime      @default(now())
+  purchaseOrderItemId String?
+  purchaseOrderItem   PurchaseOrderItem? @relation(fields: [purchaseOrderItemId], references: [id])
+
+  @@map("ingredient_batches")
+}
+
+// Saldo agregado por ingrediente + ubicación (bodega central o sucursal).
+model InventoryStock {
+  id              String        @id @default(cuid())
+  ingredientId    String
+  ingredient      Ingredient    @relation(fields: [ingredientId], references: [id])
+  stockLocationId String
+  stockLocation   StockLocation @relation(fields: [stockLocationId], references: [id])
+  quantity        Decimal       @db.Decimal(12, 4) // siempre en Ingredient.baseUnit
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([ingredientId, stockLocationId])
+  @@map("inventory_stocks")
+}
+
+// Registro de conversión entre unidades (ej. 1 L = 1000 ML, 1 espresso = 18 G)
+model UnitConversion {
+  id       String        @id @default(cuid())
+  fromUnit UnitOfMeasure
+  toUnit   UnitOfMeasure
+  factor   Decimal       @db.Decimal(12, 6) // multiplicar fromUnit * factor = toUnit
+
+  @@unique([fromUnit, toUnit])
+  @@map("unit_conversions")
+}
+
+// =========================================================================
+// PRODUCTOS / VARIANTES / RECETAS
+// =========================================================================
+
+model ProductCategory {
+  id       String            @id @default(cuid())
+  name     String            @unique // ej. "Café caliente", "Café frío", "Sin café", "Cafe de expendio"
+  products Product[]
+
+  @@map("product_categories")
+}
+
+model Product {
+  id         String          @id @default(cuid())
+  name       String // ej. "Latte", "Capuccino", "Cold Brew"
+  categoryId String
+  category   ProductCategory @relation(fields: [categoryId], references: [id])
+  type       ProductType     @default(RECETA)
+  isActive   Boolean         @default(true)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  variants       ProductVariant[]
+  branchProducts BranchProduct[]
+  comboItems     ComboItem[]
+
+  @@map("products")
+}
+
+// Tamaño / variante — cada variante tiene su propia receta independiente.
+model ProductVariant {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  name      String // ej. "Chico", "Mediano", "Grande", "Único", "Por Kilo"
+  price     Decimal  @db.Decimal(10, 2)
+  isActive  Boolean  @default(true)
+
+  recipes         Recipe[]
+  modifierGroups  VariantModifierGroup[]
+  saleItems       SaleItem[]
+  comboItems      ComboItem[]
+
+  @@map("product_variants")
+}
+
+// Disponibilidad de producto por sucursal — cada sucursal puede tener su
+// propio subconjunto de catálogo, y se puede marcar inactivo/agotado sin
+// borrar del catálogo global.
+model BranchProduct {
+  id        String  @id @default(cuid())
+  branchId  String
+  branch    Branch  @relation(fields: [branchId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  isActive  Boolean @default(true) // agotado / fuera de temporada en esa sucursal
+
+  @@unique([branchId, productId])
+  @@map("branch_products")
+}
+
+// Receta versionada — cada cambio genera una nueva versión, preservando
+// historial para costeo retroactivo de ventas pasadas.
+model Recipe {
+  id               String          @id @default(cuid())
+  kind             RecipeKind      @default(PRODUCTO_VENDIBLE)
+  productVariantId String?
+  productVariant   ProductVariant? @relation(fields: [productVariantId], references: [id])
+  // Cuando kind = INGREDIENTE_COMPUESTO, esta receta representa cómo se
+  // arma un ingrediente compuesto (ej. jarabe casero) y no se liga a un
+  // ProductVariant sino que se referencia desde RecipeIngredient.composedById
+  name             String? // requerido cuando kind = INGREDIENTE_COMPUESTO
+
+  versions RecipeVersion[]
+  usedAsComposedIngredientIn RecipeIngredient[] @relation("ComposedIngredientUsage")
+
+  @@map("recipes")
+}
+
+model RecipeVersion {
+  id           String    @id @default(cuid())
+  recipeId     String
+  recipe       Recipe    @relation(fields: [recipeId], references: [id])
+  versionNumber Int
+  isActive     Boolean   @default(true) // sólo una versión activa a la vez por Recipe
+  effectiveFrom DateTime @default(now())
+  effectiveTo   DateTime?
+  notes        String? // ej. "cambio de marca de jarabe", "ajuste sin azúcar"
+
+  ingredients RecipeIngredient[]
+  saleItems   SaleItem[] // referencia a qué versión se usó al momento de la venta
+
+  @@unique([recipeId, versionNumber])
+  @@map("recipe_versions")
+}
+
+// Una línea de receta consume exactamente UNO de los dos:
+//   - un Ingredient atómico (ingredientId), o
+//   - un Recipe de tipo INGREDIENTE_COMPUESTO (composedRecipeId), ej. un
+//     jarabe casero que a su vez tiene su propia RecipeVersion con
+//     ingredientes atómicos.
+// Regla de negocio (no forzable nativamente en Prisma): exactamente uno de
+// ingredientId / composedRecipeId debe estar presente. Validar en app o
+// agregar un CHECK constraint vía migración SQL manual.
+// COSTO: no se almacena costo fijo en ningún lado. Se calcula SIEMPRE de
+// forma recursiva y automática en tiempo de consulta:
+//   costo(RecipeIngredient) =
+//     si ingredientId      -> quantity * IngredientSupplier.cost (isSelected=true)
+//     si composedRecipeId  -> quantity * (suma recursiva del costo de la
+//                              RecipeVersion activa de esa Recipe compuesta)
+// Esto asegura que el costo de un jarabe casero siempre refleje el costo
+// actual de sus insumos atómicos, sin mantenimiento manual. La app debe
+// prevenir ciclos (Receta A compuesta de B y B compuesta de A) al guardar,
+// ya que el schema no lo puede restringir.
+model RecipeIngredient {
+  id              String        @id @default(cuid())
+  recipeVersionId String
+  recipeVersion   RecipeVersion @relation(fields: [recipeVersionId], references: [id])
+
+  ingredientId String?
+  ingredient   Ingredient? @relation(fields: [ingredientId], references: [id])
+
+  composedRecipeId String?
+  composedRecipe   Recipe? @relation("ComposedIngredientUsage", fields: [composedRecipeId], references: [id])
+
+  quantity Decimal       @db.Decimal(12, 4)
+  unit     UnitOfMeasure
+
+  @@map("recipe_ingredients")
+}
+
+// =========================================================================
+// MODIFICADORES / EXTRAS
+// =========================================================================
+
+// Grupo de modificadores aplicable a una variante (ej. "Tipo de leche",
+// "Shots extra", "Jarabe adicional").
+model VariantModifierGroup {
+  id               String         @id @default(cuid())
+  productVariantId String
+  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id])
+  name             String
+  isRequired       Boolean        @default(false)
+  allowMultiple    Boolean        @default(false)
+
+  options ModifierOption[]
+
+  @@map("variant_modifier_groups")
+}
+
+// Cada opción puede descontar inventario de un ingrediente específico
+// (ej. "Shot extra" -> +1 ESPRESSO_SHOT de café; "Leche deslactosada" ->
+// sustituye el ingrediente leche).
+model ModifierOption {
+  id                     String                @id @default(cuid())
+  groupId                String
+  group                  VariantModifierGroup  @relation(fields: [groupId], references: [id])
+  name                   String // ej. "Shot extra", "Leche deslactosada", "Doble carga de chai"
+  priceDelta             Decimal               @default(0) @db.Decimal(10, 2)
+  ingredientId           String?
+  ingredient             Ingredient?           @relation(fields: [ingredientId], references: [id])
+  quantityDelta          Decimal?              @db.Decimal(12, 4) // cantidad a sumar/restar del ingrediente
+  unit                   UnitOfMeasure?
+  isSubstitution         Boolean               @default(false) // true = reemplaza ingrediente base en vez de sumar
+
+  saleItemModifiers SaleItemModifier[]
+
+  @@map("modifier_options")
+}
+
+// =========================================================================
+// COMBOS
+// =========================================================================
+
+model Combo {
+  id        String      @id @default(cuid())
+  name      String
+  price     Decimal     @db.Decimal(10, 2) // precio único del combo (utilidad se calcula agregada)
+  isActive  Boolean     @default(true)
+
+  items     ComboItem[]
+  saleItems SaleItem[]
+
+  @@map("combos")
+}
+
+model ComboItem {
+  id               String          @id @default(cuid())
+  comboId          String
+  combo            Combo           @relation(fields: [comboId], references: [id])
+  productId        String
+  product          Product         @relation(fields: [productId], references: [id])
+  productVariantId String
+  productVariant   ProductVariant  @relation(fields: [productVariantId], references: [id])
+  quantity         Int             @default(1)
+
+  @@map("combo_items")
+}
+
+// =========================================================================
+// USUARIOS / ROLES / PERMISOS
+// =========================================================================
+
+model Employee {
+  id           String   @id @default(cuid())
+  name         String
+  email        String?  @unique
+  pin          String? // login por PIN, alternativa a password
+  passwordHash String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  branches           EmployeeBranch[]
+  inventoryMovements InventoryMovement[]
+  sales              Sale[]
+  cashiersShifts     Shift[]              @relation("ShiftCashier")
+  managerShifts      Shift[]              @relation("ShiftManager")
+  cashMovements      CashMovement[]
+  purchaseOrders     PurchaseOrder[]
+  physicalCounts     PhysicalCount[]      @relation("CountPerformedBy")
+  approvedCounts     PhysicalCount[]      @relation("CountApprovedBy")
+
+  @@map("employees")
+}
+
+model Role {
+  id   String   @id @default(cuid())
+  name RoleName @unique
+
+  permissions      RolePermission[]
+  employeeBranches EmployeeBranch[]
+
+  @@map("roles")
+}
+
+model RolePermission {
+  id         String     @id @default(cuid())
+  roleId     String
+  role       Role       @relation(fields: [roleId], references: [id])
+  permission Permission
+
+  @@unique([roleId, permission])
+  @@map("role_permissions")
+}
+
+// Un empleado puede trabajar en varias sucursales, con distinto rol en
+// cada una (empleado por sucursal por defecto, pero soporta multi-sucursal).
+model EmployeeBranch {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  branchId   String
+  branch     Branch   @relation(fields: [branchId], references: [id])
+  roleId     String
+  role       Role     @relation(fields: [roleId], references: [id])
+  isPrimary  Boolean  @default(true) // sucursal "base" del empleado
+  // Designación de "cajero", activable/desactivable independientemente del
+  // rol (aplica tanto a BARISTA como a GERENTE). Un empleado solo puede ser
+  // asignado como Shift.cashierId en esa sucursal si isCashier = true.
+  isCashier  Boolean  @default(false)
+
+  permissionOverrides EmployeePermissionOverride[]
+
+  @@unique([employeeId, branchId])
+  @@map("employee_branches")
+}
+
+// Excepción de permiso para un empleado en una sucursal específica.
+// isGranted = true  -> otorga un permiso que su rol NO tiene por defecto
+// isGranted = false -> revoca un permiso que su rol SÍ tiene por defecto
+// El permiso "efectivo" de un empleado = permisos del Role, aplicando
+// estas excepciones encima (override gana siempre sobre el rol).
+model EmployeePermissionOverride {
+  id               String         @id @default(cuid())
+  employeeBranchId String
+  employeeBranch   EmployeeBranch @relation(fields: [employeeBranchId], references: [id])
+  permission       Permission
+  isGranted        Boolean
+  notes            String?
+  createdAt        DateTime       @default(now())
+
+  @@unique([employeeBranchId, permission])
+  @@map("employee_permission_overrides")
+}
+
+// =========================================================================
+// MOVIMIENTOS DE INVENTARIO / CONTEOS FÍSICOS
+// =========================================================================
+
+model InventoryMovement {
+  id              String        @id @default(cuid())
+  type            MovementType
+  ingredientId    String
+  ingredient      Ingredient    @relation(fields: [ingredientId], references: [id])
+  stockLocationId String
+  stockLocation   StockLocation @relation(fields: [stockLocationId], references: [id])
+  quantity        Decimal       @db.Decimal(12, 4) // positivo = entrada, negativo = salida
+  unit            UnitOfMeasure
+
+  branchId String?
+  branch   Branch? @relation("MovementBranch", fields: [branchId], references: [id])
+
+  // Sólo aplica para TRANSFERENCIA_* — referencia a sucursal origen/destino
+  transferFromBranchId String?
+  transferFromBranch   Branch? @relation("TransferOutBranch", fields: [transferFromBranchId], references: [id])
+  transferToBranchId   String?
+  transferToBranch     Branch? @relation("TransferInBranch", fields: [transferToBranchId], references: [id])
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  shiftId    String?
+  shift      Shift?   @relation(fields: [shiftId], references: [id])
+
+  relatedSaleItemId String?
+  saleItem          SaleItem? @relation(fields: [relatedSaleItemId], references: [id])
+
+  notes     String?
+  createdAt DateTime @default(now())
+
+  @@map("inventory_movements")
+}
+
+model PhysicalCount {
+  id          String              @id @default(cuid())
+  branchId    String
+  branch      Branch              @relation(fields: [branchId], references: [id])
+  status      PhysicalCountStatus @default(ABIERTO)
+  performedById String
+  performedBy   Employee          @relation("CountPerformedBy", fields: [performedById], references: [id])
+  approvedById  String?
+  approvedBy    Employee?         @relation("CountApprovedBy", fields: [approvedById], references: [id])
+  startedAt   DateTime            @default(now())
+  closedAt    DateTime?
+
+  lines PhysicalCountLine[]
+
+  @@map("physical_counts")
+}
+
+model PhysicalCountLine {
+  id              String        @id @default(cuid())
+  physicalCountId String
+  physicalCount   PhysicalCount @relation(fields: [physicalCountId], references: [id])
+  ingredientId    String
+  ingredient      Ingredient    @relation(fields: [ingredientId], references: [id])
+  theoreticalQty  Decimal       @db.Decimal(12, 4) // congelado al momento del conteo
+  physicalQty     Decimal       @db.Decimal(12, 4)
+  unit            UnitOfMeasure
+
+  @@map("physical_count_lines")
+}
+
+// =========================================================================
+// COMPRAS
+// =========================================================================
+
+model PurchaseOrder {
+  id         String   @id @default(cuid())
+  branchId   String
+  branch     Branch   @relation(fields: [branchId], references: [id])
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  status     String   @default("PENDIENTE") // PENDIENTE | RECIBIDA_PARCIAL | RECIBIDA | CANCELADA
+  createdAt  DateTime @default(now())
+  receivedAt DateTime?
+
+  items PurchaseOrderItem[]
+
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  ingredientId    String
+  ingredient      Ingredient    @relation(fields: [ingredientId], references: [id])
+  quantity        Decimal       @db.Decimal(12, 4)
+  unit            UnitOfMeasure
+  unitCost        Decimal       @db.Decimal(10, 4)
+
+  batches IngredientBatch[]
+
+  @@map("purchase_order_items")
+}
+
+// =========================================================================
+// CAJA / TURNOS
+// =========================================================================
+
+model Shift {
+  id         String      @id @default(cuid())
+  branchId   String
+  branch     Branch      @relation(fields: [branchId], references: [id])
+  type       ShiftType
+  status     ShiftStatus @default(ABIERTO)
+  cashierId  String
+  cashier    Employee    @relation("ShiftCashier", fields: [cashierId], references: [id])
+  managerId  String? // gerente que autoriza el corte
+  manager    Employee?   @relation("ShiftManager", fields: [managerId], references: [id])
+  openedAt   DateTime    @default(now())
+  closedAt   DateTime?
+  openingCash  Decimal   @default(0) @db.Decimal(10, 2)
+  closingCash  Decimal?  @db.Decimal(10, 2)
+
+  sales               Sale[]
+  cashMovements       CashMovement[]
+  inventoryMovements  InventoryMovement[]
+
+  @@map("shifts")
+}
+
+model CashMovement {
+  id         String            @id @default(cuid())
+  shiftId    String
+  shift      Shift             @relation(fields: [shiftId], references: [id])
+  type       CashMovementType
+  amount     Decimal           @db.Decimal(10, 2)
+  reason     String // ej. "compra de hielo"
+  employeeId String
+  employee   Employee          @relation(fields: [employeeId], references: [id])
+  createdAt  DateTime          @default(now())
+
+  @@map("cash_movements")
+}
+
+// =========================================================================
+// CLIENTES / LEALTAD
+// =========================================================================
+
+model Customer {
+  id        String    @id @default(cuid())
+  name      String
+  birthDate DateTime?
+  email     String?   @unique
+  phone     String?   @unique
+  createdAt DateTime  @default(now())
+
+  loyaltyCard LoyaltyCard?
+  sales       Sale[]
+
+  @@map("customers")
+}
+
+model LoyaltyCard {
+  id         String       @id @default(cuid())
+  customerId String       @unique
+  customer   Customer     @relation(fields: [customerId], references: [id])
+  stamps     Int          @default(0) // sellos acumulados, reinician cada 5
+  tierId     String?
+  tier       LoyaltyTier? @relation(fields: [tierId], references: [id])
+  createdAt  DateTime     @default(now())
+
+  @@map("loyalty_cards")
+}
+
+model LoyaltyTier {
+  id               String   @id @default(cuid())
+  name             String   @unique
+  minLifetimeStamps Int // umbral acumulado histórico para alcanzar el nivel
+  benefits         String?
+
+  cards LoyaltyCard[]
+
+  @@map("loyalty_tiers")
+}
+
+// =========================================================================
+// VENTAS
+// =========================================================================
+
+model Sale {
+  id         String     @id @default(cuid())
+  branchId   String
+  branch     Branch     @relation(fields: [branchId], references: [id])
+  shiftId    String
+  shift      Shift      @relation(fields: [shiftId], references: [id])
+  employeeId String
+  employee   Employee   @relation(fields: [employeeId], references: [id])
+  customerId String?
+  customer   Customer?  @relation(fields: [customerId], references: [id])
+  status     SaleStatus @default(COMPLETADA)
+  subtotal   Decimal    @db.Decimal(10, 2)
+  discountTotal Decimal @default(0) @db.Decimal(10, 2)
+  total      Decimal    @db.Decimal(10, 2) // IVA incluido
+  createdAt  DateTime   @default(now())
+  cancelledAt DateTime?
+  cancelledById String?
+
+  items       SaleItem[]
+  payments    SalePayment[]
+  discountCode DiscountCode? @relation(fields: [discountCodeId], references: [id])
+  discountCodeId String?
+
+  @@map("sales")
+}
+
+model SaleItem {
+  id               String          @id @default(cuid())
+  saleId           String
+  sale             Sale            @relation(fields: [saleId], references: [id])
+  productVariantId String?
+  productVariant   ProductVariant? @relation(fields: [productVariantId], references: [id])
+  comboId          String?
+  combo            Combo?          @relation(fields: [comboId], references: [id])
+  recipeVersionId  String? // snapshot de qué versión de receta se usó
+  recipeVersion    RecipeVersion?  @relation(fields: [recipeVersionId], references: [id])
+  quantity         Int             @default(1)
+  unitPrice        Decimal         @db.Decimal(10, 2)
+  lineTotal        Decimal         @db.Decimal(10, 2)
+
+  modifiers           SaleItemModifier[]
+  inventoryMovements  InventoryMovement[]
+
+  @@map("sale_items")
+}
+
+model SaleItemModifier {
+  id                 String         @id @default(cuid())
+  saleItemId         String
+  saleItem           SaleItem       @relation(fields: [saleItemId], references: [id])
+  modifierOptionId   String
+  modifierOption     ModifierOption @relation(fields: [modifierOptionId], references: [id])
+  priceDelta         Decimal        @db.Decimal(10, 2)
+
+  @@map("sale_item_modifiers")
+}
+
+model SalePayment {
+  id     String        @id @default(cuid())
+  saleId String
+  sale   Sale          @relation(fields: [saleId], references: [id])
+  method PaymentMethod
+  amount Decimal       @db.Decimal(10, 2)
+
+  @@map("sale_payments")
+}
+
+model DiscountCode {
+  id        String       @id @default(cuid())
+  code      String       @unique
+  type      DiscountType
+  value     Decimal      @db.Decimal(10, 2)
+  isActive  Boolean      @default(true)
+  expiresAt DateTime?
+
+  sales Sale[]
+
+  @@map("discount_codes")
+}
