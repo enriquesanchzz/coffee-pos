@@ -137,6 +137,15 @@ enum SaleStatus {
 enum DiscountType {
   PORCENTAJE
   MONTO_FIJO
+  PRECIO_FINAL // reemplaza el total de la venta por un monto final fijo
+}
+
+// Catálogo precargado de justificaciones para descuento manual (gerente).
+enum ManualDiscountReason {
+  GIVEAWAY
+  CORTESIA
+  DESCUENTO_EMPLEADO
+  OTRO
 }
 
 enum StockLocationType {
@@ -149,6 +158,16 @@ enum PhysicalCountStatus {
   PENDIENTE_APROBACION
   APROBADO
   RECHAZADO
+}
+
+// El inventario sale de origen al pasar a EN_TRANSITO, pero no se suma al
+// stock de destino hasta RECIBIDO. Mientras está EN_TRANSITO no cuenta como
+// disponible en ninguna ubicación.
+enum TransferStatus {
+  ENVIADO
+  EN_TRANSITO
+  RECIBIDO
+  CANCELADO
 }
 
 // =========================================================================
@@ -189,6 +208,8 @@ model StockLocation {
   stocks    InventoryStock[]
   batches   IngredientBatch[]
   movements InventoryMovement[]
+  transfersOut TransferManifest[] @relation("TransferOrigin")
+  transfersIn  TransferManifest[] @relation("TransferDestination")
 
   @@map("stock_locations")
 }
@@ -217,6 +238,7 @@ model Ingredient {
   movements          InventoryMovement[]
   purchaseOrderItems PurchaseOrderItem[]
   physicalCountLines PhysicalCountLine[]
+  transferLines      TransferLine[]
 
   @@map("ingredients")
 }
@@ -315,6 +337,14 @@ model Product {
   category   ProductCategory @relation(fields: [categoryId], references: [id])
   type       ProductType     @default(RECETA)
   isActive   Boolean         @default(true)
+  // true  -> perecedero: al cancelar una venta ya cobrada, el inventario NO
+  //          se reintegra, se registra como pérdida (ej. bebidas, postres,
+  //          café en grano). Requiere autorización de gerente + justificación.
+  // false -> no perecedero: al cancelar, el inventario SÍ se reintegra
+  //          automáticamente (ej. merch, tazas). No requiere autorización.
+  // Es un flag explícito y no se infiere de `type` porque hay productos de
+  // REVENTA_DIRECTA que también son perecederos (café en grano, postres).
+  isPerishable Boolean       @default(true)
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
 
@@ -518,6 +548,9 @@ model Employee {
   purchaseOrders     PurchaseOrder[]
   physicalCounts     PhysicalCount[]      @relation("CountPerformedBy")
   approvedCounts     PhysicalCount[]      @relation("CountApprovedBy")
+  manualDiscountsAuthorized ManualDiscount[] @relation("ManualDiscountAuthorizedBy")
+  transfersInitiated TransferManifest[]   @relation("TransferInitiatedBy")
+  transfersReceived  TransferManifest[]   @relation("TransferReceivedBy")
 
   @@map("employees")
 }
@@ -613,6 +646,11 @@ model InventoryMovement {
   relatedSaleItemId String?
   saleItem          SaleItem? @relation(fields: [relatedSaleItemId], references: [id])
 
+  // Presente cuando type = TRANSFERENCIA_SALIDA/ENTRADA — liga el movimiento
+  // a la línea de TransferManifest que lo generó.
+  transferLineId String?
+  transferLine   TransferLine? @relation(fields: [transferLineId], references: [id])
+
   notes     String?
   createdAt DateTime @default(now())
 
@@ -647,6 +685,49 @@ model PhysicalCountLine {
   unit            UnitOfMeasure
 
   @@map("physical_count_lines")
+}
+
+// La inicia administración (fromStockLocation típicamente BODEGA_CENTRAL,
+// aunque también soporta sucursal-a-sucursal), la recibe gerente o barista
+// delegado en destino. El movimiento de inventario real (InventoryMovement,
+// tipo TRANSFERENCIA_SALIDA / TRANSFERENCIA_ENTRADA) se genera en cada
+// transición de estado, ligado vía TransferLine.
+model TransferManifest {
+  id     String @id @default(cuid())
+  status TransferStatus @default(ENVIADO)
+
+  fromStockLocationId String
+  fromStockLocation   StockLocation @relation("TransferOrigin", fields: [fromStockLocationId], references: [id])
+  toStockLocationId    String
+  toStockLocation      StockLocation @relation("TransferDestination", fields: [toStockLocationId], references: [id])
+
+  initiatedById String
+  initiatedBy   Employee  @relation("TransferInitiatedBy", fields: [initiatedById], references: [id])
+  receivedById  String?
+  receivedBy    Employee? @relation("TransferReceivedBy", fields: [receivedById], references: [id])
+
+  sentAt       DateTime  @default(now())
+  inTransitAt  DateTime?
+  receivedAt   DateTime?
+  notes        String?
+
+  lines TransferLine[]
+
+  @@map("transfer_manifests")
+}
+
+model TransferLine {
+  id                 String           @id @default(cuid())
+  transferManifestId String
+  transferManifest   TransferManifest @relation(fields: [transferManifestId], references: [id])
+  ingredientId       String
+  ingredient         Ingredient       @relation(fields: [ingredientId], references: [id])
+  quantity           Decimal          @db.Decimal(12, 4)
+  unit               UnitOfMeasure
+
+  movements InventoryMovement[]
+
+  @@map("transfer_lines")
 }
 
 // =========================================================================
@@ -702,7 +783,19 @@ model Shift {
   openedAt   DateTime    @default(now())
   closedAt   DateTime?
   openingCash  Decimal   @default(0) @db.Decimal(10, 2)
-  closingCash  Decimal?  @db.Decimal(10, 2)
+  closingCash  Decimal?  @db.Decimal(10, 2) // conteo físico al corte
+
+  // Total esperado (apertura + ventas efectivo - retiros + ingresos),
+  // calculado SOLO al momento del corte, nunca en tiempo real.
+  expectedCash     Decimal? @db.Decimal(10, 2)
+  // closingCash - expectedCash. Si no es 0, se requiere differenceReason.
+  cashDifference   Decimal? @db.Decimal(10, 2)
+  differenceReason String?
+
+  // El turno no puede pasar a CERRADO hasta que ambas confirmaciones existan
+  // (evidencia de doble firma cajero + gerente).
+  cashierConfirmedAt DateTime?
+  managerConfirmedAt DateTime?
 
   sales               Sale[]
   cashMovements       CashMovement[]
@@ -792,6 +885,7 @@ model Sale {
   payments    SalePayment[]
   discountCode DiscountCode? @relation(fields: [discountCodeId], references: [id])
   discountCodeId String?
+  manualDiscount ManualDiscount?
 
   @@map("sales")
 }
@@ -848,4 +942,23 @@ model DiscountCode {
   sales Sale[]
 
   @@map("discount_codes")
+}
+
+// Descuento manual autorizado por gerente (PIN/contraseña), independiente
+// del flujo de DiscountCode escaneado. type determina cómo se interpreta
+// value: PORCENTAJE (%), MONTO_FIJO (se resta del total), o PRECIO_FINAL
+// (reemplaza el total de la venta). Aparece en el ticket como "descuento
+// aprobado por gerente" junto con `reason`.
+model ManualDiscount {
+  id             String               @id @default(cuid())
+  saleId         String               @unique
+  sale           Sale                 @relation(fields: [saleId], references: [id])
+  type           DiscountType
+  value          Decimal              @db.Decimal(10, 2)
+  reason         ManualDiscountReason
+  authorizedById String
+  authorizedBy   Employee             @relation("ManualDiscountAuthorizedBy", fields: [authorizedById], references: [id])
+  createdAt      DateTime             @default(now())
+
+  @@map("manual_discounts")
 }
