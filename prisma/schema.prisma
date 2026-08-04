@@ -170,6 +170,19 @@ enum TransferStatus {
   CANCELADO
 }
 
+// QUITAR: se remueve un ingrediente que sí está en la receta base — no
+// afecta el precio (la venta se cobra igual que la receta completa), pero
+// sí se descuenta menos inventario.
+// AUMENTAR: se sube la cantidad de un ingrediente que ya está en la receta
+// base, más allá de lo que la receta define — sí afecta precio.
+// AGREGAR_EXTRA: se agrega un ingrediente que NO forma parte de la receta
+// base (ej. esencia de lavanda en un chai) — sí afecta precio.
+enum IngredientAdjustmentType {
+  QUITAR
+  AUMENTAR
+  AGREGAR_EXTRA
+}
+
 // =========================================================================
 // SUCURSALES / UBICACIONES
 // =========================================================================
@@ -227,6 +240,11 @@ model Ingredient {
   purchaseUnit      UnitOfMeasure // unidad en la que normalmente se compra
   tracksExpiration  Boolean            @default(true)
   isActive          Boolean            @default(true)
+  // Precio de venta al cliente por unidad de baseUnit, cuando este
+  // ingrediente se agrega como AGREGAR_EXTRA (fuera de la receta base) o
+  // AUMENTAR (más allá de la cantidad definida por la receta). Distinto del
+  // costo de proveedor — este es lo que se le cobra al cliente.
+  extraUnitPrice    Decimal?           @db.Decimal(10, 2)
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
@@ -239,6 +257,8 @@ model Ingredient {
   purchaseOrderItems PurchaseOrderItem[]
   physicalCountLines PhysicalCountLine[]
   transferLines      TransferLine[]
+  saleAdjustments    SaleItemIngredientAdjustment[]
+  costHistory        IngredientCostHistory[]
 
   @@map("ingredients")
 }
@@ -271,8 +291,29 @@ model IngredientSupplier {
   isSelected   Boolean    @default(false) // costo "activo" para cálculo
   updatedAt    DateTime   @updatedAt
 
+  costHistory IngredientCostHistory[]
+
   @@unique([ingredientId, supplierId])
   @@map("ingredient_suppliers")
+}
+
+// Se inserta un registro cada vez que cambia `IngredientSupplier.cost` (ej.
+// al registrar una entrada de inventario con un costo distinto al
+// registrado) — en vez de solo sobrescribir, para reportes de "cuánto ha
+// subido este insumo" y como disparador de recálculo de costo de recetas.
+model IngredientCostHistory {
+  id                   String              @id @default(cuid())
+  ingredientId         String
+  ingredient           Ingredient          @relation(fields: [ingredientId], references: [id])
+  ingredientSupplierId String
+  ingredientSupplier   IngredientSupplier  @relation(fields: [ingredientSupplierId], references: [id])
+  previousCost         Decimal?            @db.Decimal(10, 4)
+  newCost              Decimal             @db.Decimal(10, 4)
+  costUnit             UnitOfMeasure
+  changedAt            DateTime            @default(now())
+  source               String? // ej. "entrada de inventario #123"
+
+  @@map("ingredient_cost_history")
 }
 
 // Lotes por caducidad — el saldo agregado vive en InventoryStock; el lote
@@ -364,6 +405,13 @@ model ProductVariant {
   price     Decimal  @db.Decimal(10, 2)
   isActive  Boolean  @default(true)
 
+  // Costo de producción calculado en el momento en que se fijó/revisó
+  // `price` por última vez. Se compara contra el costo actual calculado de
+  // la receta activa; si el costo actual sube más de 20% sobre este valor,
+  // se dispara la alerta de "margen afectado". Se actualiza cuando el
+  // gerente ajusta el precio o descarta la alerta.
+  costAtLastPriceReview Decimal? @db.Decimal(10, 2)
+
   recipes         Recipe[]
   modifierGroups  VariantModifierGroup[]
   saleItems       SaleItem[]
@@ -417,9 +465,26 @@ model RecipeVersion {
 
   ingredients RecipeIngredient[]
   saleItems   SaleItem[] // referencia a qué versión se usó al momento de la venta
+  costHistory RecipeCostHistory[]
 
   @@unique([recipeId, versionNumber])
   @@map("recipe_versions")
+}
+
+// Snapshot del costo total calculado de una RecipeVersion en un momento
+// dado. Se inserta cuando el costo cambia de forma significativa (ej. tras
+// un IngredientCostHistory) y sirve tanto para reportes históricos de costo
+// como para saber exactamente cuánto costaba producir la bebida en la fecha
+// de una venta específica.
+model RecipeCostHistory {
+  id              String        @id @default(cuid())
+  recipeVersionId String
+  recipeVersion   RecipeVersion @relation(fields: [recipeVersionId], references: [id])
+  totalCost       Decimal       @db.Decimal(10, 2)
+  recordedAt      DateTime      @default(now())
+  reason          String? // ej. "cambio de costo de Café en grano", "snapshot de venta"
+
+  @@map("recipe_cost_history")
 }
 
 // Una línea de receta consume exactamente UNO de los dos:
@@ -543,7 +608,8 @@ model Employee {
   inventoryMovements InventoryMovement[]
   sales              Sale[]
   cashiersShifts     Shift[]              @relation("ShiftCashier")
-  managerShifts      Shift[]              @relation("ShiftManager")
+  shiftsOpeningConfirmed Shift[]          @relation("ShiftOpeningConfirmedBy")
+  shiftsClosingConfirmed Shift[]          @relation("ShiftClosingConfirmedBy")
   cashMovements      CashMovement[]
   purchaseOrders     PurchaseOrder[]
   physicalCounts     PhysicalCount[]      @relation("CountPerformedBy")
@@ -722,8 +788,15 @@ model TransferLine {
   transferManifest   TransferManifest @relation(fields: [transferManifestId], references: [id])
   ingredientId       String
   ingredient         Ingredient       @relation(fields: [ingredientId], references: [id])
-  quantity           Decimal          @db.Decimal(12, 4)
+  quantity           Decimal          @db.Decimal(12, 4) // cantidad enviada
   unit               UnitOfMeasure
+
+  // Si lo recibido no coincide con lo enviado (ej. se rompió en el camino),
+  // se captura aquí y el sistema genera automáticamente un InventoryMovement
+  // tipo MERMA por la diferencia, con nota visible en la auditoría de la
+  // sucursal receptora. receivedQuantity = quantity si no hubo discrepancia.
+  receivedQuantity   Decimal?         @db.Decimal(12, 4)
+  discrepancyNote    String?
 
   movements InventoryMovement[]
 
@@ -778,8 +851,14 @@ model Shift {
   status     ShiftStatus @default(ABIERTO)
   cashierId  String
   cashier    Employee    @relation("ShiftCashier", fields: [cashierId], references: [id])
-  managerId  String? // gerente que autoriza el corte
-  manager    Employee?   @relation("ShiftManager", fields: [managerId], references: [id])
+
+  // Confirmación de apertura: preferentemente gerente, pero puede ser
+  // cualquier otro empleado (distinto del cajero) si el gerente no está
+  // disponible por incapacidad, día libre, u otra diligencia.
+  openingConfirmedById String?
+  openingConfirmedBy   Employee? @relation("ShiftOpeningConfirmedBy", fields: [openingConfirmedById], references: [id])
+  openingConfirmedAt   DateTime?
+
   openedAt   DateTime    @default(now())
   closedAt   DateTime?
   openingCash  Decimal   @default(0) @db.Decimal(10, 2)
@@ -793,9 +872,13 @@ model Shift {
   differenceReason String?
 
   // El turno no puede pasar a CERRADO hasta que ambas confirmaciones existan
-  // (evidencia de doble firma cajero + gerente).
-  cashierConfirmedAt DateTime?
-  managerConfirmedAt DateTime?
+  // (evidencia de doble firma). closingConfirmedBy sigue el mismo criterio
+  // de flexibilidad que openingConfirmedBy: gerente de preferencia, o
+  // cualquier otro empleado si no está disponible.
+  cashierConfirmedAt   DateTime?
+  closingConfirmedById String?
+  closingConfirmedBy   Employee? @relation("ShiftClosingConfirmedBy", fields: [closingConfirmedById], references: [id])
+  closingConfirmedAt   DateTime?
 
   sales               Sale[]
   cashMovements       CashMovement[]
@@ -905,9 +988,28 @@ model SaleItem {
   lineTotal        Decimal         @db.Decimal(10, 2)
 
   modifiers           SaleItemModifier[]
+  ingredientAdjustments SaleItemIngredientAdjustment[]
   inventoryMovements  InventoryMovement[]
 
   @@map("sale_items")
+}
+
+// Ajustes libres a nivel de ingrediente sobre la receta base de una línea
+// de venta (más allá de los ModifierOption curados). QUITAR no afecta
+// precio; AUMENTAR y AGREGAR_EXTRA sí, vía priceDelta calculado con
+// Ingredient.extraUnitPrice * quantity.
+model SaleItemIngredientAdjustment {
+  id           String                   @id @default(cuid())
+  saleItemId   String
+  saleItem     SaleItem                 @relation(fields: [saleItemId], references: [id])
+  ingredientId String
+  ingredient   Ingredient               @relation(fields: [ingredientId], references: [id])
+  type         IngredientAdjustmentType
+  quantity     Decimal                  @db.Decimal(12, 4)
+  unit         UnitOfMeasure
+  priceDelta   Decimal                  @default(0) @db.Decimal(10, 2)
+
+  @@map("sale_item_ingredient_adjustments")
 }
 
 model SaleItemModifier {
