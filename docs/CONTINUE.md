@@ -12,7 +12,7 @@ Claude Code) pueda retomarlo sin arqueología.
 | Seed base (roles/permisos/sucursal) | ✅ `prisma/seed.ts`. |
 | Módulo **POS** (login por PIN, catálogo, carrito, venta, descuento de inventario) | ✅ Construido y verificado en este repo. |
 | Seed de demo (productos, recetas, empleados, turno) | ✅ `prisma/seed-demo.ts`. |
-| Módulo **Caja** completo (doble confirmación, cortes, retiros/ingresos) | ⚪ No construido. Solo existe apertura mínima de turno. |
+| Módulo **Caja** (doble confirmación de apertura/cierre, corte, retiros/ingresos) | ✅ Construido en rama `feature/modulo-caja`. Sin chequeo de permisos todavía (ver nota abajo). |
 | Módulo **Inventario** (consulta, ajustes, alertas de caducidad) | ⚪ No construido. |
 | Módulo **Compras** (Fase 2) | ⚪ No construido. Modelos ya existen en el schema. |
 | Módulo **Reportes** (Fase 3) | ⚪ No construido. |
@@ -54,12 +54,35 @@ Si en el futuro se hace que otro Server Action regrese un modelo de Prisma
 con campos `Decimal`/`Date` directo a un client component, va a pasar lo
 mismo — conviene mapear siempre a un tipo plano antes de regresar.
 
+## Módulo Caja (rama `feature/modulo-caja`)
+
+Construido y verificado end-to-end contra Postgres real (Playwright): apertura
+de turno con PIN de un segundo empleado (`openShift` en `actions/shift.ts`),
+retiros/ingresos desde un modal en el POS (`actions/cash.ts`), y cierre con
+corte (`closeShift`/`previewShiftClose`) que calcula `expectedCash` solo al
+momento de cerrar (`openingCash + ventas efectivo - retiros + ingresos`) y
+exige motivo si hay diferencia. Pantalla nueva en `/caja`
+(`app/caja/page.tsx` + `components/caja/`).
+
+Simplificación deliberada: la confirmación de un segundo empleado (apertura y
+cierre) solo exige que sea un empleado activo **distinto** de quien cuenta la
+caja — no valida permiso (`CAJA_ABRIR`/`CAJA_CERRAR`/`CAJA_CORTE_AUTORIZAR`
+ya existen en el catálogo pero no hay infraestructura de chequeo de permisos
+en el código todavía). Eso debería resolverse cuando se construya
+Administración con auth real.
+
+Durante la verificación de este módulo se encontró y corrigió un drift
+preexistente entre `schema.prisma` y las migraciones (varios campos/tablas de
+Fase 2 — Compras — estaban en el schema sin migración aplicada, ej.
+`Ingredient.expirationAlertDays`, `PurchaseOrderStatus`, `reorder_points`).
+Se generó la migración `20260805002351_fix_ingredient_expiration_alert_drift`
+para ponerlos en sync; no había datos en esas tablas, así que no hubo
+pérdida de información.
+
 ## Próximos pasos recomendados (en orden)
 
-1. **Cerrar Fase 1**: construir el módulo Caja real (cierre con doble
-   confirmación, corte, `CashMovement`) e Inventario (al menos consulta y
-   ajuste manual). Sin esto, el POS actual depende de que alguien abra el
-   turno manualmente y nunca lo cierre desde la UI.
+1. **Inventario**: al menos consulta de stock y ajuste manual. El módulo
+   Caja ya cubre apertura/cierre de turno con doble confirmación.
 2. **UI de recetas**: hoy `Recipe`/`RecipeVersion`/`RecipeIngredient` solo
    se crean vía seed/Prisma Studio. Para que el cliente pueda dar de alta
    un producto nuevo sin tocar código, hace falta una pantalla (probablemente

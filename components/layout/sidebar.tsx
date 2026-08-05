@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 // mapa completo del sistema y se marca "pronto" en vez de ocultarse.
 const modules = [
   { href: "/pos", label: "Punto de Venta", icon: ShoppingCart, enabled: true },
-  { href: "#", label: "Caja", icon: Wallet, enabled: false },
+  { href: "/caja", label: "Caja", icon: Wallet, enabled: true },
   { href: "#", label: "Inventario", icon: Package, enabled: false },
   { href: "#", label: "Compras", icon: Truck, enabled: false },
   { href: "#", label: "Reportes", icon: BarChart3, enabled: false },
