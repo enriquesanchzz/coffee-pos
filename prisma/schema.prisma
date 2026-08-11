@@ -183,6 +183,13 @@ enum IngredientAdjustmentType {
   AGREGAR_EXTRA
 }
 
+enum PurchaseOrderStatus {
+  CREADA
+  PROVEIDA
+  PROVEIDA_PARCIALMENTE // terminal — no se reabre, ver flujo de recepción parcial
+  CANCELADA
+}
+
 // =========================================================================
 // SUCURSALES / UBICACIONES
 // =========================================================================
@@ -201,6 +208,7 @@ model Branch {
   shifts           Shift[]
   sales            Sale[]
   purchaseOrders   PurchaseOrder[]
+  suppliers        Supplier[]
   movements        InventoryMovement[] @relation("MovementBranch")
   transfersOut     InventoryMovement[] @relation("TransferOutBranch")
   transfersIn      InventoryMovement[] @relation("TransferInBranch")
@@ -223,6 +231,7 @@ model StockLocation {
   movements InventoryMovement[]
   transfersOut TransferManifest[] @relation("TransferOrigin")
   transfersIn  TransferManifest[] @relation("TransferDestination")
+  reorderPoints ReorderPoint[]
 
   @@map("stock_locations")
 }
@@ -245,6 +254,9 @@ model Ingredient {
   // AUMENTAR (más allá de la cantidad definida por la receta). Distinto del
   // costo de proveedor — este es lo que se le cobra al cliente.
   extraUnitPrice    Decimal?           @db.Decimal(10, 2)
+  // Días de anticipación con que se dispara la alerta de caducidad próxima
+  // para este ingrediente. Varía por tipo — ej. leche 5 días, jarabe 30 días.
+  expirationAlertDays Int?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
@@ -259,6 +271,7 @@ model Ingredient {
   transferLines      TransferLine[]
   saleAdjustments    SaleItemIngredientAdjustment[]
   costHistory        IngredientCostHistory[]
+  reorderPoints      ReorderPoint[]
 
   @@map("ingredients")
 }
@@ -271,6 +284,20 @@ model Supplier {
   email     String?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
+
+  // null = proveedor global (disponible para todas las sucursales).
+  // Si tiene valor, es un proveedor local exclusivo de esa sucursal.
+  branchId  String?
+  branch    Branch?  @relation(fields: [branchId], references: [id])
+
+  // Mínimo total de la orden en $, cuando el proveedor lo maneja así.
+  // Independiente de IngredientSupplier.minOrderQuantity — un proveedor
+  // puede tener uno, otro, ambos o ninguno.
+  minOrderAmount Decimal? @db.Decimal(10, 2)
+
+  // Días de la semana en que el proveedor acepta pedidos (0 = domingo ...
+  // 6 = sábado). Usado para sugerir el día en que conviene mandar la orden.
+  orderDays Int[]
 
   ingredientLinks IngredientSupplier[]
   purchaseOrders  PurchaseOrder[]
@@ -290,6 +317,12 @@ model IngredientSupplier {
   costUnit     UnitOfMeasure
   isSelected   Boolean    @default(false) // costo "activo" para cálculo
   updatedAt    DateTime   @updatedAt
+
+  // Mínimo de pedido para este ingrediente en particular con este
+  // proveedor, cuando aplica (ej. "café: mínimo 20kg"). Independiente de
+  // Supplier.minOrderAmount.
+  minOrderQuantity Decimal?       @db.Decimal(12, 4)
+  minOrderUnit     UnitOfMeasure?
 
   costHistory IngredientCostHistory[]
 
@@ -807,17 +840,40 @@ model TransferLine {
 // COMPRAS
 // =========================================================================
 
+// Punto de reorden por ingrediente + ubicación de stock (distinto del
+// bloqueo de venta de Fase 1, que se calcula contra el máximo de las
+// recetas activas). manualThreshold lo define el usuario; la sugerencia
+// dinámica basada en consumo de los últimos 15 días se calcula en query
+// time contra InventoryMovement (type = VENTA), no se persiste aquí.
+model ReorderPoint {
+  id              String        @id @default(cuid())
+  ingredientId    String
+  ingredient      Ingredient    @relation(fields: [ingredientId], references: [id])
+  stockLocationId String
+  stockLocation   StockLocation @relation(fields: [stockLocationId], references: [id])
+  manualThreshold Decimal       @db.Decimal(12, 4)
+  unit            UnitOfMeasure
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([ingredientId, stockLocationId])
+  @@map("reorder_points")
+}
+
 model PurchaseOrder {
-  id         String   @id @default(cuid())
+  id         String              @id @default(cuid())
   branchId   String
-  branch     Branch   @relation(fields: [branchId], references: [id])
+  branch     Branch              @relation(fields: [branchId], references: [id])
   supplierId String
-  supplier   Supplier @relation(fields: [supplierId], references: [id])
+  supplier   Supplier            @relation(fields: [supplierId], references: [id])
   employeeId String
-  employee   Employee @relation(fields: [employeeId], references: [id])
-  status     String   @default("PENDIENTE") // PENDIENTE | RECIBIDA_PARCIAL | RECIBIDA | CANCELADA
-  createdAt  DateTime @default(now())
+  employee   Employee            @relation(fields: [employeeId], references: [id])
+  status     PurchaseOrderStatus @default(CREADA)
+  createdAt  DateTime            @default(now())
   receivedAt DateTime?
+
+  // Fecha en que se marcó como pagada (captura manual). Se compara contra
+  // createdAt para medir cuántos días tarda el proveedor en surtir.
+  paidAt     DateTime?
 
   items PurchaseOrderItem[]
 
@@ -830,9 +886,16 @@ model PurchaseOrderItem {
   purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
   ingredientId    String
   ingredient      Ingredient    @relation(fields: [ingredientId], references: [id])
-  quantity        Decimal       @db.Decimal(12, 4)
-  unit            UnitOfMeasure
-  unitCost        Decimal       @db.Decimal(10, 4)
+
+  orderedQuantity  Decimal        @db.Decimal(12, 4)
+  // null hasta que se registra la recepción; permite recepción parcial
+  // (orderedQuantity - receivedQuantity = pendiente).
+  receivedQuantity Decimal?       @db.Decimal(12, 4)
+  unit             UnitOfMeasure
+
+  estimatedUnitCost Decimal        @db.Decimal(10, 4)
+  // capturado al recibir, para ver variación estimado vs. real
+  actualUnitCost    Decimal?       @db.Decimal(10, 4)
 
   batches IngredientBatch[]
 

@@ -17,6 +17,7 @@ export function ShiftOpenForm({
 }) {
   const [type, setType] = useState<ShiftType>("MATUTINO");
   const [openingCash, setOpeningCash] = useState("0");
+  const [confirmingPin, setConfirmingPin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -30,6 +31,7 @@ export function ShiftOpenForm({
           cashierId: employeeId,
           type,
           openingCash: Number(openingCash) || 0,
+          confirmingPin,
         });
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo abrir el turno.");
@@ -45,9 +47,8 @@ export function ShiftOpenForm({
       <CardContent>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <p className="text-sm text-muted-foreground">
-            No hay un turno abierto en esta sucursal. El módulo de Caja
-            completo (doble confirmación, cortes, retiros e ingresos) aún no
-            está construido — esta es una apertura mínima para poder vender.
+            No hay un turno abierto en esta sucursal. Se requiere el PIN de un
+            segundo empleado para autorizar la apertura.
           </p>
           <div className="flex flex-col gap-1">
             <Label htmlFor="type">Tipo de turno</Label>
@@ -70,6 +71,18 @@ export function ShiftOpenForm({
               step="0.01"
               value={openingCash}
               onChange={(e) => setOpeningCash(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="confirmingPin">PIN de quien autoriza la apertura</Label>
+            <Input
+              id="confirmingPin"
+              type="password"
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="PIN de un empleado distinto"
+              value={confirmingPin}
+              onChange={(e) => setConfirmingPin(e.target.value)}
             />
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}

@@ -8,6 +8,7 @@ import { ProductDialog } from "./product-dialog";
 import { CheckoutDialog } from "./checkout-dialog";
 import { useCartStore } from "./cart-store";
 import { logoutAction } from "@/actions/session";
+import { CashMovementDialog } from "@/components/caja/cash-movement-dialog";
 
 export function PosWorkspace({
   catalog,
@@ -23,6 +24,7 @@ export function PosWorkspace({
   const [selectedProduct, setSelectedProduct] = useState<CatalogProduct | null>(null);
   const [productDialogOpen, setProductDialogOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [movementOpen, setMovementOpen] = useState(false);
   const addLine = useCartStore((s) => s.addLine);
 
   return (
@@ -32,11 +34,20 @@ export function PosWorkspace({
           <p className="text-sm text-muted-foreground">
             Atendiendo: <span className="font-medium text-foreground">{employee.name}</span>
           </p>
-          <form action={logoutAction}>
-            <button type="submit" className="text-sm text-muted-foreground hover:underline">
-              Cambiar de empleado
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              className="text-sm text-muted-foreground hover:underline"
+              onClick={() => setMovementOpen(true)}
+            >
+              Movimiento de caja
             </button>
-          </form>
+            <form action={logoutAction}>
+              <button type="submit" className="text-sm text-muted-foreground hover:underline">
+                Cambiar de empleado
+              </button>
+            </form>
+          </div>
         </div>
         <div className="flex-1 overflow-hidden">
           <CatalogBrowser
@@ -62,6 +73,13 @@ export function PosWorkspace({
         open={checkoutOpen}
         onOpenChange={setCheckoutOpen}
         branchId={branchId}
+        shiftId={shiftId}
+        employeeId={employee.id}
+      />
+
+      <CashMovementDialog
+        open={movementOpen}
+        onOpenChange={setMovementOpen}
         shiftId={shiftId}
         employeeId={employee.id}
       />
