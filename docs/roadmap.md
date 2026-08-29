@@ -7,26 +7,30 @@ migraciones destructivas entre fases.
 | Fase | Nombre | Alcance | Estado |
 |---|---|---|---|
 | 0 | Modelo de datos | Schema Prisma completo (27 modelos), catálogo de permisos, seed de roles, migración inicial. | ✅ Completa — commit `8294475` |
-| 1 | MVP operativo | POS (venta + descuento de inventario por receta), Caja (turnos), Inventario básico. | 🟡 En progreso — schema ajustado en `a9fac16`/`7745e6e`. Módulos **POS** y **Caja** construidos (ver `docs/pos-module.md` y `docs/CONTINUE.md`). **Inventario** (UI de consulta/ajuste) pendiente. |
+| 1 | MVP operativo | POS (venta + descuento de inventario por receta), Caja (turnos), Inventario básico, UI de recetas, Administración (auth + permisos reales). | ✅ Completa — ver `docs/CONTINUE.md` para el detalle de cada módulo. |
 | 2 | Cadena de suministro | Compras: proveedores, órdenes de compra, recepción de mercancía, transferencias entre sucursales, conteos físicos. | ⚪ Pendiente — modelos ya existen en el schema (`Supplier`, `PurchaseOrder`, `TransferManifest`, `PhysicalCount`, etc.), falta UI y lógica de aplicación. |
 | 3 | Business Intelligence | Reportes de utilidad, costo de recetas en el tiempo, reportes de inventario, estadísticas consolidadas. | ⚪ Pendiente — soportado por `RecipeCostHistory` / `IngredientCostHistory`, que ya capturan el historial necesario. |
 | 4 | Retención de clientes | Programa de lealtad (sellos, niveles), códigos de descuento. | ⚪ Pendiente — modelos `Customer`, `LoyaltyCard`, `LoyaltyTier`, `DiscountCode` ya existen en el schema. |
 | 5 | Multi-sucursal | Habilitar selección de sucursal en la UI, reportes consolidados (`REPORTE_CONSOLIDADO_VER`), gestión de sucursales (`SUCURSAL_GESTIONAR`). | ⚪ Pendiente — el modelo ya es multi-sucursal desde Fase 0; falta remover el `DEFAULT_BRANCH_ID` hardcodeado y construir la UI de selección/gestión. |
 
-## Qué falta para cerrar Fase 1
+## Fase 1 — cerrada
 
-Ver el detalle completo y accionable en `docs/CONTINUE.md`. En resumen:
+Los 5 pendientes que tenía Fase 1 ya están construidos y verificados
+end-to-end contra Postgres real (detalle en `docs/CONTINUE.md`):
 
-1. ~~Módulo **Caja**: apertura/cierre con doble confirmación, cortes de
-   caja, registro de retiros/ingresos (`CashMovement`).~~ Construido — ver
-   `docs/CONTINUE.md`.
-2. Módulo **Inventario**: pantallas de consulta de stock, ajustes manuales,
-   alertas de caducidad (`IngredientBatch.expirationDate`).
-3. **Administración**: autenticación real (reemplazar el selector de
-   empleado por PIN con Supabase Auth u otro proveedor), gestión de
-   empleados/roles/permisos desde UI. También es donde debería vivir en el
-   futuro un chequeo real de permisos (`CAJA_ABRIR`/`CAJA_CERRAR`/
-   `CAJA_CORTE_AUTORIZAR`, etc.) — hoy Caja solo exige que la confirmación
-   sea de un empleado activo distinto, sin validar permiso.
-4. UI para crear/editar recetas (`Recipe`/`RecipeVersion`/`RecipeIngredient`)
-   — hoy solo se pueden crear vía seed/Prisma Studio.
+1. ~~Módulo **Caja**~~ — apertura/cierre con doble confirmación, cortes,
+   retiros/ingresos.
+2. ~~Módulo **Inventario**~~ — consulta de stock y ajuste manual.
+3. ~~UI de **recetas**~~ — alta de producto completo (variantes + receta) y
+   edición versionada, sin tocar código.
+4. ~~**Administración**~~ — login real (PIN hasheado + password para
+   Administración, sesión firmada con `iron-session`), gestión de
+   empleados/roles desde UI, y chequeo real de permisos activado en Caja,
+   Inventario, Recetas y POS usando la matriz de `prisma/seed.ts`.
+
+Nota: la auth real se construyó **sin Supabase** (decisión explícita — no
+había proyecto configurado, ver `docs/CONTINUE.md`), sobre hashing propio
+(`scrypt`) y sesión firmada. Sigue siendo compatible con migrar a Supabase
+Auth más adelante si se decide adoptarlo, sin rehacer el modelo de datos.
+
+Próximo: **Fase 2 — Compras** (ver abajo).

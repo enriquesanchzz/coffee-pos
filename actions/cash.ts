@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { CashMovementType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { getSessionEmployeeId } from "@/lib/session";
+import { requirePermission } from "@/lib/permissions";
 
 export type CreateCashMovementInput = {
   shiftId: string;
@@ -13,6 +15,9 @@ export type CreateCashMovementInput = {
 };
 
 export async function createCashMovement(input: CreateCashMovementInput) {
+  if (input.employeeId !== (await getSessionEmployeeId())) {
+    throw new Error("El empleado no coincide con la sesión activa.");
+  }
   if (input.amount <= 0) {
     throw new Error("El monto debe ser mayor a cero.");
   }
@@ -24,6 +29,8 @@ export async function createCashMovement(input: CreateCashMovementInput) {
   if (!shift || shift.status !== "ABIERTO") {
     throw new Error("No hay un turno abierto válido para este movimiento.");
   }
+
+  await requirePermission(input.employeeId, shift.branchId, "CAJA_CHICA_MODIFICAR");
 
   await prisma.cashMovement.create({
     data: {

@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { Prisma, PaymentMethod, UnitOfMeasure } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_STOCK_LOCATION_ID } from "@/lib/constants";
+import { getSessionEmployeeId } from "@/lib/session";
+import { requirePermission } from "@/lib/permissions";
 
 export type CreateSaleItemInput = {
   productVariantId: string;
@@ -42,9 +44,14 @@ export type CreateSaleInput = {
 //     (no uno por línea), por eso no se liga a relatedSaleItemId.
 // -----------------------------------------------------------------------
 export async function createSale(input: CreateSaleInput) {
+  if (input.employeeId !== (await getSessionEmployeeId())) {
+    throw new Error("El empleado no coincide con la sesión activa.");
+  }
   if (input.items.length === 0) {
     throw new Error("La venta no tiene productos.");
   }
+
+  await requirePermission(input.employeeId, input.branchId, "VENTA_REALIZAR");
 
   const sale = await prisma.$transaction(async (tx) => {
     const shift = await tx.shift.findUnique({ where: { id: input.shiftId } });

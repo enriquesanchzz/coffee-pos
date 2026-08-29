@@ -3,6 +3,7 @@ import {
   ShoppingCart,
   Wallet,
   Package,
+  BookOpen,
   Truck,
   BarChart3,
   Settings,
@@ -10,16 +11,18 @@ import {
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
-// Los 6 módulos definidos en el ADR / roadmap. Solo POS está habilitado hoy
-// (ver docs/roadmap.md) — el resto queda visible para que el cliente vea el
-// mapa completo del sistema y se marca "pronto" en vez de ocultarse.
+// Los 6 módulos definidos en el ADR / roadmap (ver docs/roadmap.md). Compras
+// y Reportes (Fase 2/3) todavía no existen — quedan visibles para que el
+// cliente vea el mapa completo del sistema, marcados "pronto" en vez de
+// ocultarse.
 const modules = [
   { href: "/pos", label: "Punto de Venta", icon: ShoppingCart, enabled: true },
   { href: "/caja", label: "Caja", icon: Wallet, enabled: true },
-  { href: "#", label: "Inventario", icon: Package, enabled: false },
+  { href: "/inventario", label: "Inventario", icon: Package, enabled: true },
+  { href: "/recetas", label: "Recetas", icon: BookOpen, enabled: true },
   { href: "#", label: "Compras", icon: Truck, enabled: false },
   { href: "#", label: "Reportes", icon: BarChart3, enabled: false },
-  { href: "#", label: "Administración", icon: Settings, enabled: false },
+  { href: "/administracion", label: "Administración", icon: Settings, enabled: true },
 ];
 
 export function Sidebar() {

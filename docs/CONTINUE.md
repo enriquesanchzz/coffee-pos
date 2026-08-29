@@ -12,11 +12,12 @@ Claude Code) pueda retomarlo sin arqueología.
 | Seed base (roles/permisos/sucursal) | ✅ `prisma/seed.ts`. |
 | Módulo **POS** (login por PIN, catálogo, carrito, venta, descuento de inventario) | ✅ Construido y verificado en este repo. |
 | Seed de demo (productos, recetas, empleados, turno) | ✅ `prisma/seed-demo.ts`. |
-| Módulo **Caja** (doble confirmación de apertura/cierre, corte, retiros/ingresos) | ✅ Construido en rama `feature/modulo-caja`. Sin chequeo de permisos todavía (ver nota abajo). |
-| Módulo **Inventario** (consulta, ajustes, alertas de caducidad) | ⚪ No construido. |
+| Módulo **Caja** (doble confirmación de apertura/cierre, corte, retiros/ingresos) | ✅ Construido. Doble confirmación ahora valida permiso real (`CAJA_ABRIR`/`CAJA_CERRAR`), no solo "empleado distinto" — ver sección Administración abajo. |
+| Módulo **Inventario** (consulta, ajustes) | ✅ Construido (`/inventario`). Alertas de caducidad (`IngredientBatch.expirationDate`) no incluidas — no hay lotes sembrados con fecha todavía. |
+| UI de **Recetas** (alta de producto+receta, edición versionada) | ✅ Construido (`/recetas`). |
+| **Administración** (auth real, gestión de empleados/roles, permisos reales) | ✅ Construido (`/administracion`). Ver sección dedicada abajo. |
 | Módulo **Compras** (Fase 2) | ⚪ No construido. Modelos ya existen en el schema. |
 | Módulo **Reportes** (Fase 3) | ⚪ No construido. |
-| **Administración** (auth real, gestión de empleados/roles) | ⚪ No construido. Sesión actual es un placeholder por PIN. |
 | Multi-sucursal en UI (Fase 5) | ⚪ No construido. `DEFAULT_BRANCH_ID` fijo en `lib/constants.ts`. |
 
 ## Qué se verificó en esta sesión
@@ -79,26 +80,128 @@ Se generó la migración `20260805002351_fix_ingredient_expiration_alert_drift`
 para ponerlos en sync; no había datos en esas tablas, así que no hubo
 pérdida de información.
 
+## Módulo Inventario (`/inventario`)
+
+Consulta de stock por ingrediente (agrupado por categoría, con indicador de
+"stock bajo" si existe `ReorderPoint`) y ajuste manual (`actions/inventory.ts`
+`adjustInventoryStock` — el usuario captura la cantidad real contada, no un
+delta; el delta se calcula contra `InventoryStock` y se registra como
+`InventoryMovement` tipo `AJUSTE_MANUAL`). Requiere permiso
+`INVENTARIO_AJUSTAR` para ajustar y `INVENTARIO_CONSULTAR` para ver la
+página (gate a nivel de página, además del chequeo en la acción). Verificado
+end-to-end con Playwright contra Postgres real.
+
+Fuera de alcance: alertas de caducidad (`IngredientBatch.expirationDate`) —
+no hay lotes con fecha sembrados todavía, se puede agregar cuando haga
+falta sin cambios de diseño.
+
+## UI de Recetas (`/recetas`)
+
+Alta completa de un producto vendible (`Product` + `ProductVariant`(s) +
+`Recipe` + `RecipeVersion` + `RecipeIngredient`) desde una sola pantalla
+(`/recetas/nuevo`), incluyendo alta de ingrediente atómico nuevo inline si
+falta en el catálogo (`actions/recipes.ts` `createIngredient`). Crea también
+el `BranchProduct` de la sucursal por defecto, así que el producto aparece
+de inmediato en `/pos`.
+
+Editar la receta de una variante existente (`/recetas/[variantId]`) **no**
+sobreescribe las líneas: desactiva la `RecipeVersion` activa
+(`effectiveTo` = ahora) y crea la siguiente, preservando el costeo exacto de
+ventas ya hechas contra la versión anterior — es el propósito explícito del
+versionado en el schema.
+
+Simplificación deliberada: no se puede crear un ingrediente **compuesto**
+nuevo (ej. otro jarabe casero) desde esta pantalla, solo usar los que ya
+existen — crearlos sigue siendo vía seed/Prisma Studio.
+
+Verificado end-to-end con Playwright: alta de producto con categoría nueva,
+ingrediente nuevo inline, venta en POS del producto recién creado, edición
+de receta con verificación en DB de que `versionNumber` avanzó y la versión
+anterior quedó `isActive:false`.
+
+Bug encontrado y corregido durante la verificación: al seleccionar un
+ingrediente en una línea de receta, la unidad no se sincronizaba con el
+`baseUnit` real del ingrediente — quedaba guardada con la unidad default,
+lo que habría roto la venta por falta de `UnitConversion`. Ver
+`components/recetas/recipe-lines-editor.tsx`.
+
+## Administración (`/administracion`) — auth real + permisos reales
+
+Cierra el último pendiente de Fase 1. Decisiones de producto confirmadas
+antes de construirlo (no había proyecto Supabase configurado — sin
+credenciales no se podía integrar ni verificar, así que no se adoptó en
+esta pasada):
+
+- **Sin Supabase**: hashing propio (`crypto.scrypt`, `lib/password.ts`) y
+  sesión firmada/sellada con `iron-session` (`lib/session.ts`) en vez de la
+  cookie sin firmar de antes. Migrar a Supabase Auth después no implica
+  rehacer el modelo (`Employee`/`Role`/`RolePermission`/
+  `EmployeePermissionOverride` ya son independientes del mecanismo de
+  login).
+- **Login híbrido**: el PIN se mantiene en el POS/Caja para identificar
+  rápido quién opera (ahora hasheado, ya no en texto plano). Login fuerte
+  (email + password, `authLevel: "password"` en la sesión) solo se exige
+  para entrar a **Administración** — editar empleados/roles desde un
+  mostrador compartido con un PIN de 4 dígitos no es suficiente evidencia
+  de autorización.
+
+Permisos reales activados (`lib/permissions.ts`, matriz ya sembrada en
+`prisma/seed.ts`) en los puntos que antes no validaban nada: apertura/cierre
+de turno (`CAJA_ABRIR`/`CAJA_CERRAR` sobre quien **confirma**, no quien
+cuenta la caja), retiros/ingresos (`CAJA_CHICA_MODIFICAR`), ajuste de
+inventario (`INVENTARIO_AJUSTAR`), alta de ingrediente/producto/receta
+(`INVENTARIO_CREAR_ITEM`/`PRODUCTO_CREAR`/`RECETA_MODIFICAR`), venta
+(`VENTA_REALIZAR`). Todas las Server Actions que reciben `employeeId` del
+cliente ahora también validan que coincide con la sesión activa del
+servidor antes de proceder — antes se confiaba ciegamente en ese parámetro.
+
+Gestión de empleados (`/administracion`, alta y edición): nombre, email,
+PIN, password, rol (asignado a `DEFAULT_BRANCH_ID`, sigue fijo hasta Fase
+5), `isCashier`, `isActive`. Fuera de alcance deliberadamente: editar la
+matriz `RolePermission` en sí (los 4 roles son una decisión de negocio ya
+congelada), UI para `EmployeePermissionOverride` (excepciones por
+empleado), reset de password por correo (Administración lo asigna
+directo).
+
+Credenciales de demo (`prisma/seed-demo.ts`): Ana (`ana@nomada.cafe` /
+`admin1234`) es la única cuenta sembrada con acceso a Administración.
+
+Verificado end-to-end con Playwright contra Postgres real: login por PIN
+hasheado, gate de página en `/inventario` por rol, rechazo de acción por
+falta de permiso (Recetas), login de Administración (credenciales
+incorrectas y correctas), alta de empleado nuevo desde la UI y login
+inmediato con su PIN, doble confirmación de cierre de turno rechazada con
+un confirmante sin `CAJA_CERRAR` y aceptada con uno que sí lo tiene.
+
+Bug encontrado y corregido durante la verificación: `NewProductForm` y
+`EditRecipeForm` (Recetas) usaban `crypto.randomUUID()` dentro del
+`useState` inicial para las keys de React — como ese inicializador corre
+tanto en SSR como al hidratar en el cliente, generaba un valor distinto
+cada vez y rompía la hidratación. Se corrigió usando keys fijos/derivados
+de datos reales para el estado inicial, reservando `crypto.randomUUID()`
+solo para filas agregadas después vía clic (que nunca corren en SSR). Si
+en el futuro se agrega un `useState` inicial con un valor no determinista
+(random, `Date.now()`, etc.) en un client component, va a pasar lo mismo.
+
 ## Próximos pasos recomendados (en orden)
 
-1. **Inventario**: al menos consulta de stock y ajuste manual. El módulo
-   Caja ya cubre apertura/cierre de turno con doble confirmación.
-2. **UI de recetas**: hoy `Recipe`/`RecipeVersion`/`RecipeIngredient` solo
-   se crean vía seed/Prisma Studio. Para que el cliente pueda dar de alta
-   un producto nuevo sin tocar código, hace falta una pantalla (probablemente
-   parte de Administración).
-3. **Administración con auth real**: reemplazar `lib/session.ts` por
-   Supabase Auth (o el proveedor que se decida), conectando con el modelo
-   de roles/permisos que ya existe. Mientras esto no exista, no usar este
-   POS con dinero real sin supervisión — el PIN no es un mecanismo de
-   seguridad.
-4. **Fase 2 (Compras)**: los modelos (`Supplier`, `PurchaseOrder`,
+Fase 1 está cerrada. Lo que sigue:
+
+1. **Fase 2 (Compras)**: los modelos (`Supplier`, `PurchaseOrder`,
    `TransferManifest`, `PhysicalCount`) ya están en el schema; falta
    construir la UI y las Server Actions, siguiendo el mismo patrón que
-   `actions/pos.ts` (transacciones, validación server-side).
-5. Resolver las simplificaciones documentadas en
+   `actions/pos.ts`/`actions/recipes.ts` (transacciones, validación
+   server-side, `requirePermission` para las acciones sensibles —
+   `COMPRA_REGISTRAR`/`ORDEN_COMPRA_CREAR` ya existen en el catálogo).
+2. Resolver las simplificaciones documentadas en
    `docs/pos-module.md` (impuestos, sustituciones de ingrediente, pagos
    divididos en la UI, cancelación de venta) según prioridad de negocio.
+3. Simplificaciones deliberadas de Administración/Recetas documentadas
+   arriba (`EmployeePermissionOverride`, ingredientes compuestos nuevos,
+   alertas de caducidad) — atender si el negocio los necesita.
+4. Si se decide adoptar Supabase Auth más adelante: reemplazar
+   `lib/password.ts`/`lib/session.ts` por la integración real, el modelo de
+   datos ya está listo para ese cambio sin migraciones.
 
 ## Convenciones a mantener
 
@@ -113,3 +216,19 @@ pérdida de información.
 - Nuevos componentes de UI van en `components/ui/` siguiendo el mismo
   patrón sin Radix, a menos que la funcionalidad ya lo justifique (ese es
   el momento de adoptar Radix real, no antes).
+- Toda Server Action que mute algo sensible (dinero, inventario, recetas,
+  empleados) debe llamar `requirePermission` (`lib/permissions.ts`) con el
+  permiso que le corresponda de la matriz en `prisma/seed.ts`, y validar que
+  el `employeeId` que recibe del cliente coincide con
+  `getSessionEmployeeId()` — no confiar en un `employeeId` de parámetro sin
+  verificar. Ver `actions/inventory.ts`/`actions/recipes.ts`/`actions/pos.ts`
+  para el patrón exacto. Para acciones de Administración (que no reciben
+  `employeeId` del cliente en absoluto) usar `requirePasswordSession()` en
+  vez de `getSessionEmployeeId()`, ver `actions/employees.ts`.
+- Un `useState` inicial en un client component nunca debe usar un valor no
+  determinista (`crypto.randomUUID()`, `Date.now()`, `Math.random()`) — ese
+  inicializador corre tanto en SSR como al hidratar y un valor distinto en
+  cada corrida rompe la hidratación (bug real encontrado en Recetas, ver
+  arriba). Usar un valor fijo o derivado de datos reales para el estado
+  inicial; los valores aleatorios son seguros solo en código que corre
+  exclusivamente en el cliente (ej. un handler de "agregar fila").

@@ -40,12 +40,16 @@ npm run prisma:seed-demo    # datos de demo: productos, recetas, empleados, turn
 npm run dev                 # http://localhost:3000
 ```
 
-Empleados de demo para entrar al POS (selector por PIN, ver
-[`docs/pos-module.md`](docs/pos-module.md) sobre por qué esto no es
-autenticación real todavía):
+Empleados de demo para entrar al POS (selector por PIN — identifica rápido
+quién opera en el mostrador, ver `docs/CONTINUE.md`):
 
 - Ana — PIN `1234` (rol GERENTE)
 - Luis — PIN `5678` (rol BARISTA)
+
+Para entrar a **Administración** (`/administracion`) hace falta login con
+email + password, no PIN — solo Ana tiene una cuenta de demo con acceso:
+
+- Ana — `ana@nomada.cafe` / `admin1234`
 
 ## Scripts
 

@@ -1,12 +1,23 @@
 import { PrismaClient, RoleName } from "@prisma/client";
+import { randomBytes, scrypt as scryptCallback } from "crypto";
+import { promisify } from "util";
 
 const prisma = new PrismaClient();
+const scrypt = promisify(scryptCallback);
 
 // Duplicado intencional de lib/constants.ts: este script corre standalone
 // vía ts-node (fuera del runtime de Next.js/tsconfig paths), así que se
 // evita depender de la resolución de módulos "@/..." aquí.
 const DEFAULT_BRANCH_ID = "branch-principal";
 const DEFAULT_STOCK_LOCATION_ID = "stock-branch-principal";
+
+// Duplicado intencional de lib/password.ts (mismo motivo de arriba) — debe
+// producir el mismo formato "salt:hash" que lib/session.ts sabe verificar.
+async function hashSecret(plain: string): Promise<string> {
+  const salt = randomBytes(16).toString("hex");
+  const derivedKey = (await scrypt(plain, salt, 64)) as Buffer;
+  return `${salt}:${derivedKey.toString("hex")}`;
+}
 
 // -----------------------------------------------------------------------
 // Datos de demo para probar el módulo POS de punta a punta:
@@ -314,16 +325,32 @@ async function main() {
   const gerenteRole = await prisma.role.findUniqueOrThrow({ where: { name: RoleName.GERENTE } });
   const baristaRole = await prisma.role.findUniqueOrThrow({ where: { name: RoleName.BARISTA } });
 
+  // PIN en texto plano solo en este script (dato de demo) — se guarda
+  // hasheado, igual que produciría el flujo real de alta de empleado en
+  // Administración. Documentado aquí y en README para quien necesite
+  // iniciar sesión con estas cuentas de prueba.
+  const anaPinHash = await hashSecret("1234");
+  const luisPinHash = await hashSecret("5678");
+  // Ana (GERENTE) es la única cuenta de demo con acceso a Administración —
+  // tiene EMPLEADO_CREAR/MODIFICAR en la matriz de prisma/seed.ts.
+  const anaPasswordHash = await hashSecret("admin1234");
+
   const ana = await prisma.employee.upsert({
     where: { id: "emp-ana" },
-    update: {},
-    create: { id: "emp-ana", name: "Ana", pin: "1234" },
+    update: { pin: anaPinHash, email: "ana@nomada.cafe", passwordHash: anaPasswordHash },
+    create: {
+      id: "emp-ana",
+      name: "Ana",
+      pin: anaPinHash,
+      email: "ana@nomada.cafe",
+      passwordHash: anaPasswordHash,
+    },
   });
 
   const luis = await prisma.employee.upsert({
     where: { id: "emp-luis" },
-    update: {},
-    create: { id: "emp-luis", name: "Luis", pin: "5678" },
+    update: { pin: luisPinHash },
+    create: { id: "emp-luis", name: "Luis", pin: luisPinHash },
   });
 
   await prisma.employeeBranch.upsert({

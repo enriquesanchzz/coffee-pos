@@ -1,21 +1,26 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Prisma, ShiftType } from "@prisma/client";
+import { Permission, Prisma, ShiftType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { findEmployeeByPin } from "@/lib/session";
+import { findEmployeeByPin, getSessionEmployeeId } from "@/lib/session";
+import { requirePermission } from "@/lib/permissions";
 
 // -----------------------------------------------------------------------
-// Doble confirmación (apertura y cierre) — simplificación deliberada: solo
-// se exige que el PIN pertenezca a un empleado activo DISTINTO de quien
-// cuenta la caja, sin chequeo de permiso (CAJA_ABRIR/CAJA_CERRAR/
-// CAJA_CORTE_AUTORIZAR ya existen en el catálogo de permisos pero no hay
-// infraestructura de chequeo de permisos en el código todavía — eso es
-// trabajo del módulo Administración). Esto respeta el criterio documentado
-// en el schema: "preferentemente gerente, pero puede ser cualquier otro
-// empleado si el gerente no está disponible".
+// Doble confirmación (apertura y cierre): el PIN debe pertenecer a un
+// empleado activo DISTINTO de quien cuenta la caja Y que tenga el permiso
+// correspondiente (CAJA_ABRIR/CAJA_CERRAR) — respeta el criterio
+// documentado en el schema: "preferentemente gerente, pero puede ser
+// cualquier otro empleado si el gerente no está disponible", ahora
+// verificado de verdad contra la matriz de permisos en vez de solo pedir
+// "cualquier empleado distinto".
 // -----------------------------------------------------------------------
-async function verifyConfirmingEmployee(pin: string, excludeEmployeeId: string) {
+async function verifyConfirmingEmployee(
+  pin: string,
+  excludeEmployeeId: string,
+  branchId: string,
+  permission: Permission
+) {
   const employee = await findEmployeeByPin(pin);
   if (!employee) {
     throw new Error("PIN de confirmación incorrecto.");
@@ -23,6 +28,7 @@ async function verifyConfirmingEmployee(pin: string, excludeEmployeeId: string) 
   if (employee.id === excludeEmployeeId) {
     throw new Error("La confirmación debe ser de un empleado distinto.");
   }
+  await requirePermission(employee.id, branchId, permission);
   return employee;
 }
 
@@ -35,6 +41,10 @@ export type OpenShiftInput = {
 };
 
 export async function openShift(input: OpenShiftInput) {
+  if (input.cashierId !== (await getSessionEmployeeId())) {
+    throw new Error("El cajero no coincide con la sesión activa.");
+  }
+
   const existing = await prisma.shift.findFirst({
     where: { branchId: input.branchId, status: "ABIERTO" },
   });
@@ -44,7 +54,9 @@ export async function openShift(input: OpenShiftInput) {
 
   const confirmingEmployee = await verifyConfirmingEmployee(
     input.confirmingPin,
-    input.cashierId
+    input.cashierId,
+    input.branchId,
+    "CAJA_ABRIR"
   );
 
   const shift = await prisma.shift.create({
@@ -114,6 +126,10 @@ export type CloseShiftInput = {
 };
 
 export async function closeShift(input: CloseShiftInput) {
+  if (input.cashierId !== (await getSessionEmployeeId())) {
+    throw new Error("El cajero no coincide con la sesión activa.");
+  }
+
   await prisma.$transaction(async (tx) => {
     const shift = await tx.shift.findUnique({ where: { id: input.shiftId } });
     if (!shift || shift.status !== "ABIERTO") {
@@ -132,7 +148,9 @@ export async function closeShift(input: CloseShiftInput) {
 
     const confirmingEmployee = await verifyConfirmingEmployee(
       input.confirmingPin,
-      input.cashierId
+      input.cashierId,
+      shift.branchId,
+      "CAJA_CERRAR"
     );
 
     await tx.shift.update({
