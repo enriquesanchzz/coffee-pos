@@ -16,7 +16,7 @@ Claude Code) pueda retomarlo sin arqueología.
 | Módulo **Inventario** (consulta, ajustes) | ✅ Construido (`/inventario`). Alertas de caducidad (`IngredientBatch.expirationDate`) no incluidas — no hay lotes sembrados con fecha todavía. |
 | UI de **Recetas** (alta de producto+receta, edición versionada) | ✅ Construido (`/recetas`). |
 | **Administración** (auth real, gestión de empleados/roles, permisos reales) | ✅ Construido (`/administracion`). Ver sección dedicada abajo. |
-| Módulo **Compras** (Fase 2) | ⚪ No construido. Modelos ya existen en el schema. |
+| Módulo **Compras** — Proveedores + Órdenes de compra (Fase 2) | ✅ Construido (`/compras`, rama `feature/modulo-compras`). Transferencias y conteos físicos pendientes — ver sección dedicada abajo. |
 | Módulo **Reportes** (Fase 3) | ⚪ No construido. |
 | Multi-sucursal en UI (Fase 5) | ⚪ No construido. `DEFAULT_BRANCH_ID` fijo en `lib/constants.ts`. |
 
@@ -183,22 +183,75 @@ solo para filas agregadas después vía clic (que nunca corren en SSR). Si
 en el futuro se agrega un `useState` inicial con un valor no determinista
 (random, `Date.now()`, etc.) en un client component, va a pasar lo mismo.
 
+## Módulo Compras — Proveedores + Órdenes de compra (`/compras`, rama `feature/modulo-compras`)
+
+Primer pedazo de Fase 2, por decisión explícita del usuario de acotar el
+alcance: **proveedores + órdenes de compra con recepción**. Transferencias
+entre sucursales (`TransferManifest`) y conteos físicos (`PhysicalCount`)
+quedan pendientes — los modelos ya existen en el schema, sin tocar.
+
+- `/compras/proveedores`: alta/edición de `Supplier` (siempre global,
+  `branchId: null` — no hay razón para atarlo a una sucursal con solo una
+  sucursal activa) y de qué ingredientes surte a qué costo
+  (`IngredientSupplier`, con `isSelected` para marcar el costo "activo" —
+  al marcar uno, la acción desmarca los demás del mismo ingrediente en la
+  misma transacción).
+- `/compras/nueva`: crear una orden (`PurchaseOrder` + `PurchaseOrderItem[]`,
+  status inicial `CREADA`). El costo estimado de cada línea se autocompleta
+  desde el costo cotizado del proveedor cuando existe.
+- `/compras/[id]`: si la orden sigue `CREADA` muestra el formulario de
+  recepción; si no, un resumen de solo lectura. **La recepción es de una
+  sola vez, no incremental** — el propio schema documenta
+  `PROVEIDA_PARCIALMENTE` como terminal ("no se reabre"), así que
+  `receivePurchaseOrder` se llama una única vez capturando lo que
+  realmente llegó por línea (puede ser menos de lo pedido). Por cada línea
+  recibida: crea `IngredientBatch`, incrementa `InventoryStock`, registra
+  `InventoryMovement` tipo `COMPRA`, y si el costo real difiere del
+  cotizado actualiza `IngredientSupplier.cost` dejando rastro en
+  `IngredientCostHistory` (solo al recibir — no al editar el costo cotizado
+  a mano, eso es "configurar lista de precios", no una transacción real).
+
+**Unidad de línea bloqueada al `baseUnit` del ingrediente** — mismo
+criterio que Recetas/Inventario: no hay ninguna fila en `UnitConversion`
+sembrada todavía, así que dejar elegir `purchaseUnit` libremente (ej.
+comprar "1 KG" cuando el ingrediente se descuenta en `ESPRESSO_SHOT`)
+rompería por falta de conversión. Ordenar en `purchaseUnit` real es un
+follow-up una vez que el negocio defina y siembre los factores de
+conversión correctos.
+
+**Permisos**: no existe un permiso específico de "proveedores" en el
+catálogo — se reutiliza `ORDEN_COMPRA_CREAR` (crear/editar proveedor,
+crear orden) y `COMPRA_REGISTRAR` (recibir). Ambos son nivel BARISTA en la
+matriz de `prisma/seed.ts`, así que cualquier barista puede operar Compras,
+igual que hoy opera el POS.
+
+Fuera de alcance deliberadamente: cancelar una orden
+(`PurchaseOrderStatus.CANCELADA` existe pero no tiene UI), quitar un
+`IngredientSupplier` ya creado, `ReorderPoint` (puntos de reorden),
+transferencias, conteos físicos.
+
+Verificado end-to-end con Playwright contra Postgres real: alta de
+proveedor con costo cotizado, creación de orden con costo autocompletado,
+recepción con una línea completa (costo real distinto al estimado) y otra
+parcial → confirmado en DB `PurchaseOrder.status = PROVEIDA_PARCIALMENTE`,
+`IngredientBatch`/`InventoryStock`/`InventoryMovement` correctos,
+`IngredientCostHistory` generado solo para la línea con costo distinto. Un
+empleado AUXILIAR (sin `ORDEN_COMPRA_CREAR`/`COMPRA_REGISTRAR`) no puede
+entrar a `/compras` ni `/compras/proveedores`.
+
 ## Próximos pasos recomendados (en orden)
 
-Fase 1 está cerrada. Lo que sigue:
-
-1. **Fase 2 (Compras)**: los modelos (`Supplier`, `PurchaseOrder`,
-   `TransferManifest`, `PhysicalCount`) ya están en el schema; falta
-   construir la UI y las Server Actions, siguiendo el mismo patrón que
-   `actions/pos.ts`/`actions/recipes.ts` (transacciones, validación
-   server-side, `requirePermission` para las acciones sensibles —
-   `COMPRA_REGISTRAR`/`ORDEN_COMPRA_CREAR` ya existen en el catálogo).
+1. Dentro de Fase 2: **transferencias entre sucursales/bodega**
+   (`TransferManifest`/`TransferLine`) y **conteos físicos**
+   (`PhysicalCount`/`PhysicalCountLine`) — mismo patrón que Compras
+   (transacciones, `requirePermission`, verificación end-to-end).
 2. Resolver las simplificaciones documentadas en
    `docs/pos-module.md` (impuestos, sustituciones de ingrediente, pagos
    divididos en la UI, cancelación de venta) según prioridad de negocio.
-3. Simplificaciones deliberadas de Administración/Recetas documentadas
-   arriba (`EmployeePermissionOverride`, ingredientes compuestos nuevos,
-   alertas de caducidad) — atender si el negocio los necesita.
+3. Simplificaciones deliberadas de Administración/Recetas/Compras
+   documentadas arriba (`EmployeePermissionOverride`, ingredientes
+   compuestos nuevos, alertas de caducidad, cancelar orden, `ReorderPoint`,
+   ordenar en `purchaseUnit` real) — atender si el negocio los necesita.
 4. Si se decide adoptar Supabase Auth más adelante: reemplazar
    `lib/password.ts`/`lib/session.ts` por la integración real, el modelo de
    datos ya está listo para ese cambio sin migraciones.

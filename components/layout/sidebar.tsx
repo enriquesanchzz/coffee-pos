@@ -11,16 +11,15 @@ import {
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
-// Los 6 módulos definidos en el ADR / roadmap (ver docs/roadmap.md). Compras
-// y Reportes (Fase 2/3) todavía no existen — quedan visibles para que el
-// cliente vea el mapa completo del sistema, marcados "pronto" en vez de
-// ocultarse.
+// Los 6 módulos definidos en el ADR / roadmap (ver docs/roadmap.md). Reportes
+// (Fase 3) todavía no existe — queda visible para que el cliente vea el mapa
+// completo del sistema, marcado "pronto" en vez de ocultarse.
 const modules = [
   { href: "/pos", label: "Punto de Venta", icon: ShoppingCart, enabled: true },
   { href: "/caja", label: "Caja", icon: Wallet, enabled: true },
   { href: "/inventario", label: "Inventario", icon: Package, enabled: true },
   { href: "/recetas", label: "Recetas", icon: BookOpen, enabled: true },
-  { href: "#", label: "Compras", icon: Truck, enabled: false },
+  { href: "/compras", label: "Compras", icon: Truck, enabled: true },
   { href: "#", label: "Reportes", icon: BarChart3, enabled: false },
   { href: "/administracion", label: "Administración", icon: Settings, enabled: true },
 ];
