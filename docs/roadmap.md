@@ -9,7 +9,7 @@ migraciones destructivas entre fases.
 | 0 | Modelo de datos | Schema Prisma completo (27 modelos), catálogo de permisos, seed de roles, migración inicial. | ✅ Completa — commit `8294475` |
 | 1 | MVP operativo | POS (venta + descuento de inventario por receta), Caja (turnos), Inventario básico, UI de recetas, Administración (auth + permisos reales). | ✅ Completa — ver `docs/CONTINUE.md` para el detalle de cada módulo. |
 | 2 | Cadena de suministro | Compras: proveedores, órdenes de compra, recepción de mercancía, transferencias entre sucursales, conteos físicos. | ✅ Completa — ver `docs/CONTINUE.md` para el detalle de cada pieza. |
-| 3 | Business Intelligence | Reportes de utilidad, costo de recetas en el tiempo, reportes de inventario, estadísticas consolidadas. | ⚪ Pendiente — soportado por `RecipeCostHistory` / `IngredientCostHistory`, que ya capturan el historial necesario. |
+| 3 | Business Intelligence | Reportes de utilidad, costo de recetas en el tiempo, reportes de inventario, estadísticas consolidadas. | ✅ Completa — ver `docs/CONTINUE.md` para el detalle de cada reporte. |
 | 4 | Retención de clientes | Programa de lealtad (sellos, niveles), códigos de descuento. | ⚪ Pendiente — modelos `Customer`, `LoyaltyCard`, `LoyaltyTier`, `DiscountCode` ya existen en el schema. |
 | 5 | Multi-sucursal | Habilitar selección de sucursal en la UI, reportes consolidados (`REPORTE_CONSOLIDADO_VER`), gestión de sucursales (`SUCURSAL_GESTIONAR`). | ⚪ Pendiente — el modelo ya es multi-sucursal desde Fase 0; falta remover el `DEFAULT_BRANCH_ID` hardcodeado y construir la UI de selección/gestión. |
 
@@ -52,4 +52,13 @@ contra Postgres real (detalle en `docs/CONTINUE.md`):
    contó) antes de ajustar `InventoryStock` y registrar
    `CONTEO_FISICO_AJUSTE`.
 
-Próximo: **Fase 3 — Business Intelligence** (Reportes).
+## Fase 3 — cerrada
+
+Los 4 reportes del alcance completo ya están construidos y verificados
+end-to-end contra Postgres real (rama `feature/modulo-reportes`, detalle en
+`docs/CONTINUE.md`): **Utilidad**, **Inventario**, **Costo de recetas** (con
+`RecipeCostHistory`, que empezó a escribirse recién con este trabajo) y
+**Estadísticas**.
+
+Próximo: **Fase 4 — Retención de clientes** (lealtad, códigos de
+descuento) o **Fase 5 — Multi-sucursal**, según prioridad de negocio.
