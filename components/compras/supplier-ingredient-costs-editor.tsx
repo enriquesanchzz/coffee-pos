@@ -27,9 +27,11 @@ function LinkRow({
   onSaved: (link: SupplierIngredientLink) => void;
 }) {
   const [cost, setCost] = useState(initial ? String(initial.cost) : "");
-  const [costUnit, setCostUnit] = useState<UnitOfMeasure>(
-    (initial?.costUnit as UnitOfMeasure) ?? (baseUnit as UnitOfMeasure)
-  );
+  // El costo siempre se cotiza en el baseUnit del ingrediente — no hay
+  // ninguna fila en UnitConversion sembrada todavía, así que dejar elegir
+  // una unidad distinta rompería el cálculo de costo de receta (mismo
+  // motivo que ya bloqueó la unidad en RecipeIngredient/PurchaseOrderItem).
+  const costUnit = baseUnit as UnitOfMeasure;
   const [isSelected, setIsSelected] = useState(initial?.isSelected ?? false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -74,17 +76,9 @@ function LinkRow({
           onChange={(e) => setCost(e.target.value)}
           placeholder="Costo"
         />
-        <Select
-          className="w-24"
-          value={costUnit}
-          onChange={(e) => setCostUnit(e.target.value as UnitOfMeasure)}
-        >
-          {Object.entries(unitLabels).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </Select>
+        <span className="w-14 text-sm text-muted-foreground">
+          {unitLabels[costUnit] ?? costUnit}
+        </span>
         <label className="flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground">
           <input
             type="checkbox"

@@ -16,9 +16,9 @@ Claude Code) pueda retomarlo sin arqueología.
 | Módulo **Inventario** (consulta, ajustes) | ✅ Construido (`/inventario`). Alertas de caducidad (`IngredientBatch.expirationDate`) no incluidas — no hay lotes sembrados con fecha todavía. |
 | UI de **Recetas** (alta de producto+receta, edición versionada) | ✅ Construido (`/recetas`). |
 | **Administración** (auth real, gestión de empleados/roles, permisos reales) | ✅ Construido (`/administracion`). Ver sección dedicada abajo. |
-| Módulo **Compras** — Proveedores + Órdenes de compra (Fase 2) | ✅ Construido (`/compras`, rama `feature/modulo-compras`, PR #3). |
-| **Transferencias + Conteos físicos** (resto de Fase 2) | ✅ Construido (`/compras/transferencias`, `/compras/conteos`, rama `feature/modulo-transferencias-conteos`). Ver sección dedicada abajo. |
-| Módulo **Reportes** (Fase 3) | ⚪ No construido. |
+| Módulo **Compras** — Proveedores + Órdenes de compra (Fase 2) | ✅ Construido y mergeado a `main` (PR #3). |
+| **Transferencias + Conteos físicos** (resto de Fase 2) | ✅ Construido y mergeado a `main` (PR #4, `/compras/transferencias`, `/compras/conteos`). |
+| Módulo **Reportes** (Fase 3) | ✅ Construido (`/reportes`, rama `feature/modulo-reportes`). Ver sección dedicada abajo. |
 | Multi-sucursal en UI (Fase 5) | ⚪ No construido. `DEFAULT_BRANCH_ID` fijo en `lib/constants.ts`. |
 
 ## Qué se verificó en esta sesión
@@ -296,27 +296,98 @@ un conteo físico aprobado (confirmado `InventoryStock` ajustado +
 inventario), y que la aprobación de conteo rechaza tanto si el PIN es del
 mismo empleado que contó como si es de alguien sin `INVENTARIO_AJUSTAR`.
 
+## Módulo Reportes (`/reportes`, rama `feature/modulo-reportes`)
+
+Fase 3 completa, alcance pedido explícitamente de una sola vez: utilidad,
+costo de receta en el tiempo, inventario, estadísticas. Rama creada desde
+`main` (ya con Fase 1 y Fase 2 mergeadas).
+
+**Prerrequisito que no existía**: la base no tenía ningún
+`Supplier`/`IngredientSupplier` (se habían limpiado los de prueba de
+Compras), así que cualquier costo de receta/utilidad hubiera dado `$0`.
+`prisma/seed-demo.ts` ahora siembra un proveedor base
+(`Proveedor Central`) con costo cotizado para los 6 ingredientes, para que
+los reportes tengan números reales desde el primer momento.
+
+**`RecipeCostHistory` nunca se había escrito** — ninguna acción le metía
+filas. Ahora `actions/recipes.ts` (`createProductWithRecipe` y
+`updateVariantRecipe`) registra un snapshot vía
+`lib/recipe-cost.ts` (`recordRecipeCostSnapshot`) cada vez que se crea una
+`RecipeVersion` nueva. No hay backfill de las recetas ya sembradas — el
+reporte de recetas siempre muestra el costo **actual** calculado en vivo
+(`calculateRecipeVersionCost`, recursivo, mismo patrón que
+`resolveRecipeConsumption` de `actions/pos.ts` pero para costo en vez de
+consumo), y el historial se construye desde ahora conforme se editen
+recetas.
+
+**Fix retroactivo en Compras** (ya mergeado): `costUnit` en
+`components/compras/supplier-ingredient-costs-editor.tsx` dejaba elegir
+libremente la unidad del costo cotizado. Sin ninguna fila en
+`UnitConversion` (sigue en cero), eso hubiera roto el cálculo de costo de
+receta para cualquier ingrediente cotizado en una unidad distinta a su
+`baseUnit`. Se bloqueó a `baseUnit`, igual que ya estaba bloqueado en
+`RecipeIngredient`/`PurchaseOrderItem`.
+
+Los 4 reportes (`lib/reports.ts`), todos gateados nivel GERENTE
+(`REPORTE_UTILIDAD_VER`/`REPORTE_INVENTARIO_VER`/`ESTADISTICAS_GESTIONAR`
+— BARISTA/AUXILIAR no tienen ninguno):
+- **Utilidad** (`/reportes/utilidad`): por rango de fechas, ingresos
+  (`Sale.total`), costo (COGS: costo de receta de cada `SaleItem` vía
+  `calculateRecipeVersionCost` + costo de `SaleItemModifier` que consumen
+  ingrediente propio, ej. "Shot extra"), margen $ y %, tabla por producto.
+- **Inventario** (`/reportes/inventario`): valor de stock actual
+  (cantidad × costo cotizado) + `InventoryMovement` del periodo agrupados
+  por tipo.
+- **Recetas** (`/reportes/recetas`): costo actual vs. precio por variante
+  activa, con el historial de `RecipeCostHistory` de cada una.
+- **Estadísticas** (`/reportes/estadisticas`): productos más vendidos,
+  ventas por día, ticket promedio, total de transacciones.
+
+Rango de fechas vía `?from=&to=` en la URL
+(`components/reportes/date-range-picker.tsx`, cliente, sin estado propio
+más allá de reflejar la URL) — default últimos 30 días
+(`resolveDateRange` en `lib/reports.ts`).
+
+**Limitación documentada**: el costo de ventas pasadas en el reporte de
+utilidad usa el costo **actual** de los ingredientes aplicado a la
+composición histórica exacta de la receta (`SaleItem.recipeVersionId` es
+un snapshot inmutable) — no el costo que tenían los ingredientes el día
+exacto de esa venta. Eso requeriría cruzar `IngredientCostHistory` por
+fecha, follow-up documentado.
+
+Fuera de alcance deliberadamente: costo histórico real por fecha, gráficas
+(no hay librería de charts en el proyecto, no se agregó una dependencia
+nueva solo para esto), recalcular/re-snapshotear recetas automáticamente
+cuando cambia el costo de un ingrediente en Compras (solo se snapshotea al
+crear/editar la receta misma), `REPORTE_CONSOLIDADO_VER` (es multi-sucursal,
+Fase 5).
+
+Verificado end-to-end con Playwright contra Postgres real: venta con
+modificador de costo (Shot extra), edición de una receta (confirmado que
+se creó `RecipeCostHistory`), y los 4 reportes revisados — utilidad y
+estadísticas coinciden entre sí en ingresos/ticket, inventario refleja el
+valor de stock correcto, recetas muestra el historial recién creado. Un
+BARISTA no puede entrar a `/reportes` ni a ninguna subruta.
+
 ## Próximos pasos recomendados (en orden)
 
-Fase 2 está cerrada. Lo que sigue:
+Fases 1, 2 y 3 están cerradas. Lo que sigue:
 
-1. **Fase 3 (Reportes)**: utilidad, costo de recetas en el tiempo,
-   inventario, estadísticas consolidadas — soportado por
-   `RecipeCostHistory`/`IngredientCostHistory`, que ya capturan el
-   historial necesario.
+1. **Fase 4 (Retención de clientes)** o **Fase 5 (Multi-sucursal)**, según
+   prioridad de negocio — ninguna tiene alcance definido todavía.
 2. Resolver las simplificaciones documentadas en
    `docs/pos-module.md` (impuestos, sustituciones de ingrediente, pagos
    divididos en la UI, cancelación de venta) según prioridad de negocio.
 3. Simplificaciones deliberadas de Administración/Recetas/Compras/
-   Transferencias documentadas arriba (`EmployeePermissionOverride`,
+   Transferencias/Reportes documentadas arriba (`EmployeePermissionOverride`,
    ingredientes compuestos nuevos, alertas de caducidad, cancelar orden,
    `ReorderPoint`, ordenar en `purchaseUnit` real, revertir una
-   transferencia en tránsito) — atender si el negocio los necesita.
+   transferencia en tránsito, costo histórico por fecha, gráficas) —
+   atender si el negocio los necesita.
 4. Si se decide adoptar Supabase Auth más adelante: reemplazar
    `lib/password.ts`/`lib/session.ts` por la integración real, el modelo de
    datos ya está listo para ese cambio sin migraciones.
-5. Mergear los PRs pendientes (`feature/modulo-compras` #3,
-   `feature/modulo-transferencias-conteos`) a `main` en orden.
+5. Mergear el PR pendiente de `feature/modulo-reportes` a `main`.
 
 ## Convenciones a mantener
 

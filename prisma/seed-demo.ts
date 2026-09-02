@@ -405,6 +405,48 @@ async function main() {
     });
   }
 
+  console.log("Sembrando proveedor base y costos cotizados...");
+
+  // Sin esto, cualquier cálculo de costo de receta (lib/recipe-cost.ts) y
+  // los reportes de utilidad/recetas mostrarían $0 para todo — un proveedor
+  // base con costo por ingrediente da números reales desde el primer momento.
+  const proveedorBase = await prisma.supplier.upsert({
+    where: { id: "sup-base" },
+    update: {},
+    create: { id: "sup-base", name: "Proveedor Central", branchId: null },
+  });
+
+  // costo cotizado en la baseUnit de cada ingrediente (ver nota en
+  // components/compras/supplier-ingredient-costs-editor.tsx sobre por qué
+  // costUnit siempre debe coincidir con baseUnit).
+  const costosBase: { ingredientId: string; cost: number }[] = [
+    { ingredientId: cafe.id, cost: 3.5 }, // por ESPRESSO_SHOT
+    { ingredientId: leche.id, cost: 0.02 }, // por ML
+    { ingredientId: vaso.id, cost: 2.5 }, // por PIEZA
+    { ingredientId: azucar.id, cost: 0.03 }, // por G
+    { ingredientId: agua.id, cost: 0.001 }, // por ML
+    { ingredientId: esencia.id, cost: 0.8 }, // por ML
+  ];
+
+  for (const item of costosBase) {
+    const ingredient = await prisma.ingredient.findUniqueOrThrow({
+      where: { id: item.ingredientId },
+    });
+    await prisma.ingredientSupplier.upsert({
+      where: {
+        ingredientId_supplierId: { ingredientId: item.ingredientId, supplierId: proveedorBase.id },
+      },
+      update: { cost: item.cost, costUnit: ingredient.baseUnit, isSelected: true },
+      create: {
+        ingredientId: item.ingredientId,
+        supplierId: proveedorBase.id,
+        cost: item.cost,
+        costUnit: ingredient.baseUnit,
+        isSelected: true,
+      },
+    });
+  }
+
   console.log("Verificando turno abierto...");
 
   const openShift = await prisma.shift.findFirst({

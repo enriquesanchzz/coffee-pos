@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getSessionEmployeeId } from "@/lib/session";
 import { requirePermission } from "@/lib/permissions";
+import { recordRecipeCostSnapshot } from "@/lib/recipe-cost";
 
 export type CreateIngredientInput = {
   employeeId: string;
@@ -165,6 +166,8 @@ export async function createProductWithRecipe(input: CreateProductWithRecipeInpu
           unit: line.unit,
         })),
       });
+
+      await recordRecipeCostSnapshot(tx, version.id, "Alta de producto");
     }
 
     return product.id;
@@ -242,6 +245,8 @@ export async function updateVariantRecipe(input: UpdateVariantRecipeInput) {
         unit: line.unit,
       })),
     });
+
+    await recordRecipeCostSnapshot(tx, newVersion.id, "Edición de receta");
   });
 
   revalidatePath("/recetas");
