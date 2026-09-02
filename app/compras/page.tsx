@@ -28,9 +28,17 @@ export default async function ComprasPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-lg font-semibold">Compras</h1>
-              <Link href="/compras/proveedores" className="text-sm text-muted-foreground hover:underline">
-                Proveedores →
-              </Link>
+              <div className="flex gap-3">
+                <Link href="/compras/proveedores" className="text-sm text-muted-foreground hover:underline">
+                  Proveedores →
+                </Link>
+                <Link href="/compras/transferencias" className="text-sm text-muted-foreground hover:underline">
+                  Transferencias →
+                </Link>
+                <Link href="/compras/conteos" className="text-sm text-muted-foreground hover:underline">
+                  Conteos físicos →
+                </Link>
+              </div>
             </div>
             <Link
               href="/compras/nueva"
