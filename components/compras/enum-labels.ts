@@ -1,4 +1,9 @@
-import type { UnitOfMeasure, PurchaseOrderStatus } from "@prisma/client";
+import type {
+  UnitOfMeasure,
+  PurchaseOrderStatus,
+  TransferStatus,
+  PhysicalCountStatus,
+} from "@prisma/client";
 
 export const unitLabels: Record<UnitOfMeasure, string> = {
   KG: "kg",
@@ -16,4 +21,18 @@ export const purchaseOrderStatusLabels: Record<PurchaseOrderStatus, string> = {
   PROVEIDA: "Proveída",
   PROVEIDA_PARCIALMENTE: "Proveída parcialmente",
   CANCELADA: "Cancelada",
+};
+
+export const transferStatusLabels: Record<TransferStatus, string> = {
+  ENVIADO: "Enviada",
+  EN_TRANSITO: "En tránsito",
+  RECIBIDO: "Recibida",
+  CANCELADO: "Cancelada",
+};
+
+export const physicalCountStatusLabels: Record<PhysicalCountStatus, string> = {
+  ABIERTO: "Abierto",
+  PENDIENTE_APROBACION: "Pendiente de aprobación",
+  APROBADO: "Aprobado",
+  RECHAZADO: "Rechazado",
 };

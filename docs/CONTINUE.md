@@ -16,7 +16,8 @@ Claude Code) pueda retomarlo sin arqueología.
 | Módulo **Inventario** (consulta, ajustes) | ✅ Construido (`/inventario`). Alertas de caducidad (`IngredientBatch.expirationDate`) no incluidas — no hay lotes sembrados con fecha todavía. |
 | UI de **Recetas** (alta de producto+receta, edición versionada) | ✅ Construido (`/recetas`). |
 | **Administración** (auth real, gestión de empleados/roles, permisos reales) | ✅ Construido (`/administracion`). Ver sección dedicada abajo. |
-| Módulo **Compras** — Proveedores + Órdenes de compra (Fase 2) | ✅ Construido (`/compras`, rama `feature/modulo-compras`). Transferencias y conteos físicos pendientes — ver sección dedicada abajo. |
+| Módulo **Compras** — Proveedores + Órdenes de compra (Fase 2) | ✅ Construido (`/compras`, rama `feature/modulo-compras`, PR #3). |
+| **Transferencias + Conteos físicos** (resto de Fase 2) | ✅ Construido (`/compras/transferencias`, `/compras/conteos`, rama `feature/modulo-transferencias-conteos`). Ver sección dedicada abajo. |
 | Módulo **Reportes** (Fase 3) | ⚪ No construido. |
 | Multi-sucursal en UI (Fase 5) | ⚪ No construido. `DEFAULT_BRANCH_ID` fijo en `lib/constants.ts`. |
 
@@ -187,8 +188,8 @@ en el futuro se agrega un `useState` inicial con un valor no determinista
 
 Primer pedazo de Fase 2, por decisión explícita del usuario de acotar el
 alcance: **proveedores + órdenes de compra con recepción**. Transferencias
-entre sucursales (`TransferManifest`) y conteos físicos (`PhysicalCount`)
-quedan pendientes — los modelos ya existen en el schema, sin tocar.
+y conteos físicos se construyeron después, en la rama
+`feature/modulo-transferencias-conteos` — ver sección siguiente.
 
 - `/compras/proveedores`: alta/edición de `Supplier` (siempre global,
   `branchId: null` — no hay razón para atarlo a una sucursal con solo una
@@ -227,8 +228,7 @@ igual que hoy opera el POS.
 
 Fuera de alcance deliberadamente: cancelar una orden
 (`PurchaseOrderStatus.CANCELADA` existe pero no tiene UI), quitar un
-`IngredientSupplier` ya creado, `ReorderPoint` (puntos de reorden),
-transferencias, conteos físicos.
+`IngredientSupplier` ya creado, `ReorderPoint` (puntos de reorden).
 
 Verificado end-to-end con Playwright contra Postgres real: alta de
 proveedor con costo cotizado, creación de orden con costo autocompletado,
@@ -239,22 +239,84 @@ parcial → confirmado en DB `PurchaseOrder.status = PROVEIDA_PARCIALMENTE`,
 empleado AUXILIAR (sin `ORDEN_COMPRA_CREAR`/`COMPRA_REGISTRAR`) no puede
 entrar a `/compras` ni `/compras/proveedores`.
 
+## Módulo Transferencias + Conteos físicos (`/compras/transferencias`, `/compras/conteos`, rama `feature/modulo-transferencias-conteos`)
+
+Cierra Fase 2. Rama creada desde `feature/modulo-compras` (no desde
+`main`) para tener `/compras` disponible — el PR de Compras (#3) seguía
+sin mergear cuando se construyó esto.
+
+**Transferencias** — máquina de estados `ENVIADO -> EN_TRANSITO ->
+RECIBIDO` (o `CANCELADO`, solo permitido desde `ENVIADO`). Tal como lo
+documenta el comentario del schema, el inventario **sale de origen al
+pasar a `EN_TRANSITO`** (no al crear el manifiesto, `createTransferManifest`
+solo registra intención) **y se suma a destino solo al pasar a
+`RECIBIDO`**. `markTransferInTransit` valida stock suficiente en origen
+(throw si no alcanza) y registra `InventoryMovement` tipo
+`TRANSFERENCIA_SALIDA`; `receiveTransfer` es de una sola vez (no
+incremental, mismo criterio que recibir una orden de compra) y si
+`receivedQuantity < quantity` genera **además** un `InventoryMovement` tipo
+`MERMA` en destino por la diferencia — exactamente como lo describe el
+comentario de `TransferLine` en el schema. No hay doble confirmación por
+PIN aquí: a diferencia de Caja o de aprobar un conteo, una transferencia ya
+es un flujo de dos actores por naturaleza (quien envía, quien recibe en
+otro momento/lugar).
+
+**Conteos físicos** — con doble confirmación, igual que Caja.
+`createPhysicalCount` captura todo en una sola sesión (sin estado `ABIERTO`
+resumible — mismo criterio que recibir una orden de compra): congela
+`theoreticalQty` del `InventoryStock` actual de `DEFAULT_STOCK_LOCATION_ID`
+por ingrediente y guarda `physicalQty` capturado, sin tocar inventario
+todavía. `approvePhysicalCount` exige el PIN de un **empleado distinto** de
+quien hizo el conteo (mismo patrón que `verifyConfirmingEmployee` de
+`actions/shift.ts`) con permiso `INVENTARIO_AJUSTAR`; si se aprueba, ajusta
+`InventoryStock` al valor físico donde hubo diferencia y registra
+`InventoryMovement` tipo `CONTEO_FISICO_AJUSTE`; si se rechaza, no toca
+inventario (el conteo se descarta).
+
+**Permisos**: mismo hueco que Compras — no hay un permiso específico en el
+catálogo, así que las 6 acciones (crear/marcar en tránsito/recibir/cancelar
+transferencia, crear/aprobar conteo) usan `INVENTARIO_AJUSTAR`. Es nivel
+GERENTE en la matriz (BARISTA no tiene ningún permiso de inventario hoy),
+así que este módulo queda para GERENTE/ADMINISTRADOR, igual que
+`/inventario`.
+
+Fuera de alcance deliberadamente: cancelar/revertir una transferencia que
+ya salió de origen (`EN_TRANSITO`), conteos parciales por ubicación
+distinta a la sucursal (`PhysicalCount` no tiene `stockLocationId` propio
+en el schema, se asumió que siempre opera contra
+`DEFAULT_STOCK_LOCATION_ID`).
+
+Verificado end-to-end con Playwright contra Postgres real: transferencia
+sucursal → bodega central con una línea recibida parcialmente (confirmado
+en DB stock decrementado en origen, incrementado en destino solo lo
+recibido, `InventoryMovement` `TRANSFERENCIA_SALIDA`/`TRANSFERENCIA_ENTRADA`/`MERMA`
+correctos), una segunda transferencia cancelada mientras seguía `ENVIADO`,
+un conteo físico aprobado (confirmado `InventoryStock` ajustado +
+`CONTEO_FISICO_AJUSTE`) y otro rechazado (confirmado que NO tocó
+inventario), y que la aprobación de conteo rechaza tanto si el PIN es del
+mismo empleado que contó como si es de alguien sin `INVENTARIO_AJUSTAR`.
+
 ## Próximos pasos recomendados (en orden)
 
-1. Dentro de Fase 2: **transferencias entre sucursales/bodega**
-   (`TransferManifest`/`TransferLine`) y **conteos físicos**
-   (`PhysicalCount`/`PhysicalCountLine`) — mismo patrón que Compras
-   (transacciones, `requirePermission`, verificación end-to-end).
+Fase 2 está cerrada. Lo que sigue:
+
+1. **Fase 3 (Reportes)**: utilidad, costo de recetas en el tiempo,
+   inventario, estadísticas consolidadas — soportado por
+   `RecipeCostHistory`/`IngredientCostHistory`, que ya capturan el
+   historial necesario.
 2. Resolver las simplificaciones documentadas en
    `docs/pos-module.md` (impuestos, sustituciones de ingrediente, pagos
    divididos en la UI, cancelación de venta) según prioridad de negocio.
-3. Simplificaciones deliberadas de Administración/Recetas/Compras
-   documentadas arriba (`EmployeePermissionOverride`, ingredientes
-   compuestos nuevos, alertas de caducidad, cancelar orden, `ReorderPoint`,
-   ordenar en `purchaseUnit` real) — atender si el negocio los necesita.
+3. Simplificaciones deliberadas de Administración/Recetas/Compras/
+   Transferencias documentadas arriba (`EmployeePermissionOverride`,
+   ingredientes compuestos nuevos, alertas de caducidad, cancelar orden,
+   `ReorderPoint`, ordenar en `purchaseUnit` real, revertir una
+   transferencia en tránsito) — atender si el negocio los necesita.
 4. Si se decide adoptar Supabase Auth más adelante: reemplazar
    `lib/password.ts`/`lib/session.ts` por la integración real, el modelo de
    datos ya está listo para ese cambio sin migraciones.
+5. Mergear los PRs pendientes (`feature/modulo-compras` #3,
+   `feature/modulo-transferencias-conteos`) a `main` en orden.
 
 ## Convenciones a mantener
 
