@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { CatalogCategory, CatalogProduct } from "@/lib/catalog";
+import type { CustomerOption } from "@/lib/customers";
 import { CatalogBrowser } from "./catalog-browser";
 import { CartPanel } from "./cart-panel";
 import { ProductDialog } from "./product-dialog";
@@ -15,11 +16,13 @@ export function PosWorkspace({
   branchId,
   shiftId,
   employee,
+  customers,
 }: {
   catalog: CatalogCategory[];
   branchId: string;
   shiftId: string;
   employee: { id: string; name: string };
+  customers: CustomerOption[];
 }) {
   const [selectedProduct, setSelectedProduct] = useState<CatalogProduct | null>(null);
   const [productDialogOpen, setProductDialogOpen] = useState(false);
@@ -75,6 +78,7 @@ export function PosWorkspace({
         branchId={branchId}
         shiftId={shiftId}
         employeeId={employee.id}
+        customers={customers}
       />
 
       <CashMovementDialog

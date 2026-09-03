@@ -447,6 +447,24 @@ async function main() {
     });
   }
 
+  console.log("Sembrando niveles de lealtad...");
+
+  // Sin UI de gestión (ver docs/CONTINUE.md) — igual que los roles, es una
+  // decisión de negocio que se siembra, no algo que se edite seguido.
+  const nivelesLealtad: { id: string; name: string; minLifetimeStamps: number; benefits?: string }[] = [
+    { id: "tier-regular", name: "Regular", minLifetimeStamps: 0 },
+    { id: "tier-frecuente", name: "Frecuente", minLifetimeStamps: 10, benefits: "10% de descuento en bebidas frías" },
+    { id: "tier-vip", name: "VIP", minLifetimeStamps: 30, benefits: "Bebida de cortesía en tu cumpleaños" },
+  ];
+
+  for (const tier of nivelesLealtad) {
+    await prisma.loyaltyTier.upsert({
+      where: { id: tier.id },
+      update: {},
+      create: tier,
+    });
+  }
+
   console.log("Verificando turno abierto...");
 
   const openShift = await prisma.shift.findFirst({

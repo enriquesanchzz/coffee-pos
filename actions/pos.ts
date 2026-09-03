@@ -1,10 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Prisma, PaymentMethod, UnitOfMeasure } from "@prisma/client";
+import { Prisma, PaymentMethod, UnitOfMeasure, DiscountType, ManualDiscountReason } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_STOCK_LOCATION_ID } from "@/lib/constants";
-import { getSessionEmployeeId } from "@/lib/session";
+import { getSessionEmployeeId, findEmployeeByPin } from "@/lib/session";
 import { requirePermission } from "@/lib/permissions";
 
 export type CreateSaleItemInput = {
@@ -13,13 +13,40 @@ export type CreateSaleItemInput = {
   modifierOptionIds: string[];
 };
 
+export type ManualDiscountInput = {
+  type: DiscountType;
+  value: number;
+  reason: ManualDiscountReason;
+  authorizingPin: string;
+};
+
 export type CreateSaleInput = {
   branchId: string;
   shiftId: string;
   employeeId: string;
   items: CreateSaleItemInput[];
   payments: { method: PaymentMethod; amount: number }[];
+  customerId?: string;
+  discountCodeId?: string;
+  manualDiscount?: ManualDiscountInput;
 };
+
+// PORCENTAJE -> % del subtotal; MONTO_FIJO -> monto directo; PRECIO_FINAL
+// -> el total resultante ES `value` (el descuento es la diferencia).
+function computeDiscount(
+  type: DiscountType,
+  value: Prisma.Decimal,
+  subtotal: Prisma.Decimal
+): Prisma.Decimal {
+  switch (type) {
+    case "PORCENTAJE":
+      return subtotal.mul(value).div(100);
+    case "MONTO_FIJO":
+      return value;
+    case "PRECIO_FINAL":
+      return subtotal.sub(value);
+  }
+}
 
 // -----------------------------------------------------------------------
 // Venta — decisión de arquitectura ADR-001: el inventario NUNCA se descuenta
@@ -201,8 +228,53 @@ export async function createSale(input: CreateSaleInput) {
       }
     }
 
-    // Sin impuestos ni descuentos todavía — ver docs/CONTINUE.md.
-    const discountTotal = new Prisma.Decimal(0);
+    // Sin impuestos todavía — ver docs/CONTINUE.md. Descuento: código o
+    // manual, nunca ambos a la vez.
+    if (input.discountCodeId && input.manualDiscount) {
+      throw new Error("Solo se puede aplicar un tipo de descuento por venta.");
+    }
+
+    let discountTotal = new Prisma.Decimal(0);
+    let manualDiscountData: {
+      type: DiscountType;
+      value: Prisma.Decimal;
+      reason: ManualDiscountReason;
+      authorizedById: string;
+    } | null = null;
+
+    if (input.discountCodeId) {
+      await requirePermission(input.employeeId, input.branchId, "DESCUENTO_APLICAR_CODIGO");
+
+      const code = await tx.discountCode.findUniqueOrThrow({
+        where: { id: input.discountCodeId },
+      });
+      if (!code.isActive || (code.expiresAt && code.expiresAt < new Date())) {
+        throw new Error("Este código de descuento ya no es válido.");
+      }
+      discountTotal = computeDiscount(code.type, code.value, subtotal);
+    }
+
+    if (input.manualDiscount) {
+      const authorizer = await findEmployeeByPin(input.manualDiscount.authorizingPin);
+      if (!authorizer) {
+        throw new Error("PIN de autorización incorrecto.");
+      }
+      await requirePermission(authorizer.id, input.branchId, "DESCUENTO_MANUAL");
+
+      const value = new Prisma.Decimal(input.manualDiscount.value);
+      discountTotal = computeDiscount(input.manualDiscount.type, value, subtotal);
+      manualDiscountData = {
+        type: input.manualDiscount.type,
+        value,
+        reason: input.manualDiscount.reason,
+        authorizedById: authorizer.id,
+      };
+    }
+
+    if (discountTotal.lessThan(0) || discountTotal.greaterThan(subtotal)) {
+      throw new Error("El descuento no puede ser mayor al subtotal de la venta.");
+    }
+
     const total = subtotal.sub(discountTotal);
 
     const paymentsTotal = input.payments.reduce((sum, p) => sum + p.amount, 0);
@@ -215,9 +287,12 @@ export async function createSale(input: CreateSaleInput) {
         branchId: input.branchId,
         shiftId: input.shiftId,
         employeeId: input.employeeId,
+        customerId: input.customerId || null,
+        discountCodeId: input.discountCodeId || null,
         subtotal,
         discountTotal,
         total,
+        ...(manualDiscountData ? { manualDiscount: { create: manualDiscountData } } : {}),
         items: {
           create: saleItemsData.map((item) => ({
             productVariantId: item.productVariantId,
@@ -272,6 +347,36 @@ export async function createSale(input: CreateSaleInput) {
           shiftId: input.shiftId,
           notes: `Venta ${createdSale.id}`,
         },
+      });
+    }
+
+    // Lealtad: +1 sello por venta completada con cliente ligado, se
+    // reinicia a 0 al llegar a 5 (ver comentario en LoyaltyCard del
+    // schema). El nivel se deriva contando ventas históricas del cliente —
+    // el schema no guarda un acumulado aparte, y esta cuenta ya incluye la
+    // venta recién creada por correr dentro de la misma transacción.
+    if (input.customerId) {
+      const card = await tx.loyaltyCard.upsert({
+        where: { customerId: input.customerId },
+        update: {},
+        create: { customerId: input.customerId, stamps: 0 },
+      });
+
+      const incrementedStamps = card.stamps + 1;
+      const newStamps = incrementedStamps >= 5 ? 0 : incrementedStamps;
+
+      const lifetimeStamps = await tx.sale.count({
+        where: { customerId: input.customerId, status: "COMPLETADA" },
+      });
+
+      const eligibleTier = await tx.loyaltyTier.findFirst({
+        where: { minLifetimeStamps: { lte: lifetimeStamps } },
+        orderBy: { minLifetimeStamps: "desc" },
+      });
+
+      await tx.loyaltyCard.update({
+        where: { customerId: input.customerId },
+        data: { stamps: newStamps, tierId: eligibleTier?.id ?? null },
       });
     }
 
