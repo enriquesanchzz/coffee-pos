@@ -18,7 +18,8 @@ Claude Code) pueda retomarlo sin arqueología.
 | **Administración** (auth real, gestión de empleados/roles, permisos reales) | ✅ Construido (`/administracion`). Ver sección dedicada abajo. |
 | Módulo **Compras** — Proveedores + Órdenes de compra (Fase 2) | ✅ Construido y mergeado a `main` (PR #3). |
 | **Transferencias + Conteos físicos** (resto de Fase 2) | ✅ Construido y mergeado a `main` (PR #4, `/compras/transferencias`, `/compras/conteos`). |
-| Módulo **Reportes** (Fase 3) | ✅ Construido (`/reportes`, rama `feature/modulo-reportes`). Ver sección dedicada abajo. |
+| Módulo **Reportes** (Fase 3) | ✅ Construido y mergeado a `main` (PR #5, `/reportes`). |
+| **Clientes + Lealtad + Descuentos** (Fase 4) | ✅ Construido (`/clientes`, rama `feature/modulo-clientes`). Ver sección dedicada abajo. |
 | Multi-sucursal en UI (Fase 5) | ⚪ No construido. `DEFAULT_BRANCH_ID` fijo en `lib/constants.ts`. |
 
 ## Qué se verificó en esta sesión
@@ -369,25 +370,87 @@ estadísticas coinciden entre sí en ingresos/ticket, inventario refleja el
 valor de stock correcto, recetas muestra el historial recién creado. Un
 BARISTA no puede entrar a `/reportes` ni a ninguna subruta.
 
+## Módulo Clientes (`/clientes`, rama `feature/modulo-clientes`)
+
+Fase 4 completa, alcance pedido de una vez: clientes, lealtad (sellos y
+niveles) y descuentos (código + manual). Es la primera fase que modifica
+`actions/pos.ts`/`components/pos/checkout-dialog.tsx` — el flujo de venta
+ya verificado varias veces esta sesión — así que la regresión (venta
+normal sin cliente ni descuento) se verificó explícitamente primero.
+
+**Sellos y nivel sin campo nuevo en el schema**: `LoyaltyCard.stamps` se
+incrementa +1 por venta completada con cliente ligado y se reinicia a 0 al
+llegar a 5 (comentario del schema: "reinician cada 5"). Para el nivel,
+`LoyaltyTier.minLifetimeStamps` necesita un acumulado histórico que el
+schema no guarda en ningún campo — se deriva contando `Sale` completadas
+de ese cliente dentro de la misma transacción (ya incluye la venta recién
+creada), y se busca el `LoyaltyTier` de mayor `minLifetimeStamps` que
+aplique. `LoyaltyTier` no tiene UI de gestión — se siembra en
+`prisma/seed-demo.ts` (Regular/Frecuente/VIP), mismo criterio que los
+roles: decisión de negocio, no algo que se edite seguido. No hay
+fulfillment automático de premio al llegar a 5 sellos — es una señal
+visual en la pantalla del cliente, el barista decide cómo lo resuelve (ej.
+con un descuento manual).
+
+**Descuento de código vs. manual, mutuamente excluyentes por venta**
+(`createSale` en `actions/pos.ts` rechaza si llegan ambos). Fórmula por
+`DiscountType`: `PORCENTAJE` → `subtotal * value/100`; `MONTO_FIJO` →
+`value`; `PRECIO_FINAL` → el total resultante es exactamente `value`. Se
+valida que el descuento no exceda el subtotal. Código
+(`DESCUENTO_APLICAR_CODIGO`, nivel BARISTA): se resuelve por texto
+(`findDiscountCodeByCode` en `actions/discounts.ts` — el cajero teclea el
+código, no conoce el id), valida `isActive`/`expiresAt`. Manual
+(`DESCUENTO_MANUAL`, nivel GERENTE): a diferencia de Caja/Conteos, **no**
+exige que el autorizante sea un empleado distinto del cajero — solo que el
+PIN capturado pertenezca a alguien con el permiso (mismo patrón
+`findEmployeeByPin` + `requirePermission` que ya usa `actions/shift.ts`).
+
+**Sin action de "preview" nueva**: a diferencia de `previewShiftClose`
+(Caja), la fórmula de descuento es aritmética trivial una vez que se
+conoce `type`/`value` — `findDiscountCodeByCode` ya resuelve esos dos
+datos desde el servidor, así que `checkout-dialog.tsx` calcula el total
+mostrado localmente con una copia de 5 líneas de la misma fórmula
+(duplicación deliberada de algo trivial, no de la lógica real de negocio
+— el servidor sigue siendo la única fuente de verdad en `createSale`, que
+recalcula todo independientemente).
+
+Fuera de alcance deliberadamente: fulfillment automático de premio al
+llegar a 5 sellos, UI de gestión de `LoyaltyTier`, editar un código de
+descuento más allá de activar/desactivar, combinar código + descuento
+manual en la misma venta, notificaciones al cliente.
+
+Verificado end-to-end con Playwright contra Postgres real: **regresión
+explícita primero** (venta sin cliente ni descuento sigue funcionando
+igual), alta de cliente, 5 ventas ligadas a ese cliente (confirmado
+`stamps` en 0 tras la quinta y `tier = Regular`), código de descuento
+aplicado (confirmado `discountTotal`/`total` correctos en DB), descuento
+manual rechazado con PIN de alguien sin `DESCUENTO_MANUAL` y aceptado con
+alguien que sí lo tiene (confirmado `ManualDiscount.authorizedById`
+correcto), y que un BARISTA no puede entrar a `/clientes/descuentos`.
+
 ## Próximos pasos recomendados (en orden)
 
-Fases 1, 2 y 3 están cerradas. Lo que sigue:
+Fases 1, 2, 3 y 4 están cerradas. Lo que sigue:
 
-1. **Fase 4 (Retención de clientes)** o **Fase 5 (Multi-sucursal)**, según
-   prioridad de negocio — ninguna tiene alcance definido todavía.
+1. **Fase 5 (Multi-sucursal)** — la única fase que queda del roadmap
+   original. Quitar el `DEFAULT_BRANCH_ID` fijo, UI de selección/gestión
+   de sucursales, reportes consolidados (`REPORTE_CONSOLIDADO_VER`). Es
+   más arquitectónica que las anteriores — toca código de todos los
+   módulos ya construidos en vez de agregar uno nuevo.
 2. Resolver las simplificaciones documentadas en
    `docs/pos-module.md` (impuestos, sustituciones de ingrediente, pagos
    divididos en la UI, cancelación de venta) según prioridad de negocio.
 3. Simplificaciones deliberadas de Administración/Recetas/Compras/
-   Transferencias/Reportes documentadas arriba (`EmployeePermissionOverride`,
-   ingredientes compuestos nuevos, alertas de caducidad, cancelar orden,
-   `ReorderPoint`, ordenar en `purchaseUnit` real, revertir una
-   transferencia en tránsito, costo histórico por fecha, gráficas) —
-   atender si el negocio los necesita.
+   Transferencias/Reportes/Clientes documentadas arriba
+   (`EmployeePermissionOverride`, ingredientes compuestos nuevos, alertas
+   de caducidad, cancelar orden, `ReorderPoint`, ordenar en `purchaseUnit`
+   real, revertir una transferencia en tránsito, costo histórico por
+   fecha, gráficas, fulfillment de premio de lealtad, gestión de niveles)
+   — atender si el negocio los necesita.
 4. Si se decide adoptar Supabase Auth más adelante: reemplazar
    `lib/password.ts`/`lib/session.ts` por la integración real, el modelo de
    datos ya está listo para ese cambio sin migraciones.
-5. Mergear el PR pendiente de `feature/modulo-reportes` a `main`.
+5. Mergear el PR pendiente de `feature/modulo-clientes` a `main`.
 
 ## Convenciones a mantener
 

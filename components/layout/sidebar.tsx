@@ -6,13 +6,14 @@ import {
   BookOpen,
   Truck,
   BarChart3,
+  Users,
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
-// Los 6 módulos definidos en el ADR / roadmap (ver docs/roadmap.md) — todos
-// habilitados desde que se cerró Fase 3.
+// Los 6 módulos definidos en el ADR / roadmap (ver docs/roadmap.md), más
+// "Clientes" agregado en Fase 4 (no estaba en el ADR original de 6).
 const modules = [
   { href: "/pos", label: "Punto de Venta", icon: ShoppingCart, enabled: true },
   { href: "/caja", label: "Caja", icon: Wallet, enabled: true },
@@ -20,6 +21,7 @@ const modules = [
   { href: "/recetas", label: "Recetas", icon: BookOpen, enabled: true },
   { href: "/compras", label: "Compras", icon: Truck, enabled: true },
   { href: "/reportes", label: "Reportes", icon: BarChart3, enabled: true },
+  { href: "/clientes", label: "Clientes", icon: Users, enabled: true },
   { href: "/administracion", label: "Administración", icon: Settings, enabled: true },
 ];
 

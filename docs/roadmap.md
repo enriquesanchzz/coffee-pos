@@ -10,7 +10,7 @@ migraciones destructivas entre fases.
 | 1 | MVP operativo | POS (venta + descuento de inventario por receta), Caja (turnos), Inventario básico, UI de recetas, Administración (auth + permisos reales). | ✅ Completa — ver `docs/CONTINUE.md` para el detalle de cada módulo. |
 | 2 | Cadena de suministro | Compras: proveedores, órdenes de compra, recepción de mercancía, transferencias entre sucursales, conteos físicos. | ✅ Completa — ver `docs/CONTINUE.md` para el detalle de cada pieza. |
 | 3 | Business Intelligence | Reportes de utilidad, costo de recetas en el tiempo, reportes de inventario, estadísticas consolidadas. | ✅ Completa — ver `docs/CONTINUE.md` para el detalle de cada reporte. |
-| 4 | Retención de clientes | Programa de lealtad (sellos, niveles), códigos de descuento. | ⚪ Pendiente — modelos `Customer`, `LoyaltyCard`, `LoyaltyTier`, `DiscountCode` ya existen en el schema. |
+| 4 | Retención de clientes | Programa de lealtad (sellos, niveles), códigos de descuento. | ✅ Completa — ver `docs/CONTINUE.md`. |
 | 5 | Multi-sucursal | Habilitar selección de sucursal en la UI, reportes consolidados (`REPORTE_CONSOLIDADO_VER`), gestión de sucursales (`SUCURSAL_GESTIONAR`). | ⚪ Pendiente — el modelo ya es multi-sucursal desde Fase 0; falta remover el `DEFAULT_BRANCH_ID` hardcodeado y construir la UI de selección/gestión. |
 
 ## Fase 1 — cerrada
@@ -60,5 +60,15 @@ end-to-end contra Postgres real (rama `feature/modulo-reportes`, detalle en
 `RecipeCostHistory`, que empezó a escribirse recién con este trabajo) y
 **Estadísticas**.
 
-Próximo: **Fase 4 — Retención de clientes** (lealtad, códigos de
-descuento) o **Fase 5 — Multi-sucursal**, según prioridad de negocio.
+## Fase 4 — cerrada
+
+Alcance completo pedido de una vez, construido y verificado end-to-end
+contra Postgres real (rama `feature/modulo-clientes`, detalle en
+`docs/CONTINUE.md`): **Clientes** (`/clientes`), **Lealtad** (sellos que
+se reinician cada 5, nivel derivado del histórico de ventas del cliente —
+sin campo nuevo en el schema), **Códigos de descuento** y **Descuento
+manual con autorización por PIN**, ambos integrados al checkout del POS
+(`actions/pos.ts` `createSale`, `components/pos/checkout-dialog.tsx`).
+
+Próximo: **Fase 5 — Multi-sucursal** — la única fase que queda del
+roadmap original.
