@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentEmployee } from "@/lib/session";
-import { getCatalog, getOpenShift } from "@/lib/catalog";
+import { getCatalog, getOpenShift, getExtraIngredientOptions } from "@/lib/catalog";
 import { getCustomerOptions } from "@/lib/customers";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { Sidebar } from "@/components/layout/sidebar";
@@ -11,10 +11,11 @@ export default async function PosPage() {
   const employee = await getCurrentEmployee();
   if (!employee) redirect("/");
 
-  const [shift, catalog, customers] = await Promise.all([
+  const [shift, catalog, customers, extraIngredientOptions] = await Promise.all([
     getOpenShift(DEFAULT_BRANCH_ID),
     getCatalog(DEFAULT_BRANCH_ID),
     getCustomerOptions(),
+    getExtraIngredientOptions(),
   ]);
 
   return (
@@ -28,6 +29,7 @@ export default async function PosPage() {
             shiftId={shift.id}
             employee={{ id: employee.id, name: employee.name }}
             customers={customers}
+            extraIngredientOptions={extraIngredientOptions}
           />
         ) : (
           <div className="flex h-full items-center justify-center p-6">

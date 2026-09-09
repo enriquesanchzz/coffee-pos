@@ -121,6 +121,7 @@ export type VariantRecipeDetail = {
   isActive: boolean;
   productId: string;
   productName: string;
+  productImageUrl: string | null;
   categoryName: string;
   recipeId: string;
   activeVersionNumber: number;
@@ -168,6 +169,7 @@ export async function getVariantRecipeDetail(
     isActive: variant.isActive,
     productId: variant.product.id,
     productName: variant.product.name,
+    productImageUrl: variant.product.imageUrl,
     categoryName: variant.product.category.name,
     recipeId: recipe.id,
     activeVersionNumber: version.versionNumber,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { CatalogCategory, CatalogProduct } from "@/lib/catalog";
+import type { CatalogCategory, CatalogProduct, ExtraIngredientOption } from "@/lib/catalog";
 import type { CustomerOption } from "@/lib/customers";
 import { CatalogBrowser } from "./catalog-browser";
 import { CartPanel } from "./cart-panel";
@@ -17,12 +17,14 @@ export function PosWorkspace({
   shiftId,
   employee,
   customers,
+  extraIngredientOptions,
 }: {
   catalog: CatalogCategory[];
   branchId: string;
   shiftId: string;
   employee: { id: string; name: string };
   customers: CustomerOption[];
+  extraIngredientOptions: ExtraIngredientOption[];
 }) {
   const [selectedProduct, setSelectedProduct] = useState<CatalogProduct | null>(null);
   const [productDialogOpen, setProductDialogOpen] = useState(false);
@@ -69,6 +71,7 @@ export function PosWorkspace({
         product={selectedProduct}
         open={productDialogOpen}
         onOpenChange={setProductDialogOpen}
+        extraIngredientOptions={extraIngredientOptions}
         onAdd={addLine}
       />
 

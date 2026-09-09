@@ -20,6 +20,7 @@ Claude Code) pueda retomarlo sin arqueología.
 | **Transferencias + Conteos físicos** (resto de Fase 2) | ✅ Construido y mergeado a `main` (PR #4, `/compras/transferencias`, `/compras/conteos`). |
 | Módulo **Reportes** (Fase 3) | ✅ Construido y mergeado a `main` (PR #5, `/reportes`). |
 | **Clientes + Lealtad + Descuentos** (Fase 4) | ✅ Construido (`/clientes`, rama `feature/modulo-clientes`). Ver sección dedicada abajo. |
+| **Cambios Punto de Venta** (categorías verticales, imagen, extras libres, notas, Frío/Caliente, sustitución real, búsqueda de cliente) | ✅ Construido (rama `cambios-punto-venta`). Ver sección dedicada abajo. |
 | Multi-sucursal en UI (Fase 5) | ⚪ No construido. `DEFAULT_BRANCH_ID` fijo en `lib/constants.ts`. |
 
 ## Qué se verificó en esta sesión
@@ -428,9 +429,95 @@ manual rechazado con PIN de alguien sin `DESCUENTO_MANUAL` y aceptado con
 alguien que sí lo tiene (confirmado `ManualDiscount.authorizedById`
 correcto), y que un BARISTA no puede entrar a `/clientes/descuentos`.
 
+## Módulo Cambios Punto de Venta (rama `cambios-punto-venta`)
+
+No es una fase del roadmap original — es un rediseño/ajuste del POS pedido
+por el usuario vía un PDF con 7 cambios y mockups (`Cambios Nomada.pdf`),
+después de cerrar Fase 4. Mezcla rediseño visual puro con cambios reales de
+lógica de negocio que sí tocan `actions/pos.ts` (el flujo de venta, ya
+verificado varias veces esta sesión), así que se corrió una regresión
+explícita (venta normal sin extras/notas/sustitución/temperatura) antes de
+dar el trabajo por cerrado. Tres decisiones ambiguas se acotaron con el
+usuario antes de planear — ver el plan de la sesión para el detalle
+completo de la discusión:
+
+- **Imágenes de producto por URL externa**, no upload real (no hay storage
+  configurado). `Product.imageUrl String?` (migración nueva) + input de
+  texto en Recetas (`new-product-form.tsx`/`edit-recipe-form.tsx`).
+  `CatalogBrowser` muestra la imagen si existe, si no un ícono placeholder.
+- **Frío/Caliente sí afecta receta/costo** (decisión explícita del
+  usuario, no la opción cosmética que se había recomendado) — no hay UI de
+  gestión de `VariantModifierGroup`/`ModifierOption` (sigue seed-only) y
+  una receta de verdad distinta (hielo, menos leche) no cabe en un
+  modificador de un solo ingrediente. Se modela como **otro eje de
+  `ProductVariant`**, sin ningún cambio de schema: convención de nombre
+  `"{Tamaño} {Temperatura}"` (ej. "Chico Frío") que `parseVariantName()`
+  (`lib/catalog.ts`) detecta por sufijo. Si un producto usa la convención
+  (Latte), `ProductDialog` muestra dos filas de selección (Tamaño +
+  Temperatura) y resuelve la variante exacta cruzando ambas; si no la usa
+  (Capuccino, a propósito dejado sin cambiar), se comporta exactamente
+  igual que antes — cero regresión para el catálogo existente. Si la
+  combinación elegida no tiene variante real (grid incompleto), `variant`
+  resuelve a `null` en vez de caer en una variante arbitraria — el botón
+  "Agregar al carrito" se deshabilita y se muestra "Esta combinación no
+  está disponible" (`components/pos/product-dialog.tsx`).
+- **Precio de extras libres calculado en vivo**, no un campo manual: al
+  agregar cualquier ingrediente activo desde "Agregar otro ingrediente" en
+  `ProductDialog`, el precio mostrado es solo vista previa — `createSale`
+  recibe `{ingredientId, quantity}` (nunca un precio) y calcula
+  `priceDelta = quantity × costo cotizado (IngredientSupplier.cost,
+  isSelected)` él mismo, para que un precio manipulado desde el cliente no
+  pueda llegar a cobrarse. `Ingredient.extraUnitPrice` del schema queda sin
+  usar deliberadamente (se habría desincronizado del costo real cotizado
+  en Compras).
+
+**Bug real corregido**: sustitución de ingrediente
+(`ModifierOption.isSubstitution=true`, ej. "Tipo de leche") antes solo
+**sumaba** el sustituto sin restar el ingrediente base de la receta —
+descontaba ambos. Se corrigió en `resolveRecipeConsumption`
+(`actions/pos.ts`): si algún modificador seleccionado es sustitución, se
+omiten las líneas de receta cuyo ingrediente comparte `category` con el
+del modificador (para leche, `category = LECHE`) antes de sumar el
+consumo del sustituto. Es una heurística por categoría, no un vínculo
+explícito línea-por-línea (el schema no lo modela así) — válida hoy porque
+ninguna receta tiene más de una línea por categoría sustituible.
+
+Punto 4 (notas): `SaleItem.notes String?` (misma migración que
+`imageUrl`), textarea opcional en `ProductDialog`, se muestra en
+`CartPanel` y viaja hasta `createSale`.
+
+Punto 7 (búsqueda de cliente): el `<select>` de cliente en
+`checkout-dialog.tsx` se reemplazó por un input de texto con lista
+filtrada en vivo sobre los clientes ya recibidos como prop (sin query
+nueva al servidor — dataset chico).
+
+`prisma/seed-demo.ts` ganó: 3 ingredientes nuevos (Leche deslactosada,
+Leche de avena, Hielo, con stock y costo cotizado), dos variantes frías de
+Latte ("Chico Frío"/"Grande Frío" con receta real de hielo), y el grupo
+"Tipo de leche" (sustitución, +$8/+$12) en todas las variantes con leche
+base (Latte y Capuccino, chico y grande).
+
+Verificado end-to-end con Playwright contra Postgres real: venta de Latte
+Chico Frío con sustitución a leche de avena + extra libre de esencia de
+vainilla + nota → confirmado en DB que se usó `recipe-latte-chico-frio-v1`,
+que se descontó **Leche de avena** y no Leche entera, que el
+`SaleItemIngredientAdjustment` (`AGREGAR_EXTRA`) quedó con `priceDelta`
+calculado desde el costo cotizado (no inventado), y que la nota se guardó
+en `SaleItem.notes`. Regresión explícita: venta de Capuccino Chico (sin la
+convención de temperatura) sigue funcionando idéntico a antes, sin mostrar
+selector de Temperatura. Búsqueda de cliente por texto confirmada
+visualmente. Todos los datos de la verificación se limpiaron de la base
+(ventas, movimientos de inventario, stock restaurado) al terminar.
+
+Fuera de alcance deliberadamente: UI de gestión de
+`VariantModifierGroup`/`ModifierOption` (sigue seed-only), upload real de
+imágenes, sustitución por vínculo explícito línea-de-receta↔modificador
+(la heurística por categoría basta hoy).
+
 ## Próximos pasos recomendados (en orden)
 
-Fases 1, 2, 3 y 4 están cerradas. Lo que sigue:
+Fases 1, 2, 3 y 4 están cerradas, más el ajuste "Cambios Punto de Venta".
+Lo que sigue:
 
 1. **Fase 5 (Multi-sucursal)** — la única fase que queda del roadmap
    original. Quitar el `DEFAULT_BRANCH_ID` fijo, UI de selección/gestión
@@ -438,19 +525,20 @@ Fases 1, 2, 3 y 4 están cerradas. Lo que sigue:
    más arquitectónica que las anteriores — toca código de todos los
    módulos ya construidos en vez de agregar uno nuevo.
 2. Resolver las simplificaciones documentadas en
-   `docs/pos-module.md` (impuestos, sustituciones de ingrediente, pagos
-   divididos en la UI, cancelación de venta) según prioridad de negocio.
+   `docs/pos-module.md` (impuestos, pagos divididos en la UI, cancelación
+   de venta) según prioridad de negocio.
 3. Simplificaciones deliberadas de Administración/Recetas/Compras/
-   Transferencias/Reportes/Clientes documentadas arriba
-   (`EmployeePermissionOverride`, ingredientes compuestos nuevos, alertas
-   de caducidad, cancelar orden, `ReorderPoint`, ordenar en `purchaseUnit`
-   real, revertir una transferencia en tránsito, costo histórico por
-   fecha, gráficas, fulfillment de premio de lealtad, gestión de niveles)
-   — atender si el negocio los necesita.
+   Transferencias/Reportes/Clientes/Cambios Punto de Venta documentadas
+   arriba (`EmployeePermissionOverride`, ingredientes compuestos nuevos,
+   alertas de caducidad, cancelar orden, `ReorderPoint`, ordenar en
+   `purchaseUnit` real, revertir una transferencia en tránsito, costo
+   histórico por fecha, gráficas, fulfillment de premio de lealtad,
+   gestión de niveles, UI de modificadores, upload real de imágenes) —
+   atender si el negocio los necesita.
 4. Si se decide adoptar Supabase Auth más adelante: reemplazar
    `lib/password.ts`/`lib/session.ts` por la integración real, el modelo de
    datos ya está listo para ese cambio sin migraciones.
-5. Mergear el PR pendiente de `feature/modulo-clientes` a `main`.
+5. Mergear el PR pendiente de `cambios-punto-venta` a `main`.
 
 ## Convenciones a mantener
 

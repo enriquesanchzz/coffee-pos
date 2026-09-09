@@ -35,6 +35,7 @@ export function EditRecipeForm({
 }) {
   const router = useRouter();
   const [name, setName] = useState(detail.variantName);
+  const [imageUrl, setImageUrl] = useState(detail.productImageUrl ?? "");
   const [price, setPrice] = useState(String(detail.price));
   const [isActive, setIsActive] = useState(detail.isActive);
   const [lines, setLines] = useState<LineDraft[]>(linesFromDetail(detail));
@@ -66,6 +67,7 @@ export function EditRecipeForm({
           price: Number(price) || 0,
           isActive,
           lines: lineInputs,
+          imageUrl,
         });
         router.push("/recetas");
       } catch (err) {
@@ -106,6 +108,16 @@ export function EditRecipeForm({
                 onChange={(e) => setPrice(e.target.value)}
               />
             </div>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="product-image">Imagen del producto (URL, opcional)</Label>
+            <Input
+              id="product-image"
+              value={imageUrl}
+              onChange={(e) => setImageUrl(e.target.value)}
+              placeholder="https://…"
+            />
           </div>
 
           <label className="flex items-center gap-2 text-sm">

@@ -83,14 +83,19 @@ Documentadas también como comentarios en `actions/pos.ts`:
 - **Sin impuestos ni descuentos todavía** — `total = subtotal`. La
   configuración de impuestos es parte de Fase de Administración
   (`CONFIGURACION_SISTEMA_GESTIONAR`).
-- **`ModifierOption.isSubstitution`** se trata igual que un extra normal
-  (se suma al consumo); no se resta el ingrediente base que sustituye
-  porque el schema no define explícitamente cuál línea de la receta
-  corresponde reducir. Falta una decisión de producto antes de
-  implementarlo.
-- **`SaleItemIngredientAdjustment`** (ajustes libres QUITAR/AUMENTAR/
-  AGREGAR_EXTRA fuera de los modificadores curados) existe en el modelo
-  pero no está expuesto en la UI.
+- **`ModifierOption.isSubstitution`** (ej. "Tipo de leche") sí resta el
+  ingrediente base que sustituye, desde el ajuste "Cambios Punto de Venta"
+  — ver `docs/CONTINUE.md`. El schema no liga explícitamente qué línea de
+  receta corresponde reducir, así que se usa una heurística por
+  `Ingredient.category` (omite la línea de la receta cuya categoría
+  coincide con la del sustituto), válida mientras cada receta tenga a lo
+  más una línea por categoría sustituible.
+- **`SaleItemIngredientAdjustment`** tipo `AGREGAR_EXTRA` (agregar
+  cualquier ingrediente activo, no solo los modificadores curados de la
+  variante) está expuesto en `ProductDialog` desde "Cambios Punto de
+  Venta" — el precio se calcula en el servidor desde el costo cotizado del
+  ingrediente, nunca confiando en el cliente. Los tipos QUITAR/AUMENTAR
+  siguen sin UI.
 - **Pagos:** el modelo soporta pagos divididos (`SalePayment[]`), pero el
   checkout de la UI hoy solo permite un método por venta.
 - El `InventoryMovement` de una venta se registra **una vez por
