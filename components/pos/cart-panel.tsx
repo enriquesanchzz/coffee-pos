@@ -29,10 +29,16 @@ export function CartPanel({ onCheckout }: { onCheckout: () => void }) {
                   <p className="text-sm font-medium">
                     {line.productName} · {line.variantName}
                   </p>
-                  {line.modifiers.length > 0 && (
+                  {(line.modifiers.length > 0 || line.extraIngredients.length > 0) && (
                     <p className="text-xs text-muted-foreground">
-                      {line.modifiers.map((m) => m.name).join(", ")}
+                      {[
+                        ...line.modifiers.map((m) => m.name),
+                        ...line.extraIngredients.map((e) => `+ ${e.name} (${e.quantity}${e.unit})`),
+                      ].join(", ")}
                     </p>
+                  )}
+                  {line.notes && (
+                    <p className="text-xs italic text-muted-foreground">“{line.notes}”</p>
                   )}
                 </div>
                 <button

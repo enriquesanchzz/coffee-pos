@@ -88,6 +88,7 @@ export type CreateVariantInput = {
 export type CreateProductWithRecipeInput = {
   employeeId: string;
   productName: string;
+  imageUrl?: string;
   categoryId?: string;
   newCategoryName?: string;
   variants: CreateVariantInput[];
@@ -133,7 +134,7 @@ export async function createProductWithRecipe(input: CreateProductWithRecipeInpu
       : await tx.productCategory.findUniqueOrThrow({ where: { id: input.categoryId } });
 
     const product = await tx.product.create({
-      data: { name: productName, categoryId: category.id },
+      data: { name: productName, imageUrl: input.imageUrl?.trim() || null, categoryId: category.id },
     });
 
     await tx.branchProduct.create({
@@ -186,6 +187,9 @@ export type UpdateVariantRecipeInput = {
   price: number;
   isActive: boolean;
   lines: RecipeLineInput[];
+  // Nivel producto (no de la variante) — se actualiza vía el producto
+  // dueño de esta variante.
+  imageUrl?: string;
 };
 
 // Editar la receta de una variante existente NO sobreescribe las líneas de
@@ -209,10 +213,17 @@ export async function updateVariantRecipe(input: UpdateVariantRecipeInput) {
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "RECETA_MODIFICAR");
 
   await prisma.$transaction(async (tx) => {
-    await tx.productVariant.update({
+    const updatedVariant = await tx.productVariant.update({
       where: { id: input.variantId },
       data: { name, price: input.price, isActive: input.isActive },
     });
+
+    if (input.imageUrl !== undefined) {
+      await tx.product.update({
+        where: { id: updatedVariant.productId },
+        data: { imageUrl: input.imageUrl.trim() || null },
+      });
+    }
 
     const recipe = await tx.recipe.findFirst({
       where: { productVariantId: input.variantId, kind: "PRODUCTO_VENDIBLE" },

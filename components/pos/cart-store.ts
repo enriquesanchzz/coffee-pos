@@ -6,6 +6,15 @@ export type CartModifier = {
   priceDelta: number;
 };
 
+export type CartExtraIngredient = {
+  ingredientId: string;
+  name: string;
+  quantity: number;
+  unit: string;
+  /** Vista previa — actions/pos.ts recalcula el precio real al confirmar. */
+  priceDelta: number;
+};
+
 export type CartLine = {
   /** Identificador local de la línea (no es id de base de datos). */
   lineId: string;
@@ -14,6 +23,8 @@ export type CartLine = {
   variantName: string;
   unitBasePrice: number;
   modifiers: CartModifier[];
+  extraIngredients: CartExtraIngredient[];
+  notes: string;
   quantity: number;
 };
 
@@ -23,6 +34,8 @@ type AddLineInput = {
   variantName: string;
   unitBasePrice: number;
   modifiers: CartModifier[];
+  extraIngredients: CartExtraIngredient[];
+  notes: string;
 };
 
 function modifierSignature(modifiers: CartModifier[]) {
@@ -32,10 +45,37 @@ function modifierSignature(modifiers: CartModifier[]) {
     .join(",");
 }
 
-function lineUnitPrice(line: Pick<CartLine, "unitBasePrice" | "modifiers">) {
+function extraIngredientSignature(extras: CartExtraIngredient[]) {
+  return extras
+    .map((e) => `${e.ingredientId}:${e.quantity}`)
+    .sort()
+    .join(",");
+}
+
+// Firma completa de una línea "idéntica" — una bebida con nota o extra
+// libre nunca se agrupa silenciosamente con una genérica que se ve igual
+// mas no lo es.
+function lineSignature(line: {
+  productVariantId: string;
+  modifiers: CartModifier[];
+  extraIngredients: CartExtraIngredient[];
+  notes: string;
+}) {
+  return [
+    line.productVariantId,
+    modifierSignature(line.modifiers),
+    extraIngredientSignature(line.extraIngredients),
+    line.notes.trim(),
+  ].join("|");
+}
+
+function lineUnitPrice(
+  line: Pick<CartLine, "unitBasePrice" | "modifiers" | "extraIngredients">
+) {
   return (
     line.unitBasePrice +
-    line.modifiers.reduce((sum, m) => sum + m.priceDelta, 0)
+    line.modifiers.reduce((sum, m) => sum + m.priceDelta, 0) +
+    line.extraIngredients.reduce((sum, e) => sum + e.priceDelta, 0)
   );
 }
 
@@ -52,16 +92,12 @@ type CartState = {
 export const useCartStore = create<CartState>((set, get) => ({
   lines: [],
 
-  // Agrupa por variante + mismo set de modificadores (misma "receta"
-  // exacta), sumando cantidad en vez de crear una línea duplicada.
+  // Agrupa por variante + mismo set de modificadores/extras/nota (misma
+  // "receta" exacta), sumando cantidad en vez de crear una línea duplicada.
   addLine: (input) =>
     set((state) => {
-      const signature = modifierSignature(input.modifiers);
-      const existing = state.lines.find(
-        (line) =>
-          line.productVariantId === input.productVariantId &&
-          modifierSignature(line.modifiers) === signature
-      );
+      const signature = lineSignature(input);
+      const existing = state.lines.find((line) => lineSignature(line) === signature);
 
       if (existing) {
         return {
@@ -80,6 +116,8 @@ export const useCartStore = create<CartState>((set, get) => ({
         variantName: input.variantName,
         unitBasePrice: input.unitBasePrice,
         modifiers: input.modifiers,
+        extraIngredients: input.extraIngredients,
+        notes: input.notes,
         quantity: 1,
       };
 

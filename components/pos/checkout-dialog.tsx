@@ -70,6 +70,8 @@ export function CheckoutDialog({
   const { lines, subtotal, clear } = useCartStore();
   const [method, setMethod] = useState<PaymentMethod>("EFECTIVO");
   const [customerId, setCustomerId] = useState("");
+  const [customerQuery, setCustomerQuery] = useState("");
+  const [customerListOpen, setCustomerListOpen] = useState(false);
 
   const [discountMode, setDiscountMode] = useState<DiscountMode>("NINGUNO");
   const [codeInput, setCodeInput] = useState("");
@@ -84,6 +86,26 @@ export function CheckoutDialog({
 
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const selectedCustomer = customers.find((c) => c.id === customerId) ?? null;
+  const filteredCustomers = customerQuery.trim()
+    ? customers.filter(
+        (c) =>
+          c.name.toLowerCase().includes(customerQuery.toLowerCase()) ||
+          c.phone?.includes(customerQuery)
+      )
+    : customers;
+
+  function handleSelectCustomer(customer: CustomerOption) {
+    setCustomerId(customer.id);
+    setCustomerQuery(customer.name);
+    setCustomerListOpen(false);
+  }
+
+  function handleClearCustomer() {
+    setCustomerId("");
+    setCustomerQuery("");
+  }
 
   const rawSubtotal = subtotal();
   const discountPreview =
@@ -127,6 +149,11 @@ export function CheckoutDialog({
             productVariantId: line.productVariantId,
             quantity: line.quantity,
             modifierOptionIds: line.modifiers.map((m) => m.modifierOptionId),
+            extraIngredients: line.extraIngredients.map((e) => ({
+              ingredientId: e.ingredientId,
+              quantity: e.quantity,
+            })),
+            notes: line.notes || undefined,
           })),
           // El checkout hoy solo soporta un método por venta. El modelo
           // (SalePayment) ya permite pagos divididos — falta la UI.
@@ -144,7 +171,7 @@ export function CheckoutDialog({
               : undefined,
         });
         clear();
-        setCustomerId("");
+        handleClearCustomer();
         setDiscountMode("NINGUNO");
         resetDiscountState();
         onOpenChange(false);
@@ -159,15 +186,48 @@ export function CheckoutDialog({
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
           <Label htmlFor="customer">Cliente (opcional)</Label>
-          <Select id="customer" value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
-            <option value="">Sin cliente</option>
-            {customers.map((customer) => (
-              <option key={customer.id} value={customer.id}>
-                {customer.name}
-                {customer.phone ? ` · ${customer.phone}` : ""}
-              </option>
-            ))}
-          </Select>
+          <div className="relative">
+            <Input
+              id="customer"
+              value={customerQuery}
+              onChange={(e) => {
+                setCustomerQuery(e.target.value);
+                setCustomerId("");
+                setCustomerListOpen(true);
+              }}
+              onFocus={() => setCustomerListOpen(true)}
+              onBlur={() => setTimeout(() => setCustomerListOpen(false), 150)}
+              placeholder="Buscar por nombre o teléfono…"
+              autoComplete="off"
+            />
+            {customerListOpen && filteredCustomers.length > 0 && (
+              <ul className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-md border border-border bg-background shadow-md">
+                {filteredCustomers.map((customer) => (
+                  <li key={customer.id}>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => handleSelectCustomer(customer)}
+                      className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                    >
+                      {customer.name}
+                      {customer.phone && (
+                        <span className="text-muted-foreground"> · {customer.phone}</span>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          {selectedCustomer && (
+            <p className="text-xs text-muted-foreground">
+              Seleccionado: {selectedCustomer.name}{" "}
+              <button type="button" onClick={handleClearCustomer} className="underline">
+                quitar
+              </button>
+            </p>
+          )}
         </div>
 
         <div>

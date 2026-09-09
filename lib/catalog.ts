@@ -16,16 +16,27 @@ export type CatalogModifierGroup = {
   options: CatalogModifierOption[];
 };
 
+export type VariantTemperature = "CALIENTE" | "FRIO";
+
 export type CatalogVariant = {
   id: string;
   name: string;
   price: number;
+  // Ejes derivados del nombre de la variante (ver parseVariantName) — si
+  // un producto define variantes "Chico Frío"/"Chico Caliente", el POS
+  // puede mostrar dos selectores (tamaño + temperatura) en vez de una
+  // lista plana. Si el producto no usa la convención (como hoy, solo
+  // "Chico"/"Grande"), temperature queda null y el comportamiento es
+  // idéntico al actual.
+  sizeLabel: string | null;
+  temperature: VariantTemperature | null;
   modifierGroups: CatalogModifierGroup[];
 };
 
 export type CatalogProduct = {
   id: string;
   name: string;
+  imageUrl: string | null;
   variants: CatalogVariant[];
 };
 
@@ -34,6 +45,33 @@ export type CatalogCategory = {
   name: string;
   products: CatalogProduct[];
 };
+
+const TEMPERATURE_SUFFIXES: Record<string, VariantTemperature> = {
+  caliente: "CALIENTE",
+  frio: "FRIO",
+  frío: "FRIO",
+};
+
+// Convención de nombre de variante: "{Tamaño} {Temperatura}" (ej. "Chico
+// Frío"). La palabra final se compara contra CALIENTE/FRÍO — si no
+// coincide, el nombre completo se trata como tamaño y no hay eje de
+// temperatura (mismo comportamiento que antes de este cambio).
+export function parseVariantName(name: string): {
+  sizeLabel: string | null;
+  temperature: VariantTemperature | null;
+} {
+  const trimmed = name.trim();
+  const words = trimmed.split(/\s+/);
+  const lastWord = words[words.length - 1]?.toLowerCase();
+  const temperature = lastWord ? (TEMPERATURE_SUFFIXES[lastWord] ?? null) : null;
+
+  if (!temperature) {
+    return { sizeLabel: trimmed || null, temperature: null };
+  }
+
+  const sizeLabel = words.slice(0, -1).join(" ").trim();
+  return { sizeLabel: sizeLabel || null, temperature };
+}
 
 // Catálogo disponible para vender: categorías -> productos activos y
 // habilitados en la sucursal (BranchProduct.isActive) -> variantes activas
@@ -74,25 +112,57 @@ export async function getCatalog(
       products: category.products.map((product) => ({
         id: product.id,
         name: product.name,
-        variants: product.variants.map((variant) => ({
-          id: variant.id,
-          name: variant.name,
-          price: Number(variant.price),
-          modifierGroups: variant.modifierGroups.map((group) => ({
-            id: group.id,
-            name: group.name,
-            isRequired: group.isRequired,
-            allowMultiple: group.allowMultiple,
-            options: group.options.map((option) => ({
-              id: option.id,
-              name: option.name,
-              priceDelta: Number(option.priceDelta),
-              isSubstitution: option.isSubstitution,
+        imageUrl: product.imageUrl,
+        variants: product.variants.map((variant) => {
+          const { sizeLabel, temperature } = parseVariantName(variant.name);
+          return {
+            id: variant.id,
+            name: variant.name,
+            price: Number(variant.price),
+            sizeLabel,
+            temperature,
+            modifierGroups: variant.modifierGroups.map((group) => ({
+              id: group.id,
+              name: group.name,
+              isRequired: group.isRequired,
+              allowMultiple: group.allowMultiple,
+              options: group.options.map((option) => ({
+                id: option.id,
+                name: option.name,
+                priceDelta: Number(option.priceDelta),
+                isSubstitution: option.isSubstitution,
+              })),
             })),
-          })),
-        })),
+          };
+        }),
       })),
     }));
+}
+
+export type ExtraIngredientOption = {
+  id: string;
+  name: string;
+  baseUnit: string;
+  unitCost: number; // costo cotizado en Compras (IngredientSupplier.isSelected), 0 si nadie lo ha cotizado
+};
+
+// Para "agregar otro ingrediente" libre en el POS (fuera de los
+// ModifierOption curados) — el precio que ve el barista aquí es solo vista
+// previa, actions/pos.ts recalcula el precio real con el mismo costo al
+// confirmar la venta.
+export async function getExtraIngredientOptions(): Promise<ExtraIngredientOption[]> {
+  const ingredients = await prisma.ingredient.findMany({
+    where: { isActive: true },
+    orderBy: { name: "asc" },
+    include: { suppliers: { where: { isSelected: true }, take: 1 } },
+  });
+
+  return ingredients.map((ingredient) => ({
+    id: ingredient.id,
+    name: ingredient.name,
+    baseUnit: ingredient.baseUnit,
+    unitCost: ingredient.suppliers[0]?.cost.toNumber() ?? 0,
+  }));
 }
 
 // Turno ABIERTO de la sucursal, si existe. `Sale.shiftId` es obligatorio en

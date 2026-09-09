@@ -125,6 +125,48 @@ async function main() {
     },
   });
 
+  // Ingredientes para el modificador "Tipo de leche" (sustitución real, ver
+  // actions/pos.ts) y para la variante fría (ver más abajo).
+  const lecheDeslactosada = await prisma.ingredient.upsert({
+    where: { id: "ing-leche-deslactosada" },
+    update: {},
+    create: {
+      id: "ing-leche-deslactosada",
+      name: "Leche deslactosada",
+      category: "LECHE",
+      kind: "ATOMICO",
+      baseUnit: "ML",
+      purchaseUnit: "L",
+    },
+  });
+
+  const lecheAvena = await prisma.ingredient.upsert({
+    where: { id: "ing-leche-avena" },
+    update: {},
+    create: {
+      id: "ing-leche-avena",
+      name: "Leche de avena",
+      category: "LECHE",
+      kind: "ATOMICO",
+      baseUnit: "ML",
+      purchaseUnit: "L",
+    },
+  });
+
+  const hielo = await prisma.ingredient.upsert({
+    where: { id: "ing-hielo" },
+    update: {},
+    create: {
+      id: "ing-hielo",
+      name: "Hielo",
+      category: "INSUMOS",
+      kind: "ATOMICO",
+      baseUnit: "G",
+      purchaseUnit: "KG",
+      tracksExpiration: false,
+    },
+  });
+
   console.log("Sembrando jarabe de vainilla casero (ingrediente compuesto)...");
 
   const jarabeRecipe = await prisma.recipe.upsert({
@@ -195,11 +237,18 @@ async function main() {
     lines: { ingredientId?: string; composedRecipeId?: string; quantity: number; unit: string }[];
   };
 
+  // Latte usa la convención "{Tamaño} {Temperatura}" que lee
+  // lib/catalog.ts (parseVariantName) para mostrar los selectores de
+  // Tamaño y Temperatura en el POS — con recetas de verdad distintas para
+  // frío (menos leche, agrega hielo), no solo una etiqueta cosmética. Ver
+  // punto 5 de docs/CONTINUE.md. Capuccino se deja con nombres simples
+  // ("Chico"/"Grande") a propósito, para verificar que un producto sin la
+  // convención se sigue comportando exactamente igual que antes.
   const variantSpecs: VariantSpec[] = [
     {
       id: "variant-latte-chico",
       productId: latte.id,
-      name: "Chico",
+      name: "Chico Caliente",
       price: 45,
       recipeId: "recipe-latte-chico",
       lines: [
@@ -212,12 +261,40 @@ async function main() {
     {
       id: "variant-latte-grande",
       productId: latte.id,
-      name: "Grande",
+      name: "Grande Caliente",
       price: 55,
       recipeId: "recipe-latte-grande",
       lines: [
         { ingredientId: cafe.id, quantity: 2, unit: "ESPRESSO_SHOT" },
         { ingredientId: leche.id, quantity: 240, unit: "ML" },
+        { ingredientId: vaso.id, quantity: 1, unit: "PIEZA" },
+        { composedRecipeId: jarabeRecipe.id, quantity: 0.05, unit: "PUMP" },
+      ],
+    },
+    {
+      id: "variant-latte-chico-frio",
+      productId: latte.id,
+      name: "Chico Frío",
+      price: 48,
+      recipeId: "recipe-latte-chico-frio",
+      lines: [
+        { ingredientId: cafe.id, quantity: 1, unit: "ESPRESSO_SHOT" },
+        { ingredientId: leche.id, quantity: 150, unit: "ML" },
+        { ingredientId: hielo.id, quantity: 120, unit: "G" },
+        { ingredientId: vaso.id, quantity: 1, unit: "PIEZA" },
+        { composedRecipeId: jarabeRecipe.id, quantity: 0.03, unit: "PUMP" },
+      ],
+    },
+    {
+      id: "variant-latte-grande-frio",
+      productId: latte.id,
+      name: "Grande Frío",
+      price: 58,
+      recipeId: "recipe-latte-grande-frio",
+      lines: [
+        { ingredientId: cafe.id, quantity: 2, unit: "ESPRESSO_SHOT" },
+        { ingredientId: leche.id, quantity: 200, unit: "ML" },
+        { ingredientId: hielo.id, quantity: 150, unit: "G" },
         { ingredientId: vaso.id, quantity: 1, unit: "PIEZA" },
         { composedRecipeId: jarabeRecipe.id, quantity: 0.05, unit: "PUMP" },
       ],
@@ -251,7 +328,7 @@ async function main() {
   for (const spec of variantSpecs) {
     const variant = await prisma.productVariant.upsert({
       where: { id: spec.id },
-      update: { price: spec.price },
+      update: { name: spec.name, price: spec.price },
       create: {
         id: spec.id,
         productId: spec.productId,
@@ -318,6 +395,47 @@ async function main() {
         isSubstitution: false,
       },
     });
+
+    // "Tipo de leche" — sustitución real (ver createSale en actions/pos.ts):
+    // al elegir una opción se descuenta la leche elegida en vez de la
+    // base de la receta, por categoría (LECHE). Solo en variantes que sí
+    // llevan leche base.
+    const lecheLine = spec.lines.find((line) => line.ingredientId === leche.id);
+    if (lecheLine) {
+      const milkGroup = await prisma.variantModifierGroup.upsert({
+        where: { id: `vmg-${spec.id}-leche` },
+        update: {},
+        create: {
+          id: `vmg-${spec.id}-leche`,
+          productVariantId: variant.id,
+          name: "Tipo de leche",
+          isRequired: false,
+          allowMultiple: false,
+        },
+      });
+
+      const milkOptions = [
+        { id: "deslactosada", name: "Deslactosada", ingredientId: lecheDeslactosada.id, priceDelta: 8 },
+        { id: "avena", name: "Avena", ingredientId: lecheAvena.id, priceDelta: 12 },
+      ];
+
+      for (const option of milkOptions) {
+        await prisma.modifierOption.upsert({
+          where: { id: `mo-${spec.id}-leche-${option.id}` },
+          update: {},
+          create: {
+            id: `mo-${spec.id}-leche-${option.id}`,
+            groupId: milkGroup.id,
+            name: option.name,
+            priceDelta: option.priceDelta,
+            ingredientId: option.ingredientId,
+            quantityDelta: lecheLine.quantity,
+            unit: lecheLine.unit as never,
+            isSubstitution: true,
+          },
+        });
+      }
+    }
   }
 
   console.log("Sembrando empleados de demo...");
@@ -386,6 +504,9 @@ async function main() {
     { ingredientId: azucar.id, quantity: 5000 },
     { ingredientId: agua.id, quantity: 5000 },
     { ingredientId: esencia.id, quantity: 500 },
+    { ingredientId: lecheDeslactosada.id, quantity: 5000 },
+    { ingredientId: lecheAvena.id, quantity: 5000 },
+    { ingredientId: hielo.id, quantity: 10000 },
   ];
 
   for (const stock of initialStock) {
@@ -426,6 +547,9 @@ async function main() {
     { ingredientId: azucar.id, cost: 0.03 }, // por G
     { ingredientId: agua.id, cost: 0.001 }, // por ML
     { ingredientId: esencia.id, cost: 0.8 }, // por ML
+    { ingredientId: lecheDeslactosada.id, cost: 0.035 }, // por ML
+    { ingredientId: lecheAvena.id, cost: 0.045 }, // por ML
+    { ingredientId: hielo.id, cost: 0.002 }, // por G
   ];
 
   for (const item of costosBase) {

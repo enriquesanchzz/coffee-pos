@@ -57,6 +57,7 @@ export function NewProductForm({
 }) {
   const router = useRouter();
   const [productName, setProductName] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
   const [categoryId, setCategoryId] = useState(categories[0]?.id ?? NEW_CATEGORY_VALUE);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [variants, setVariants] = useState<VariantDraft[]>([initialVariant()]);
@@ -81,6 +82,7 @@ export function NewProductForm({
         await createProductWithRecipe({
           employeeId,
           productName,
+          imageUrl: imageUrl || undefined,
           categoryId: categoryId === NEW_CATEGORY_VALUE ? undefined : categoryId,
           newCategoryName: categoryId === NEW_CATEGORY_VALUE ? newCategoryName : undefined,
           variants: variants.map((v) => ({
@@ -117,6 +119,16 @@ export function NewProductForm({
               value={productName}
               onChange={(e) => setProductName(e.target.value)}
               placeholder="ej. Mocha"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="product-image">Imagen (URL, opcional)</Label>
+            <Input
+              id="product-image"
+              value={imageUrl}
+              onChange={(e) => setImageUrl(e.target.value)}
+              placeholder="https://…"
             />
           </div>
 

@@ -7,10 +7,18 @@ import { DEFAULT_STOCK_LOCATION_ID } from "@/lib/constants";
 import { getSessionEmployeeId, findEmployeeByPin } from "@/lib/session";
 import { requirePermission } from "@/lib/permissions";
 
+export type CreateSaleExtraIngredientInput = {
+  ingredientId: string;
+  /** Siempre en el baseUnit del ingrediente — mismo criterio que el resto de la app. */
+  quantity: number;
+};
+
 export type CreateSaleItemInput = {
   productVariantId: string;
   quantity: number;
   modifierOptionIds: string[];
+  extraIngredients?: CreateSaleExtraIngredientInput[];
+  notes?: string;
 };
 
 export type ManualDiscountInput = {
@@ -57,18 +65,21 @@ function computeDiscount(
 // Todo corre en una sola transacción de Prisma: si falla el descuento de
 // inventario, la venta tampoco se registra.
 //
+// Sustitución real: cuando un ModifierOption con isSubstitution=true está
+// seleccionado, se omite del consumo cualquier línea de receta cuyo
+// ingrediente comparte `category` con el ingrediente del sustituto (ej.
+// "Leche de avena" reemplaza cualquier línea de categoría LECHE). Es una
+// heurística por categoría, no un vínculo explícito línea-por-línea — el
+// schema no lo modela así — pero es correcta mientras cada receta tenga a
+// lo más una línea por categoría sustituible (el caso real de hoy).
+//
+// Extras libres (SaleItemIngredientAdjustment, AGREGAR_EXTRA): el cliente
+// manda qué ingrediente y cuánto, nunca el precio — se calcula aquí desde
+// el costo cotizado en Compras (IngredientSupplier.isSelected), para que
+// un precio manipulado del lado del cliente nunca llegue a cobrarse.
+//
 // Simplificaciones conocidas de este MVP (ver docs/CONTINUE.md):
-//   - No hay impuestos ni descuentos aplicados todavía (total = subtotal).
-//   - Los ModifierOption con isSubstitution = true se suman al consumo
-//     igual que un extra normal; no se resta el ingrediente base que
-//     sustituyen (falta definir con el negocio qué línea de la receita
-//     corresponde reducir).
-//   - SaleItemIngredientAdjustment (ajustes libres QUITAR/AUMENTAR/
-//     AGREGAR_EXTRA fuera de los ModifierOption curados) no está expuesto
-//     en la UI todavía, aunque el modelo lo soporta.
-//   - El consumo de inventario se agrega por ingrediente para toda la
-//     venta y se registra en un solo InventoryMovement por ingrediente
-//     (no uno por línea), por eso no se liga a relatedSaleItemId.
+//   - No hay impuestos todavía (el descuento sí — ver computeDiscount).
 // -----------------------------------------------------------------------
 export async function createSale(input: CreateSaleInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
@@ -86,22 +97,27 @@ export async function createSale(input: CreateSaleInput) {
       throw new Error("No hay un turno abierto válido para esta venta.");
     }
 
-    const ingredientBaseUnitCache = new Map<string, UnitOfMeasure>();
+    const ingredientInfoCache = new Map<string, { baseUnit: UnitOfMeasure; category: string }>();
     const consumption = new Map<string, Prisma.Decimal>();
+
+    async function getIngredientInfo(ingredientId: string) {
+      let info = ingredientInfoCache.get(ingredientId);
+      if (!info) {
+        const ingredient = await tx.ingredient.findUniqueOrThrow({
+          where: { id: ingredientId },
+        });
+        info = { baseUnit: ingredient.baseUnit, category: ingredient.category };
+        ingredientInfoCache.set(ingredientId, info);
+      }
+      return info;
+    }
 
     async function toBaseUnit(
       ingredientId: string,
       quantity: Prisma.Decimal,
       unit: UnitOfMeasure
     ) {
-      let baseUnit = ingredientBaseUnitCache.get(ingredientId);
-      if (!baseUnit) {
-        const ingredient = await tx.ingredient.findUniqueOrThrow({
-          where: { id: ingredientId },
-        });
-        baseUnit = ingredient.baseUnit;
-        ingredientBaseUnitCache.set(ingredientId, baseUnit);
-      }
+      const { baseUnit } = await getIngredientInfo(ingredientId);
       if (unit === baseUnit) return quantity;
 
       const conversion = await tx.unitConversion.findUnique({
@@ -125,6 +141,7 @@ export async function createSale(input: CreateSaleInput) {
     async function resolveRecipeConsumption(
       recipeVersionId: string,
       multiplier: Prisma.Decimal,
+      excludedCategories: Set<string>,
       depth = 0
     ) {
       if (depth > 10) {
@@ -141,6 +158,8 @@ export async function createSale(input: CreateSaleInput) {
         const lineQuantity = line.quantity.mul(multiplier);
 
         if (line.ingredientId) {
+          const { category } = await getIngredientInfo(line.ingredientId);
+          if (excludedCategories.has(category)) continue; // sustituido, no se descuenta el ingrediente base
           const baseQty = await toBaseUnit(line.ingredientId, lineQuantity, line.unit);
           addConsumption(line.ingredientId, baseQty);
         } else if (line.composedRecipeId) {
@@ -156,7 +175,7 @@ export async function createSale(input: CreateSaleInput) {
           // no como una cantidad con conversión de unidad propia — ver nota
           // en el schema (RecipeIngredient) sobre cómo se calcula el costo
           // de ingredientes compuestos de la misma forma.
-          await resolveRecipeConsumption(composedVersion.id, lineQuantity, depth + 1);
+          await resolveRecipeConsumption(composedVersion.id, lineQuantity, excludedCategories, depth + 1);
         }
       }
     }
@@ -168,7 +187,14 @@ export async function createSale(input: CreateSaleInput) {
       quantity: number;
       unitPrice: Prisma.Decimal;
       lineTotal: Prisma.Decimal;
+      notes: string | null;
       modifiers: { modifierOptionId: string; priceDelta: Prisma.Decimal }[];
+      extraIngredients: {
+        ingredientId: string;
+        quantity: Prisma.Decimal;
+        baseUnit: UnitOfMeasure;
+        priceDelta: Prisma.Decimal;
+      }[];
     }[] = [];
 
     for (const item of input.items) {
@@ -196,7 +222,32 @@ export async function createSale(input: CreateSaleInput) {
         (sum, opt) => sum.add(opt.priceDelta),
         new Prisma.Decimal(0)
       );
-      const unitPrice = variant.price.add(modifierTotal);
+
+      // Extras libres: precio SIEMPRE calculado aquí desde el costo
+      // cotizado, nunca confiado del cliente.
+      const resolvedExtras: {
+        ingredientId: string;
+        quantity: Prisma.Decimal;
+        baseUnit: UnitOfMeasure;
+        priceDelta: Prisma.Decimal;
+      }[] = [];
+      let extrasTotal = new Prisma.Decimal(0);
+
+      for (const extra of item.extraIngredients ?? []) {
+        if (extra.quantity <= 0) {
+          throw new Error("La cantidad de un ingrediente extra debe ser mayor a cero.");
+        }
+        const { baseUnit } = await getIngredientInfo(extra.ingredientId);
+        const supplierCost = await tx.ingredientSupplier.findFirst({
+          where: { ingredientId: extra.ingredientId, isSelected: true },
+        });
+        const quantity = new Prisma.Decimal(extra.quantity);
+        const priceDelta = quantity.mul(supplierCost?.cost ?? new Prisma.Decimal(0));
+        extrasTotal = extrasTotal.add(priceDelta);
+        resolvedExtras.push({ ingredientId: extra.ingredientId, quantity, baseUnit, priceDelta });
+      }
+
+      const unitPrice = variant.price.add(modifierTotal).add(extrasTotal);
       const lineTotal = unitPrice.mul(item.quantity);
       subtotal = subtotal.add(lineTotal);
 
@@ -206,14 +257,28 @@ export async function createSale(input: CreateSaleInput) {
         quantity: item.quantity,
         unitPrice,
         lineTotal,
+        notes: item.notes?.trim() || null,
         modifiers: modifierOptions.map((opt) => ({
           modifierOptionId: opt.id,
           priceDelta: opt.priceDelta,
         })),
+        extraIngredients: resolvedExtras,
       });
 
+      const substitutionCategories = new Set<string>();
+      for (const opt of modifierOptions) {
+        if (opt.isSubstitution && opt.ingredientId) {
+          const { category } = await getIngredientInfo(opt.ingredientId);
+          substitutionCategories.add(category);
+        }
+      }
+
       if (recipeVersion) {
-        await resolveRecipeConsumption(recipeVersion.id, new Prisma.Decimal(item.quantity));
+        await resolveRecipeConsumption(
+          recipeVersion.id,
+          new Prisma.Decimal(item.quantity),
+          substitutionCategories
+        );
       }
 
       for (const opt of modifierOptions) {
@@ -226,10 +291,15 @@ export async function createSale(input: CreateSaleInput) {
           addConsumption(opt.ingredientId, baseQty);
         }
       }
+
+      // Extras libres también consumen inventario, escalados por la
+      // cantidad de la línea — igual que los ModifierOption con ingrediente.
+      for (const extra of resolvedExtras) {
+        addConsumption(extra.ingredientId, extra.quantity.mul(item.quantity));
+      }
     }
 
-    // Sin impuestos todavía — ver docs/CONTINUE.md. Descuento: código o
-    // manual, nunca ambos a la vez.
+    // Descuento: código o manual, nunca ambos a la vez.
     if (input.discountCodeId && input.manualDiscount) {
       throw new Error("Solo se puede aplicar un tipo de descuento por venta.");
     }
@@ -293,27 +363,47 @@ export async function createSale(input: CreateSaleInput) {
         discountTotal,
         total,
         ...(manualDiscountData ? { manualDiscount: { create: manualDiscountData } } : {}),
-        items: {
-          create: saleItemsData.map((item) => ({
-            productVariantId: item.productVariantId,
-            recipeVersionId: item.recipeVersionId,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            lineTotal: item.lineTotal,
-            modifiers: {
-              create: item.modifiers.map((m) => ({
-                modifierOptionId: m.modifierOptionId,
-                priceDelta: m.priceDelta,
-              })),
-            },
-          })),
-        },
         payments: {
           create: input.payments.map((p) => ({ method: p.method, amount: p.amount })),
         },
       },
-      include: { items: true },
     });
+
+    // Se crean uno por uno (en vez de un solo Sale.create anidado) para
+    // tener el id real de cada SaleItem y poder ligarle sus
+    // SaleItemIngredientAdjustment (extras libres) correctamente.
+    for (const item of saleItemsData) {
+      const createdItem = await tx.saleItem.create({
+        data: {
+          saleId: createdSale.id,
+          productVariantId: item.productVariantId,
+          recipeVersionId: item.recipeVersionId,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          lineTotal: item.lineTotal,
+          notes: item.notes,
+          modifiers: {
+            create: item.modifiers.map((m) => ({
+              modifierOptionId: m.modifierOptionId,
+              priceDelta: m.priceDelta,
+            })),
+          },
+        },
+      });
+
+      if (item.extraIngredients.length > 0) {
+        await tx.saleItemIngredientAdjustment.createMany({
+          data: item.extraIngredients.map((extra) => ({
+            saleItemId: createdItem.id,
+            ingredientId: extra.ingredientId,
+            type: "AGREGAR_EXTRA",
+            quantity: extra.quantity,
+            unit: extra.baseUnit,
+            priceDelta: extra.priceDelta,
+          })),
+        });
+      }
+    }
 
     for (const [ingredientId, quantity] of consumption.entries()) {
       const ingredient = await tx.ingredient.findUniqueOrThrow({
