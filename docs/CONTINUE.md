@@ -21,6 +21,7 @@ Claude Code) pueda retomarlo sin arqueología.
 | Módulo **Reportes** (Fase 3) | ✅ Construido y mergeado a `main` (PR #5, `/reportes`). |
 | **Clientes + Lealtad + Descuentos** (Fase 4) | ✅ Construido (`/clientes`, rama `feature/modulo-clientes`). Ver sección dedicada abajo. |
 | **Cambios Punto de Venta** (categorías verticales, imagen, extras libres, notas, Frío/Caliente, sustitución real, búsqueda de cliente) | ✅ Construido (rama `cambios-punto-venta`). Ver sección dedicada abajo. |
+| **Reskin visual del POS** (estilo "Purr'Coffee": tarjetas con selección rápida, tipo de orden, buscador) | ✅ Construido (rama `pos-reskin-purrcoffee`). Ver sección dedicada abajo. |
 | Multi-sucursal en UI (Fase 5) | ⚪ No construido. `DEFAULT_BRANCH_ID` fijo en `lib/constants.ts`. |
 
 ## Qué se verificó en esta sesión
@@ -514,10 +515,69 @@ Fuera de alcance deliberadamente: UI de gestión de
 imágenes, sustitución por vínculo explícito línea-de-receta↔modificador
 (la heurística por categoría basta hoy).
 
+## Reskin visual del POS (rama `pos-reskin-purrcoffee`)
+
+El usuario compartió un mockup de referencia (app "Purr'Coffee") y pidió que
+`/pos` se vea similar. Se acotó el alcance con 3 preguntas antes de tocar
+código, porque el mockup contradice o agrega cosas respecto a "Cambios
+Punto de Venta" (fase anterior):
+
+- **Categorías siguen en menú vertical** (decisión explícita de la fase
+  anterior) — solo cambió el estilo visual de los botones, no volvió a
+  horizontal.
+- **Nueva interacción de tarjeta**: cada tarjeta de `CatalogBrowser` ahora
+  resuelve tamaño/temperatura y cantidad inline, con un botón **"Agregar"**
+  que va directo al carrito sin abrir ningún diálogo (sin
+  modificadores/extras/notas). El diálogo existente (`ProductDialog`) se
+  conserva intacto en su lógica, accesible vía un botón **"Personalizar"**
+  — sigue siendo el único lugar para elegir tipo de leche, extras libres o
+  escribir una nota. La lógica de resolución de variante (antes duplicada
+  en el diálogo) se extrajo a `resolveProductVariant()` en `lib/catalog.ts`
+  — la usan ambos componentes, así que el fix de la fase anterior (una
+  combinación tamaño×temperatura inexistente da `null`, nunca cae en
+  `variants[0]`) vive en un solo lugar.
+- **Tipo de orden real** (En sucursal / Para llevar / A domicilio): a
+  diferencia del resto del reskin, esto sí es una función de negocio
+  nueva. `Sale.orderType SaleOrderType` (migración aditiva, default
+  `PARA_LLEVAR`) se selecciona con tabs en `CartPanel` y viaja hasta
+  `createSale` sin afectar inventario ni costo.
+- **Buscador de producto** dentro de la categoría activa (client-side,
+  sobre el catálogo ya cargado — sin query nueva al servidor).
+- El botón "Filter" del mockup se descartó (no hay ningún atributo de
+  producto que filtrar hoy).
+
+**Acento naranja acotado a `components/pos/*`**: se definieron
+`posAccentClass`/`posAccentBorderClass` en `lib/utils.ts` y se aplicaron
+vía `className` sobre el `Button` compartido — deliberadamente **no** se
+tocó la variable global `--primary` de `app/globals.css`, así que el resto
+de la app (Compras, Reportes, Administración, el sidebar "Nomada Café")
+conserva el tema café/marrón de siempre.
+
+`CartLine`/`AddLineInput` (`cart-store.ts`) ganaron `imageUrl` (miniatura
+en el carrito, mismo patrón que las tarjetas del catálogo) y `quantity`
+opcional en `addLine` (para que el stepper de la tarjeta pueda agregar más
+de 1 de una vez, sumando a una línea existente con la misma firma en vez
+de +1 fijo).
+
+Verificado end-to-end con Playwright contra Postgres real: agregar rápido
+un Capuccino Chico sin abrir diálogo (confirmado en DB mismo
+`recipeVersionId`/consumo que el flujo con diálogo), "Personalizar" en
+Latte sigue funcionando idéntico a la fase anterior (Frío + sustitución de
+leche + extra + nota, confirmado en DB), y `Sale.orderType` persistido
+correctamente al elegir "A domicilio". Captura visual del catálogo
+comparada contra el mockup. Datos de prueba limpiados de la base al
+terminar (solo la venta y movimientos creados en esta verificación — no se
+tocaron ventas de sesiones anteriores).
+
+Fuera de alcance deliberadamente: descripciones de producto en la tarjeta
+(no existe `Product.description` en el schema), botón "Filter" del
+mockup, foto de perfil del empleado en la barra superior (no hay avatar en
+`Employee`).
+
 ## Próximos pasos recomendados (en orden)
 
-Fases 1, 2, 3 y 4 están cerradas, más el ajuste "Cambios Punto de Venta".
-Lo que sigue:
+Fases 1, 2, 3 y 4 están cerradas, más los ajustes "Cambios Punto de Venta"
+y "Reskin visual del POS". Lo que sigue:
 
 1. **Fase 5 (Multi-sucursal)** — la única fase que queda del roadmap
    original. Quitar el `DEFAULT_BRANCH_ID` fijo, UI de selección/gestión
@@ -528,17 +588,18 @@ Lo que sigue:
    `docs/pos-module.md` (impuestos, pagos divididos en la UI, cancelación
    de venta) según prioridad de negocio.
 3. Simplificaciones deliberadas de Administración/Recetas/Compras/
-   Transferencias/Reportes/Clientes/Cambios Punto de Venta documentadas
-   arriba (`EmployeePermissionOverride`, ingredientes compuestos nuevos,
-   alertas de caducidad, cancelar orden, `ReorderPoint`, ordenar en
-   `purchaseUnit` real, revertir una transferencia en tránsito, costo
-   histórico por fecha, gráficas, fulfillment de premio de lealtad,
-   gestión de niveles, UI de modificadores, upload real de imágenes) —
-   atender si el negocio los necesita.
+   Transferencias/Reportes/Clientes/Cambios Punto de Venta/Reskin del POS
+   documentadas arriba (`EmployeePermissionOverride`, ingredientes
+   compuestos nuevos, alertas de caducidad, cancelar orden,
+   `ReorderPoint`, ordenar en `purchaseUnit` real, revertir una
+   transferencia en tránsito, costo histórico por fecha, gráficas,
+   fulfillment de premio de lealtad, gestión de niveles, UI de
+   modificadores, upload real de imágenes, descripciones de producto,
+   avatar de empleado) — atender si el negocio los necesita.
 4. Si se decide adoptar Supabase Auth más adelante: reemplazar
    `lib/password.ts`/`lib/session.ts` por la integración real, el modelo de
    datos ya está listo para ese cambio sin migraciones.
-5. Mergear el PR pendiente de `cambios-punto-venta` a `main`.
+5. Mergear el PR pendiente de `pos-reskin-purrcoffee` a `main`.
 
 ## Convenciones a mantener
 

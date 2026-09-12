@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { SaleOrderType } from "@prisma/client";
 
 export type CartModifier = {
   modifierOptionId: string;
@@ -21,6 +22,7 @@ export type CartLine = {
   productVariantId: string;
   productName: string;
   variantName: string;
+  imageUrl: string | null;
   unitBasePrice: number;
   modifiers: CartModifier[];
   extraIngredients: CartExtraIngredient[];
@@ -32,10 +34,13 @@ type AddLineInput = {
   productVariantId: string;
   productName: string;
   variantName: string;
+  imageUrl: string | null;
   unitBasePrice: number;
   modifiers: CartModifier[];
   extraIngredients: CartExtraIngredient[];
   notes: string;
+  /** Cantidad inicial de la línea — default 1 (ej. diálogo de personalizar). */
+  quantity?: number;
 };
 
 function modifierSignature(modifiers: CartModifier[]) {
@@ -81,6 +86,8 @@ function lineUnitPrice(
 
 type CartState = {
   lines: CartLine[];
+  orderType: SaleOrderType;
+  setOrderType: (orderType: SaleOrderType) => void;
   addLine: (input: AddLineInput) => void;
   incrementLine: (lineId: string) => void;
   decrementLine: (lineId: string) => void;
@@ -91,6 +98,8 @@ type CartState = {
 
 export const useCartStore = create<CartState>((set, get) => ({
   lines: [],
+  orderType: "PARA_LLEVAR",
+  setOrderType: (orderType) => set({ orderType }),
 
   // Agrupa por variante + mismo set de modificadores/extras/nota (misma
   // "receta" exacta), sumando cantidad en vez de crear una línea duplicada.
@@ -98,12 +107,13 @@ export const useCartStore = create<CartState>((set, get) => ({
     set((state) => {
       const signature = lineSignature(input);
       const existing = state.lines.find((line) => lineSignature(line) === signature);
+      const quantity = input.quantity ?? 1;
 
       if (existing) {
         return {
           lines: state.lines.map((line) =>
             line.lineId === existing.lineId
-              ? { ...line, quantity: line.quantity + 1 }
+              ? { ...line, quantity: line.quantity + quantity }
               : line
           ),
         };
@@ -114,11 +124,12 @@ export const useCartStore = create<CartState>((set, get) => ({
         productVariantId: input.productVariantId,
         productName: input.productName,
         variantName: input.variantName,
+        imageUrl: input.imageUrl,
         unitBasePrice: input.unitBasePrice,
         modifiers: input.modifiers,
         extraIngredients: input.extraIngredients,
         notes: input.notes,
-        quantity: 1,
+        quantity,
       };
 
       return { lines: [...state.lines, newLine] };

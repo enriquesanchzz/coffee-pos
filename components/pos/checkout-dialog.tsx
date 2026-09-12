@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency, posAccentClass, posAccentBorderClass } from "@/lib/utils";
 import { createSale } from "@/actions/pos";
 import { findDiscountCodeByCode, type FoundDiscountCode } from "@/actions/discounts";
 import type { CustomerOption } from "@/lib/customers";
@@ -67,7 +67,7 @@ export function CheckoutDialog({
   employeeId: string;
   customers: CustomerOption[];
 }) {
-  const { lines, subtotal, clear } = useCartStore();
+  const { lines, subtotal, clear, orderType, setOrderType } = useCartStore();
   const [method, setMethod] = useState<PaymentMethod>("EFECTIVO");
   const [customerId, setCustomerId] = useState("");
   const [customerQuery, setCustomerQuery] = useState("");
@@ -158,6 +158,7 @@ export function CheckoutDialog({
           // El checkout hoy solo soporta un método por venta. El modelo
           // (SalePayment) ya permite pagos divididos — falta la UI.
           payments: [{ method, amount: total }],
+          orderType,
           customerId: customerId || undefined,
           discountCodeId: discountMode === "CODIGO" ? resolvedCode?.id : undefined,
           manualDiscount:
@@ -174,6 +175,7 @@ export function CheckoutDialog({
         handleClearCustomer();
         setDiscountMode("NINGUNO");
         resetDiscountState();
+        setOrderType("PARA_LLEVAR");
         onOpenChange(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo registrar la venta.");
@@ -241,12 +243,10 @@ export function CheckoutDialog({
                   setDiscountMode(mode.value);
                   resetDiscountState();
                 }}
-                className={
-                  "flex-1 rounded-md border border-border px-3 py-2 text-sm " +
-                  (discountMode === mode.value
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "hover:bg-muted")
-                }
+                className={cn(
+                  "flex-1 rounded-md border border-border px-3 py-2 text-sm",
+                  discountMode === mode.value ? posAccentBorderClass : "hover:bg-muted"
+                )}
               >
                 {mode.label}
               </button>
@@ -366,12 +366,10 @@ export function CheckoutDialog({
                 key={m.value}
                 type="button"
                 onClick={() => setMethod(m.value)}
-                className={
-                  "flex-1 rounded-md border border-border px-3 py-2 text-sm " +
-                  (method === m.value
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "hover:bg-muted")
-                }
+                className={cn(
+                  "flex-1 rounded-md border border-border px-3 py-2 text-sm",
+                  method === m.value ? posAccentBorderClass : "hover:bg-muted"
+                )}
               >
                 {m.label}
               </button>
@@ -382,6 +380,7 @@ export function CheckoutDialog({
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         <Button
+          className={posAccentClass}
           onClick={handleConfirm}
           disabled={
             isPending ||

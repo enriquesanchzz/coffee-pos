@@ -6,13 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { formatCurrency, cn } from "@/lib/utils";
-import type {
-  CatalogModifierOption,
-  CatalogProduct,
-  CatalogVariant,
-  ExtraIngredientOption,
-  VariantTemperature,
+import { formatCurrency, cn, posAccentClass, posAccentBorderClass } from "@/lib/utils";
+import {
+  resolveProductVariant,
+  type CatalogModifierOption,
+  type CatalogProduct,
+  type ExtraIngredientOption,
+  type VariantTemperature,
 } from "@/lib/catalog";
 import type { CartExtraIngredient, CartModifier } from "./cart-store";
 
@@ -36,6 +36,7 @@ export function ProductDialog({
     productVariantId: string;
     productName: string;
     variantName: string;
+    imageUrl: string | null;
     unitBasePrice: number;
     modifiers: CartModifier[];
     extraIngredients: CartExtraIngredient[];
@@ -82,19 +83,10 @@ export function ProductDialog({
     return Array.from(seen);
   }, [product]);
 
-  const variant: CatalogVariant | null = useMemo(() => {
+  const variant = useMemo(() => {
     if (!product) return null;
-    if (sizes.length === 0 && temperatures.length === 0) {
-      return product.variants[0] ?? null;
-    }
-    return (
-      product.variants.find(
-        (v) =>
-          (sizes.length === 0 || v.sizeLabel === sizeLabel) &&
-          (temperatures.length === 0 || v.temperature === temperature)
-      ) ?? null
-    );
-  }, [product, sizes.length, sizeLabel, temperatures.length, temperature]);
+    return resolveProductVariant(product, sizeLabel, temperature);
+  }, [product, sizeLabel, temperature]);
 
   const missingRequired = useMemo(() => {
     if (!variant) return [];
@@ -158,6 +150,7 @@ export function ProductDialog({
       productVariantId: variant.id,
       productName: product!.name,
       variantName: variant.name,
+      imageUrl: product!.imageUrl,
       unitBasePrice: variant.price,
       modifiers: selectedOptions.map((o) => ({
         modifierOptionId: o.id,
@@ -184,9 +177,7 @@ export function ProductDialog({
                   onClick={() => setSizeLabel(size)}
                   className={cn(
                     "rounded-md border border-border px-3 py-1.5 text-sm",
-                    sizeLabel === size
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "hover:bg-muted"
+                    sizeLabel === size ? posAccentBorderClass : "hover:bg-muted"
                   )}
                 >
                   {size}
@@ -207,9 +198,7 @@ export function ProductDialog({
                   onClick={() => setTemperature(temp)}
                   className={cn(
                     "rounded-md border border-border px-3 py-1.5 text-sm",
-                    temperature === temp
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "hover:bg-muted"
+                    temperature === temp ? posAccentBorderClass : "hover:bg-muted"
                   )}
                 >
                   {temperatureLabels[temp]}
@@ -241,9 +230,7 @@ export function ProductDialog({
                     onClick={() => toggleOption(group.id, option, group.allowMultiple)}
                     className={cn(
                       "rounded-md border border-border px-3 py-1.5 text-sm",
-                      isSelected
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "hover:bg-muted"
+                      isSelected ? posAccentBorderClass : "hover:bg-muted"
                     )}
                   >
                     {option.name}
@@ -322,7 +309,11 @@ export function ProductDialog({
           <span className="text-lg font-semibold">{formatCurrency(total)}</span>
         </div>
 
-        <Button onClick={handleAdd} disabled={!variant || missingRequired.length > 0}>
+        <Button
+          className={posAccentClass}
+          onClick={handleAdd}
+          disabled={!variant || missingRequired.length > 0}
+        >
           Agregar al carrito
         </Button>
       </div>
