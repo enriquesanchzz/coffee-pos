@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Prisma, PaymentMethod, UnitOfMeasure, DiscountType, ManualDiscountReason } from "@prisma/client";
+import { Prisma, PaymentMethod, UnitOfMeasure, DiscountType, ManualDiscountReason, SaleOrderType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_STOCK_LOCATION_ID } from "@/lib/constants";
 import { getSessionEmployeeId, findEmployeeByPin } from "@/lib/session";
@@ -34,6 +34,7 @@ export type CreateSaleInput = {
   employeeId: string;
   items: CreateSaleItemInput[];
   payments: { method: PaymentMethod; amount: number }[];
+  orderType: SaleOrderType;
   customerId?: string;
   discountCodeId?: string;
   manualDiscount?: ManualDiscountInput;
@@ -357,6 +358,7 @@ export async function createSale(input: CreateSaleInput) {
         branchId: input.branchId,
         shiftId: input.shiftId,
         employeeId: input.employeeId,
+        orderType: input.orderType,
         customerId: input.customerId || null,
         discountCodeId: input.discountCodeId || null,
         subtotal,

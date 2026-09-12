@@ -73,6 +73,34 @@ export function parseVariantName(name: string): {
   return { sizeLabel: sizeLabel || null, temperature };
 }
 
+// Resuelve la variante exacta para una combinación tamaño×temperatura.
+// Si el producto no usa esos ejes (sizeLabel/temperature en null en todas
+// sus variantes), regresa la primera. Si los usa pero la combinación
+// pedida no existe como variante real (grid incompleto), regresa `null`
+// — nunca cae en variants[0] por error (bug real corregido: ver
+// docs/CONTINUE.md, "Cambios Punto de Venta"). Compartida por
+// ProductCard y ProductDialog para no duplicar esta lógica sensible.
+export function resolveProductVariant(
+  product: CatalogProduct,
+  sizeLabel: string | null,
+  temperature: VariantTemperature | null
+): CatalogVariant | null {
+  const hasSizes = product.variants.some((v) => v.sizeLabel !== null);
+  const hasTemperatures = product.variants.some((v) => v.temperature !== null);
+
+  if (!hasSizes && !hasTemperatures) {
+    return product.variants[0] ?? null;
+  }
+
+  return (
+    product.variants.find(
+      (v) =>
+        (!hasSizes || v.sizeLabel === sizeLabel) &&
+        (!hasTemperatures || v.temperature === temperature)
+    ) ?? null
+  );
+}
+
 // Catálogo disponible para vender: categorías -> productos activos y
 // habilitados en la sucursal (BranchProduct.isActive) -> variantes activas
 // -> grupos de modificadores con sus opciones. Categorías/productos sin

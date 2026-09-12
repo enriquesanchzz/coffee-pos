@@ -35,9 +35,9 @@ export function PosWorkspace({
   return (
     <div className="grid h-full grid-cols-[1fr_360px]">
       <div className="flex h-full flex-col">
-        <div className="flex items-center justify-between border-b border-border px-4 py-2">
+        <div className="flex items-center justify-between border-b border-border px-5 py-3">
           <p className="text-sm text-muted-foreground">
-            Atendiendo: <span className="font-medium text-foreground">{employee.name}</span>
+            Atendiendo: <span className="font-semibold text-foreground">{employee.name}</span>
           </p>
           <div className="flex items-center gap-4">
             <button
@@ -57,7 +57,20 @@ export function PosWorkspace({
         <div className="flex-1 overflow-hidden">
           <CatalogBrowser
             catalog={catalog}
-            onSelectProduct={(product) => {
+            onQuickAdd={(product, variant, quantity) =>
+              addLine({
+                productVariantId: variant.id,
+                productName: product.name,
+                variantName: variant.name,
+                imageUrl: product.imageUrl,
+                unitBasePrice: variant.price,
+                modifiers: [],
+                extraIngredients: [],
+                notes: "",
+                quantity,
+              })
+            }
+            onCustomize={(product) => {
               setSelectedProduct(product);
               setProductDialogOpen(true);
             }}

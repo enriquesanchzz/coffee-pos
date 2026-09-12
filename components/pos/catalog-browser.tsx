@@ -1,20 +1,31 @@
 "use client";
 
-import { useState } from "react";
-import { Coffee } from "lucide-react";
-import { cn, formatCurrency } from "@/lib/utils";
-import type { CatalogCategory, CatalogProduct } from "@/lib/catalog";
-import { Card } from "@/components/ui/card";
+import { useMemo, useState } from "react";
+import { Search } from "lucide-react";
+import { cn, posAccentClass } from "@/lib/utils";
+import type { CatalogCategory, CatalogProduct, CatalogVariant } from "@/lib/catalog";
+import { Input } from "@/components/ui/input";
+import { ProductCard } from "./product-card";
 
 export function CatalogBrowser({
   catalog,
-  onSelectProduct,
+  onQuickAdd,
+  onCustomize,
 }: {
   catalog: CatalogCategory[];
-  onSelectProduct: (product: CatalogProduct) => void;
+  onQuickAdd: (product: CatalogProduct, variant: CatalogVariant, quantity: number) => void;
+  onCustomize: (product: CatalogProduct) => void;
 }) {
   const [activeCategoryId, setActiveCategoryId] = useState(catalog[0]?.id);
+  const [query, setQuery] = useState("");
   const activeCategory = catalog.find((c) => c.id === activeCategoryId) ?? catalog[0];
+
+  const filteredProducts = useMemo(() => {
+    const products = activeCategory?.products ?? [];
+    const trimmed = query.trim().toLowerCase();
+    if (!trimmed) return products;
+    return products.filter((p) => p.name.toLowerCase().includes(trimmed));
+  }, [activeCategory, query]);
 
   if (catalog.length === 0) {
     return (
@@ -26,15 +37,15 @@ export function CatalogBrowser({
 
   return (
     <div className="flex h-full">
-      <nav className="flex w-44 flex-shrink-0 flex-col gap-1 overflow-y-auto border-r border-border p-3">
+      <nav className="flex w-44 flex-shrink-0 flex-col gap-1.5 overflow-y-auto p-3">
         {catalog.map((category) => (
           <button
             key={category.id}
             onClick={() => setActiveCategoryId(category.id)}
             className={cn(
-              "rounded-md px-3 py-2 text-left text-sm",
+              "rounded-full px-4 py-2 text-left text-sm font-medium transition-colors",
               category.id === activeCategory?.id
-                ? "bg-primary text-primary-foreground"
+                ? posAccentClass
                 : "text-foreground hover:bg-muted"
             )}
           >
@@ -43,36 +54,32 @@ export function CatalogBrowser({
         ))}
       </nav>
 
-      <div className="grid flex-1 auto-rows-min grid-cols-2 gap-4 overflow-y-auto p-4 sm:grid-cols-3 lg:grid-cols-4">
-        {activeCategory?.products.map((product) => {
-          const fromPrice = Math.min(...product.variants.map((v) => v.price));
-          return (
-            <Card
+      <div className="flex flex-1 flex-col gap-4 overflow-hidden p-4">
+        <div className="relative max-w-sm flex-shrink-0">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar producto…"
+            className="rounded-full pl-9"
+          />
+        </div>
+
+        <div className="grid flex-1 auto-rows-min grid-cols-1 gap-3 overflow-y-auto pr-1">
+          {filteredProducts.map((product) => (
+            <ProductCard
               key={product.id}
-              className="flex aspect-square cursor-pointer flex-col overflow-hidden p-0 transition-shadow hover:shadow-md"
-              onClick={() => onSelectProduct(product)}
-            >
-              <div className="flex flex-1 items-center justify-center overflow-hidden bg-muted">
-                {product.imageUrl ? (
-                  // Imagen por URL externa — no hay storage de archivos
-                  // configurado, ver docs/CONTINUE.md.
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={product.imageUrl}
-                    alt={product.name}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <Coffee className="h-10 w-10 text-muted-foreground" />
-                )}
-              </div>
-              <div className="p-3">
-                <p className="text-base font-semibold leading-tight">{product.name}</p>
-                <p className="text-sm text-muted-foreground">Desde {formatCurrency(fromPrice)}</p>
-              </div>
-            </Card>
-          );
-        })}
+              product={product}
+              onQuickAdd={onQuickAdd}
+              onCustomize={onCustomize}
+            />
+          ))}
+          {filteredProducts.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              Sin resultados para “{query}” en {activeCategory?.name}.
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -134,6 +134,12 @@ enum SaleStatus {
   CANCELADA
 }
 
+enum SaleOrderType {
+  CONSUMO_LOCAL
+  PARA_LLEVAR
+  DOMICILIO
+}
+
 enum DiscountType {
   PORCENTAJE
   MONTO_FIJO
@@ -1021,6 +1027,7 @@ model Sale {
   customerId String?
   customer   Customer?  @relation(fields: [customerId], references: [id])
   status     SaleStatus @default(COMPLETADA)
+  orderType  SaleOrderType @default(PARA_LLEVAR)
   subtotal   Decimal    @db.Decimal(10, 2)
   discountTotal Decimal @default(0) @db.Decimal(10, 2)
   total      Decimal    @db.Decimal(10, 2) // IVA incluido
