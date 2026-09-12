@@ -54,8 +54,16 @@ export function ProductCard({
     [product, sizeLabel, temperature]
   );
 
+  // La tarjeta no tiene UI para elegir modificadores (sabor, tipo de leche,
+  // etc.) — si la variante tiene algún grupo obligatorio (ej. "Sabor" en
+  // Chai/Malteada/Soda Italiana), "Agregar" no puede satisfacerlo y hay que
+  // forzar "Personalizar", igual que ProductDialog ya bloquea su propio
+  // botón cuando falta un grupo requerido.
+  const hasRequiredModifiers = variant?.modifierGroups.some((g) => g.isRequired) ?? false;
+  const canQuickAdd = Boolean(variant) && !hasRequiredModifiers;
+
   function handleQuickAdd() {
-    if (!variant) return;
+    if (!canQuickAdd || !variant) return;
     onQuickAdd(product, variant, quantity);
     setQuantity(1);
   }
@@ -123,6 +131,9 @@ export function ProductCard({
         {!variant && (
           <p className="text-xs text-destructive">Esta combinación no está disponible.</p>
         )}
+        {hasRequiredModifiers && (
+          <p className="text-xs text-muted-foreground">Elige opciones en “Personalizar”.</p>
+        )}
 
         <div className="mt-auto flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1.5">
@@ -159,7 +170,7 @@ export function ProductCard({
               size="sm"
               className={cn("flex-shrink-0 rounded-full", posAccentClass)}
               onClick={handleQuickAdd}
-              disabled={!variant}
+              disabled={!canQuickAdd}
             >
               Agregar
             </Button>

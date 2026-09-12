@@ -12,7 +12,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:seed": "prisma db seed",
-    "prisma:seed-demo": "dotenv -e .env -- ts-node prisma/seed-demo.ts"
+    "prisma:seed-demo": "dotenv -e .env -- ts-node prisma/seed-demo.ts",
+    "prisma:seed-lapso": "dotenv -e .env -- ts-node prisma/seed-lapso.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
