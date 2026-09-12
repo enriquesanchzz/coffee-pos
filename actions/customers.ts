@@ -11,6 +11,7 @@ export type CreateCustomerInput = {
   name: string;
   phone?: string;
   email?: string;
+  address?: string; // para pedidos "A domicilio"
   birthDate?: string; // ISO date, opcional
 };
 
@@ -30,6 +31,7 @@ export async function createCustomer(input: CreateCustomerInput) {
       name,
       phone: input.phone?.trim() || null,
       email: input.email?.trim() || null,
+      address: input.address?.trim() || null,
       birthDate: input.birthDate ? new Date(input.birthDate) : null,
     },
   });
@@ -45,6 +47,7 @@ export type UpdateCustomerInput = {
   name: string;
   phone?: string;
   email?: string;
+  address?: string;
   birthDate?: string;
 };
 
@@ -65,6 +68,7 @@ export async function updateCustomer(input: UpdateCustomerInput) {
       name,
       phone: input.phone?.trim() || null,
       email: input.email?.trim() || null,
+      address: input.address?.trim() || null,
       birthDate: input.birthDate ? new Date(input.birthDate) : null,
     },
   });

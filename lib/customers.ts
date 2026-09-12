@@ -69,15 +69,24 @@ export async function getCustomerDetail(id: string): Promise<CustomerDetail> {
   };
 }
 
-export type CustomerOption = { id: string; name: string; phone: string | null };
+export type CustomerOption = {
+  id: string;
+  name: string;
+  phone: string | null;
+  address: string | null;
+  loyaltyCode: string | null;
+};
 
 export async function getCustomerOptions(): Promise<CustomerOption[]> {
   const customers = await prisma.customer.findMany({
     orderBy: { name: "asc" },
+    include: { loyaltyCard: { select: { code: true } } },
   });
   return customers.map((customer) => ({
     id: customer.id,
     name: customer.name,
     phone: customer.phone,
+    address: customer.address,
+    loyaltyCode: customer.loyaltyCard?.code ?? null,
   }));
 }

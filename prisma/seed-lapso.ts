@@ -25,9 +25,11 @@ const DEFAULT_STOCK_LOCATION_ID = "stock-branch-principal";
 //      mismos IDs que seed-demo.ts, para que ambos scripts sean
 //      compatibles sin importar el orden en que se corran, y actualiza su
 //      costo cotizado a precios reales dados por el usuario.
-//   3. Siembra el menú real: categorías, productos, variantes y — donde
-//      hay una base de costo real (café/leche/esencia) — una receta
-//      aproximada, documentada explícitamente como aproximación.
+//   3. Siembra el árbol de categorías (padre → hijas, ver "Mejoras
+//      avanzadas de POS") y el menú real: productos, variantes, recetas
+//      aproximadas donde hay costo real, Frío/Caliente/Frappé como eje de
+//      variante (no productos duplicados), y "Tipo de leche" como
+//      modificador de sustitución con costo real estimado.
 //
 // Requiere `prisma/seed.ts` ya corrido (roles/permisos + sucursal + stock
 // location). No requiere `prisma/seed-demo.ts`.
@@ -47,6 +49,15 @@ const COSTO_AGUA_POR_ML = 0.001;
 const COSTO_HIELO_POR_G = 0.002;
 const COSTO_VASO_POR_PIEZA = 2.5;
 
+// Leches alternativas (punto 5, "Mejoras avanzadas de POS"): el menú real
+// las ofrece "sin costo adicional", pero el negocio pidió mostrar su costo
+// real y no se dio precio por litro — son ESTIMACIONES documentadas,
+// ajustables después en /compras/proveedores sin tocar este script.
+const COSTO_LECHE_LIGHT_POR_ML = 32 / 1000;
+const COSTO_LECHE_DESLACTOSADA_POR_ML = 38 / 1000;
+const COSTO_LECHE_DESLACTOSADA_LIGHT_POR_ML = 40 / 1000;
+const COSTO_LECHE_SOYA_POR_ML = 46 / 1000;
+
 type RecipeLineSpec = {
   ingredientId?: string;
   composedRecipeId?: string;
@@ -54,14 +65,18 @@ type RecipeLineSpec = {
   unit: UnitOfMeasure;
 };
 
-// "Chico"/"Mediano"/"Grande" -> índice 0/1/2 para las funciones de receta
-// por tamaño de abajo.
+// "Chico"/"Mediano"/"Grande [Temperatura]" -> índice 0/1/2 para las
+// funciones de receta por tamaño de abajo.
 type SizeLabel = string;
 
 type VariantSpec = {
   label: SizeLabel;
   price: number;
   recipe?: RecipeLineSpec[];
+  // ml de leche entera que ya usa la receta de esta variante — si se da,
+  // seedProduct() agrega el grupo "Tipo de leche" automáticamente (ver
+  // milkAlternatives más abajo). No aplica a variantes sin leche.
+  milkMl?: number;
 };
 
 type ProductSpec = {
@@ -74,7 +89,8 @@ type ProductSpec = {
   // Grupo de sabor sin costo ni consumo de ingrediente propio — el sabor
   // ya está incluido en la "esencia" genérica de la receta base (ver nota
   // en la sección de costos arriba). Se repite igual en cada variante
-  // (tamaño) del producto, es obligatorio (el cliente sí debe elegir uno).
+  // (tamaño/temperatura) del producto, es obligatorio (el cliente sí debe
+  // elegir uno).
   flavorGroup?: { name: string; options: string[] };
 };
 
@@ -203,6 +219,41 @@ async function main() {
     },
   });
 
+  console.log("Sembrando leches alternativas (Tipo de leche)...");
+
+  // "Tipo de leche" (punto 5, Mejoras avanzadas de POS): Entera es la
+  // base de toda receta con leche; estas son las alternativas reales del
+  // menú (Light/Deslactosada/Deslactosada Light/Soya), con costo
+  // ESTIMADO (ver constantes arriba) porque el negocio no dio precio real
+  // por litro — se puede ajustar después en /compras/proveedores.
+  const milkAlternativesData: { id: string; name: string; costPerMl: number }[] = [
+    { id: "ing-lapso-leche-light", name: "Light", costPerMl: COSTO_LECHE_LIGHT_POR_ML },
+    { id: "ing-lapso-leche-deslactosada", name: "Deslactosada", costPerMl: COSTO_LECHE_DESLACTOSADA_POR_ML },
+    {
+      id: "ing-lapso-leche-deslactosada-light",
+      name: "Deslactosada Light",
+      costPerMl: COSTO_LECHE_DESLACTOSADA_LIGHT_POR_ML,
+    },
+    { id: "ing-lapso-leche-soya", name: "Soya", costPerMl: COSTO_LECHE_SOYA_POR_ML },
+  ];
+
+  const milkAlternatives: { id: string; name: string; costPerMl: number }[] = [];
+  for (const milk of milkAlternativesData) {
+    await prisma.ingredient.upsert({
+      where: { id: milk.id },
+      update: {},
+      create: {
+        id: milk.id,
+        name: `Leche ${milk.name}`,
+        category: "LECHE",
+        kind: "ATOMICO",
+        baseUnit: "ML",
+        purchaseUnit: "L",
+      },
+    });
+    milkAlternatives.push(milk);
+  }
+
   console.log("Sembrando ingredientes de la sección Extras del menú...");
 
   // Los "Extras" del menú (Aderezo, Salsa, Extracción, etc.) son cargos
@@ -258,6 +309,7 @@ async function main() {
     { ingredientId: agua.id, cost: COSTO_AGUA_POR_ML },
     { ingredientId: hielo.id, cost: COSTO_HIELO_POR_G },
     { ingredientId: esenciaSabor.id, cost: COSTO_ESENCIA_POR_ML },
+    ...milkAlternatives.map((m) => ({ ingredientId: m.id, cost: m.costPerMl })),
     ...Array.from(extraIngredients.values()).map((e) => ({ ingredientId: e.id, cost: e.cost })),
   ];
 
@@ -285,6 +337,7 @@ async function main() {
     { ingredientId: agua.id, quantity: 20000 },
     { ingredientId: hielo.id, quantity: 30000 },
     { ingredientId: esenciaSabor.id, quantity: 20000 },
+    ...milkAlternatives.map((m) => ({ ingredientId: m.id, quantity: 10000 })),
     ...Array.from(extraIngredients.values()).map((e) => ({ ingredientId: e.id, quantity: 500 })),
   ];
 
@@ -300,35 +353,46 @@ async function main() {
     });
   }
 
-  console.log("Sembrando categorías y menú real de LAPSO...");
+  console.log("Sembrando árbol de categorías y menú real de LAPSO...");
 
-  async function category(name: string): Promise<string> {
+  async function category(name: string, parentId?: string): Promise<string> {
     const cat = await prisma.productCategory.upsert({
       where: { name },
-      update: {},
-      create: { name },
+      update: { parentId: parentId ?? null },
+      create: { name, parentId: parentId ?? null },
     });
     return cat.id;
   }
 
-  const catChocolates = await category("Chocolates");
-  const catTe = await category("Té e Infusiones");
-  const catTisanas = await category("Tisanas");
-  const catSmoothie = await category("Smoothie");
-  const catChai = await category("Chai");
-  const catMalteada = await category("Malteada");
-  const catSoda = await category("Soda Italiana");
-  const catCafe = await category("Café");
-  const catEspresso = await category("Espresso");
-  const catCapuccinos = await category("Capuccinos");
-  const catLatte = await category("Latte");
-  const catBocadillos = await category("Bocadillos");
-  const catGalletas = await category("Galletas");
-  const catPasteles = await category("Pasteles");
-  const catPiesTartas = await category("Pies y Tartas");
-  const catMacarons = await category("Macarons");
-  const catSouvenirs = await category("Souvenirs");
-  const catTarjetaRegalo = await category("Tarjeta de regalo");
+  // Árbol de 2 niveles (punto 2, Mejoras avanzadas de POS) — los padres no
+  // llevan productos directos (excepto "Café en grano", que no tiene
+  // hijas y actúa como categoría de un solo nivel, igual que antes).
+  const catCafeEspresso = await category("Café y Espresso");
+  const catChocolatesTes = await category("Chocolates y Tés");
+  const catBebidasFrias = await category("Bebidas Frías");
+  const catBocadillosPadre = await category("Bocadillos");
+  const catPostres = await category("Postres");
+  const catSouvenirsTarjetas = await category("Souvenirs y Tarjetas");
+
+  const catChocolates = await category("Chocolates", catChocolatesTes);
+  const catTe = await category("Té e Infusiones", catChocolatesTes);
+  const catTisanas = await category("Tisanas", catChocolatesTes);
+  const catSmoothie = await category("Smoothie", catBebidasFrias);
+  const catChai = await category("Chai", catChocolatesTes);
+  const catMalteada = await category("Malteada", catBebidasFrias);
+  const catSoda = await category("Soda Italiana", catBebidasFrias);
+  const catCafe = await category("Café", catCafeEspresso);
+  const catEspresso = await category("Espresso", catCafeEspresso);
+  const catCapuccinos = await category("Capuccinos", catCafeEspresso);
+  const catLatte = await category("Latte", catCafeEspresso);
+  const catBagels = await category("Bagels", catBocadillosPadre);
+  const catOtrosBocadillos = await category("Otros Bocadillos", catBocadillosPadre);
+  const catGalletas = await category("Galletas", catPostres);
+  const catPasteles = await category("Pasteles", catPostres);
+  const catPiesTartas = await category("Pies y Tartas", catPostres);
+  const catMacarons = await category("Macarons", catPostres);
+  const catSouvenirs = await category("Souvenirs", catSouvenirsTarjetas);
+  const catTarjetaRegalo = await category("Tarjeta de regalo", catSouvenirsTarjetas);
   const catCafeGrano = await category("Café en grano");
 
   // -----------------------------------------------------------------------
@@ -482,30 +546,84 @@ async function main() {
           });
         }
       }
+
+      // "Tipo de leche" (punto 5, Mejoras avanzadas de POS): Entera sin
+      // costo (ya es la base de la receta) + alternativas como
+      // sustitución real con priceDelta = diferencia de costo × la misma
+      // cantidad de ml que ya usa esta variante — mismo mecanismo de
+      // sustitución por categoría (LECHE) ya construido en actions/pos.ts.
+      if (variant.milkMl) {
+        const milkMl = variant.milkMl;
+        const groupId = `${variantId}-leche`;
+        const group = await prisma.variantModifierGroup.upsert({
+          where: { id: groupId },
+          update: {},
+          create: {
+            id: groupId,
+            productVariantId: productVariant.id,
+            name: "Tipo de leche",
+            isRequired: false,
+            allowMultiple: false,
+          },
+        });
+
+        await prisma.modifierOption.upsert({
+          where: { id: `${groupId}-entera` },
+          update: {},
+          create: { id: `${groupId}-entera`, groupId: group.id, name: "Entera", priceDelta: 0 },
+        });
+
+        for (const milk of milkAlternatives) {
+          const priceDelta = Math.round((milk.costPerMl - COSTO_LECHE_POR_ML) * milkMl * 100) / 100;
+          await prisma.modifierOption.upsert({
+            where: { id: `${groupId}-${slug(milk.name)}` },
+            update: {},
+            create: {
+              id: `${groupId}-${slug(milk.name)}`,
+              groupId: group.id,
+              name: milk.name,
+              priceDelta,
+              ingredientId: milk.id,
+              quantityDelta: milkMl,
+              unit: "ML",
+              isSubstitution: true,
+            },
+          });
+        }
+      }
     }
+
+    // Si el producto cambió su conjunto de variantes entre corridas (ej.
+    // "Té"/"Americano" al agregarles el eje de temperatura), las
+    // variantes que ya no están en spec.variants se desactivan — nunca se
+    // borran (mismo criterio de "desactivar, no borrar" del resto del
+    // script), así que no se pierden ventas históricas que las usaron.
+    const currentVariantIds = spec.variants.map((v) => `${spec.id}-${slug(v.label)}`);
+    await prisma.productVariant.updateMany({
+      where: { productId: product.id, id: { notIn: currentVariantIds }, isActive: true },
+      data: { isActive: false },
+    });
   }
 
+  // Productos consolidados de aquí en adelante usan el mismo eje de
+  // variante "{Tamaño} {Temperatura}" ya construido en "Cambios Punto de
+  // Venta" (ver parseVariantName en lib/catalog.ts), sin cambios de
+  // schema. Frappé es un 3er estado agregado a VariantTemperature.
+
   // -----------------------------------------------------------------------
-  // CAFÉ
+  // CAFÉ — "Americano" consolida Americano/Americano Frío en un producto.
   // -----------------------------------------------------------------------
   await seedProduct({
     id: "lapso-americano",
     name: "Americano",
     categoryId: catCafe,
     variants: [
-      { label: "Chico", price: 27, recipe: recetaAmericano(0, [1, 1, 2], [150, 200, 250]) },
-      { label: "Mediano", price: 34, recipe: recetaAmericano(1, [1, 1, 2], [150, 200, 250]) },
-      { label: "Grande", price: 37, recipe: recetaAmericano(2, [1, 1, 2], [150, 200, 250]) },
-    ],
-  });
-  await seedProduct({
-    id: "lapso-americano-frio",
-    name: "Americano Frío",
-    categoryId: catCafe,
-    variants: [
-      { label: "Chico", price: 28, recipe: recetaAmericano(0, [1, 1, 2], [100, 130, 160], [100, 130, 160]) },
-      { label: "Mediano", price: 35, recipe: recetaAmericano(1, [1, 1, 2], [100, 130, 160], [100, 130, 160]) },
-      { label: "Grande", price: 39, recipe: recetaAmericano(2, [1, 1, 2], [100, 130, 160], [100, 130, 160]) },
+      { label: "Chico Caliente", price: 27, recipe: recetaAmericano(0, [1, 1, 2], [150, 200, 250]) },
+      { label: "Mediano Caliente", price: 34, recipe: recetaAmericano(1, [1, 1, 2], [150, 200, 250]) },
+      { label: "Grande Caliente", price: 37, recipe: recetaAmericano(2, [1, 1, 2], [150, 200, 250]) },
+      { label: "Chico Frío", price: 28, recipe: recetaAmericano(0, [1, 1, 2], [100, 130, 160], [100, 130, 160]) },
+      { label: "Mediano Frío", price: 35, recipe: recetaAmericano(1, [1, 1, 2], [100, 130, 160], [100, 130, 160]) },
+      { label: "Grande Frío", price: 39, recipe: recetaAmericano(2, [1, 1, 2], [100, 130, 160], [100, 130, 160]) },
     ],
   });
   await seedProduct({
@@ -544,8 +662,8 @@ async function main() {
     name: "Cortado",
     categoryId: catEspresso,
     variants: [
-      { label: "Sencillo", price: 32, recipe: base({ ingredientId: cafe.id, quantity: 1, unit: "ESPRESSO_SHOT" }, { ingredientId: leche.id, quantity: 20, unit: "ML" }) },
-      { label: "Doble", price: 37, recipe: base({ ingredientId: cafe.id, quantity: 2, unit: "ESPRESSO_SHOT" }, { ingredientId: leche.id, quantity: 30, unit: "ML" }) },
+      { label: "Sencillo", price: 32, milkMl: 20, recipe: base({ ingredientId: cafe.id, quantity: 1, unit: "ESPRESSO_SHOT" }, { ingredientId: leche.id, quantity: 20, unit: "ML" }) },
+      { label: "Doble", price: 37, milkMl: 30, recipe: base({ ingredientId: cafe.id, quantity: 2, unit: "ESPRESSO_SHOT" }, { ingredientId: leche.id, quantity: 30, unit: "ML" }) },
     ],
   });
   await seedProduct({
@@ -553,8 +671,8 @@ async function main() {
     name: "Macciato",
     categoryId: catEspresso,
     variants: [
-      { label: "Sencillo", price: 32, recipe: base({ ingredientId: cafe.id, quantity: 1, unit: "ESPRESSO_SHOT" }, { ingredientId: leche.id, quantity: 10, unit: "ML" }) },
-      { label: "Doble", price: 37, recipe: base({ ingredientId: cafe.id, quantity: 2, unit: "ESPRESSO_SHOT" }, { ingredientId: leche.id, quantity: 15, unit: "ML" }) },
+      { label: "Sencillo", price: 32, milkMl: 10, recipe: base({ ingredientId: cafe.id, quantity: 1, unit: "ESPRESSO_SHOT" }, { ingredientId: leche.id, quantity: 10, unit: "ML" }) },
+      { label: "Doble", price: 37, milkMl: 15, recipe: base({ ingredientId: cafe.id, quantity: 2, unit: "ESPRESSO_SHOT" }, { ingredientId: leche.id, quantity: 15, unit: "ML" }) },
     ],
   });
   await seedProduct({
@@ -570,6 +688,7 @@ async function main() {
   // -----------------------------------------------------------------------
   // CAPUCCINOS
   // -----------------------------------------------------------------------
+  const lecheCapuccinoMl = [150, 200, 250];
   const capuccinos: { id: string; name: string; price: [number, number, number]; esencia?: [number, number, number] }[] = [
     { id: "lapso-capuccino-clasico", name: "Capuccino Clásico", price: [43, 49, 54] },
     { id: "lapso-capuccino-moca", name: "Capuccino Moca", price: [46, 53, 58], esencia: [5, 7, 10] },
@@ -584,34 +703,31 @@ async function main() {
       variants: (["Chico", "Mediano", "Grande"] as const).map((label, i) => ({
         label,
         price: c.price[i],
-        recipe: recetaCafeConLeche(i, [1, 1, 2], [150, 200, 250], c.esencia),
+        milkMl: lecheCapuccinoMl[i],
+        recipe: recetaCafeConLeche(i, [1, 1, 2], lecheCapuccinoMl, c.esencia),
       })),
     });
   }
 
   // -----------------------------------------------------------------------
-  // LATTE
+  // LATTE — "Latte" consolida Latte Caliente/Frío; Banana sigue aparte.
   // -----------------------------------------------------------------------
+  const lecheLatteCalienteMl = [180, 220, 260];
+  const lecheLatteFrioMl = [150, 190, 220];
   await seedProduct({
-    id: "lapso-latte-caliente",
-    name: "Latte Caliente",
+    id: "lapso-latte",
+    name: "Latte",
     categoryId: catLatte,
-    variants: (["Chico", "Mediano", "Grande"] as const).map((label, i) => ({
-      label,
-      price: [43, 49, 54][i],
-      recipe: recetaCafeConLeche(i, [1, 1, 2], [180, 220, 260]),
-    })),
+    variants: [
+      { label: "Chico Caliente", price: 43, milkMl: lecheLatteCalienteMl[0], recipe: recetaCafeConLeche(0, [1, 1, 2], lecheLatteCalienteMl) },
+      { label: "Mediano Caliente", price: 49, milkMl: lecheLatteCalienteMl[1], recipe: recetaCafeConLeche(1, [1, 1, 2], lecheLatteCalienteMl) },
+      { label: "Grande Caliente", price: 54, milkMl: lecheLatteCalienteMl[2], recipe: recetaCafeConLeche(2, [1, 1, 2], lecheLatteCalienteMl) },
+      { label: "Chico Frío", price: 45, milkMl: lecheLatteFrioMl[0], recipe: recetaCafeConLeche(0, [1, 1, 2], lecheLatteFrioMl, undefined, [100, 130, 160]) },
+      { label: "Mediano Frío", price: 52, milkMl: lecheLatteFrioMl[1], recipe: recetaCafeConLeche(1, [1, 1, 2], lecheLatteFrioMl, undefined, [100, 130, 160]) },
+      { label: "Grande Frío", price: 57, milkMl: lecheLatteFrioMl[2], recipe: recetaCafeConLeche(2, [1, 1, 2], lecheLatteFrioMl, undefined, [100, 130, 160]) },
+    ],
   });
-  await seedProduct({
-    id: "lapso-latte-frio",
-    name: "Latte Frío",
-    categoryId: catLatte,
-    variants: (["Chico", "Mediano", "Grande"] as const).map((label, i) => ({
-      label,
-      price: [45, 52, 57][i],
-      recipe: recetaCafeConLeche(i, [1, 1, 2], [150, 190, 220], undefined, [100, 130, 160]),
-    })),
-  });
+  const lecheLatteBananaMl = [180, 220, 260];
   await seedProduct({
     id: "lapso-latte-banana",
     name: "Latte Banana",
@@ -619,24 +735,49 @@ async function main() {
     variants: (["Chico", "Mediano", "Grande"] as const).map((label, i) => ({
       label,
       price: [52, 60, 66][i],
-      recipe: recetaCafeConLeche(i, [1, 1, 2], [180, 220, 260], [5, 7, 10]),
+      milkMl: lecheLatteBananaMl[i],
+      recipe: recetaCafeConLeche(i, [1, 1, 2], lecheLatteBananaMl, [5, 7, 10]),
     })),
   });
 
   // -----------------------------------------------------------------------
-  // CHOCOLATES
+  // CHOCOLATES — "Chocolate" consolida Frío/Tradicional(Caliente); el
+  // resto de sabores solo existen en un estado en el menú real.
   // -----------------------------------------------------------------------
-  const chocolates: { id: string; name: string; price: [number, number, number]; agua?: boolean; esencia: [number, number, number] }[] = [
-    { id: "lapso-chocolate-frio", name: "Chocolate Frío", price: [42, 48, 53], esencia: [8, 10, 12] },
-    { id: "lapso-chocolate-tradicional", name: "Chocolate Tradicional", price: [42, 48, 53], esencia: [8, 10, 12] },
-    { id: "lapso-chocolate-tradicional-agua", name: "Tradicional en Agua", price: [40, 46, 51], agua: true, esencia: [8, 10, 12] },
+  const lecheChocolateMl = [180, 220, 260];
+  await seedProduct({
+    id: "lapso-chocolate",
+    name: "Chocolate",
+    categoryId: catChocolates,
+    variants: [
+      { label: "Chico Caliente", price: 42, milkMl: lecheChocolateMl[0], recipe: recetaLecheEsencia(0, lecheChocolateMl, [8, 10, 12]) },
+      { label: "Mediano Caliente", price: 48, milkMl: lecheChocolateMl[1], recipe: recetaLecheEsencia(1, lecheChocolateMl, [8, 10, 12]) },
+      { label: "Grande Caliente", price: 53, milkMl: lecheChocolateMl[2], recipe: recetaLecheEsencia(2, lecheChocolateMl, [8, 10, 12]) },
+      { label: "Chico Frío", price: 42, milkMl: lecheChocolateMl[0], recipe: recetaLecheEsencia(0, lecheChocolateMl, [8, 10, 12]) },
+      { label: "Mediano Frío", price: 48, milkMl: lecheChocolateMl[1], recipe: recetaLecheEsencia(1, lecheChocolateMl, [8, 10, 12]) },
+      { label: "Grande Frío", price: 53, milkMl: lecheChocolateMl[2], recipe: recetaLecheEsencia(2, lecheChocolateMl, [8, 10, 12]) },
+    ],
+  });
+
+  await seedProduct({
+    id: "lapso-chocolate-tradicional-agua",
+    name: "Tradicional en Agua",
+    categoryId: catChocolates,
+    variants: (["Chico", "Mediano", "Grande"] as const).map((label, i) => ({
+      label,
+      price: [40, 46, 51][i],
+      recipe: recetaAguaEsencia(i, [200, 250, 300], [8, 10, 12]),
+    })),
+  });
+
+  const otrosChocolates: { id: string; name: string; price: [number, number, number]; esencia: [number, number, number] }[] = [
     { id: "lapso-chocolate-extra-amargo", name: "Chocolate Extra Amargo", price: [45, 52, 57], esencia: [10, 12, 14] },
     { id: "lapso-chocolate-espanol", name: "Chocolate Español", price: [45, 52, 57], esencia: [10, 12, 14] },
     { id: "lapso-chocolate-lapso", name: "Chocolate LAPSO", price: [54, 62, 68], esencia: [12, 15, 18] },
     { id: "lapso-chocomenta-caliente", name: "Chocomenta Caliente", price: [52, 60, 66], esencia: [10, 12, 14] },
     { id: "lapso-carturo", name: "Carturo", price: [45, 52, 57], esencia: [10, 12, 14] },
   ];
-  for (const c of chocolates) {
+  for (const c of otrosChocolates) {
     await seedProduct({
       id: c.id,
       name: c.name,
@@ -644,36 +785,57 @@ async function main() {
       variants: (["Chico", "Mediano", "Grande"] as const).map((label, i) => ({
         label,
         price: c.price[i],
-        recipe: c.agua
-          ? recetaAguaEsencia(i, [200, 250, 300], c.esencia)
-          : recetaLecheEsencia(i, [180, 220, 260], c.esencia),
+        milkMl: lecheChocolateMl[i],
+        recipe: recetaLecheEsencia(i, lecheChocolateMl, c.esencia),
       })),
     });
   }
 
   // -----------------------------------------------------------------------
-  // TÉ E INFUSIONES / TISANAS — sin receta: no hay costo de té/hierbas dado.
+  // TÉ — antes vivía como grupo de modificador "Temperatura" sin costo,
+  // pero el menú real cobra distinto por Frío ($39/43/47) que por
+  // Caliente ($37/41/45) — se reconstruye como el mismo eje de variante
+  // que el resto (punto 4, Mejoras avanzadas de POS), sin receta (no hay
+  // costo de té/hierbas dado).
   // -----------------------------------------------------------------------
   await seedProduct({
     id: "lapso-te",
     name: "Té",
     categoryId: catTe,
     variants: [
-      { label: "Chico", price: 37 },
-      { label: "Mediano", price: 41 },
-      { label: "Grande", price: 45 },
+      { label: "Chico Caliente", price: 37 },
+      { label: "Mediano Caliente", price: 41 },
+      { label: "Grande Caliente", price: 45 },
+      { label: "Chico Frío", price: 39 },
+      { label: "Mediano Frío", price: 43 },
+      { label: "Grande Frío", price: 47 },
     ],
-    flavorGroup: { name: "Temperatura", options: ["Caliente", "Frío"] },
   });
 
-  const tisanas: { id: string; name: string; price: [number, number, number] }[] = [
-    { id: "lapso-tisana-caliente", name: "Tisana Caliente", price: [37, 41, 45] },
-    { id: "lapso-tisana-fria", name: "Tisana Fría", price: [39, 43, 47] },
+  // -----------------------------------------------------------------------
+  // TISANAS — "Tisana" consolida Caliente/Fría; Cristal/Yogurt/Frappé son
+  // especialidades que el menú real solo ofrece en un estado.
+  // -----------------------------------------------------------------------
+  await seedProduct({
+    id: "lapso-tisana",
+    name: "Tisana",
+    categoryId: catTisanas,
+    variants: [
+      { label: "Chico Caliente", price: 37 },
+      { label: "Mediano Caliente", price: 41 },
+      { label: "Grande Caliente", price: 45 },
+      { label: "Chico Frío", price: 39 },
+      { label: "Mediano Frío", price: 43 },
+      { label: "Grande Frío", price: 47 },
+    ],
+  });
+
+  const tisanasEspeciales: { id: string; name: string; price: [number, number, number] }[] = [
     { id: "lapso-tisana-cristal", name: "Tisana Cristal", price: [47, 54, 59] },
     { id: "lapso-tisana-yogurt", name: "Tisana Yogurt", price: [47, 54, 59] },
     { id: "lapso-tisana-frappe", name: "Tisana Frappé", price: [52, 60, 66] },
   ];
-  for (const t of tisanas) {
+  for (const t of tisanasEspeciales) {
     await seedProduct({
       id: t.id,
       name: t.name,
@@ -685,6 +847,7 @@ async function main() {
   // -----------------------------------------------------------------------
   // SMOOTHIE
   // -----------------------------------------------------------------------
+  const lecheSmoothieMl = [150, 180, 210];
   const smoothies = ["Chamoy", "Mango Maracuyá", "Tamarindo"];
   for (const flavor of smoothies) {
     await seedProduct({
@@ -694,47 +857,71 @@ async function main() {
       variants: (["Chico", "Mediano", "Grande"] as const).map((label, i) => ({
         label,
         price: [43, 48, 53][i],
-        recipe: recetaLecheEsencia(i, [150, 180, 210], [10, 13, 16], [80, 100, 120]),
+        milkMl: lecheSmoothieMl[i],
+        recipe: recetaLecheEsencia(i, lecheSmoothieMl, [10, 13, 16], [80, 100, 120]),
       })),
     });
   }
 
   // -----------------------------------------------------------------------
-  // CHAI / DIRTY CHAI — sabor (Tradicional/Té Verde/Manzana) no cambia el
-  // precio en el menú real, así que se modela como grupo de sabor
-  // obligatorio sin costo, no como productos separados.
+  // CHAI / DIRTY CHAI — "Chai" y "Dirty Chai" consolidan Frío/Caliente/
+  // Frappé como eje de variante (9 variantes: 3 tamaños × 3 temperaturas),
+  // conservando el grupo de sabor (Tradicional/Té Verde/Manzana, sin
+  // costo) en cada una. "Dirty" agrega un shot de espresso constante.
   // -----------------------------------------------------------------------
   const saborChai = { name: "Sabor", options: ["Tradicional", "Té Verde", "Manzana"] };
-  const chaiVariantes: { id: string; name: string; price: [number, number, number]; hielo?: [number, number, number]; dirty?: boolean }[] = [
-    { id: "lapso-chai-frio", name: "Chai Frío", price: [48, 55, 61], hielo: [80, 100, 120] },
-    { id: "lapso-chai-caliente", name: "Chai Caliente", price: [47, 54, 59] },
-    { id: "lapso-chai-frappe", name: "Chai Frappé", price: [56, 63, 69], hielo: [100, 130, 160] },
-    { id: "lapso-dirty-chai-frio", name: "Dirty Chai Frío", price: [52, 58, 64], hielo: [80, 100, 120], dirty: true },
-    { id: "lapso-dirty-chai-caliente", name: "Dirty Chai Caliente", price: [51, 57, 63], dirty: true },
-    { id: "lapso-dirty-chai-frappe", name: "Dirty Chai Frappé", price: [59, 66, 73], hielo: [100, 130, 160], dirty: true },
+  const lecheChaiMl = [150, 200, 250];
+
+  type ChaiTemp = { suffix: string; price: [number, number, number]; hielo?: [number, number, number] };
+  const chaiTemps: ChaiTemp[] = [
+    { suffix: "Caliente", price: [47, 54, 59] },
+    { suffix: "Frío", price: [48, 55, 61], hielo: [80, 100, 120] },
+    { suffix: "Frappé", price: [56, 63, 69], hielo: [100, 130, 160] },
   ];
-  for (const c of chaiVariantes) {
-    await seedProduct({
-      id: c.id,
-      name: c.name,
-      categoryId: catChai,
-      flavorGroup: saborChai,
-      variants: (["Chico", "Mediano", "Grande"] as const).map((label, i) => {
-        const lines = recetaLecheEsencia(i, [150, 200, 250], [6, 8, 10], c.hielo);
-        if (c.dirty) {
-          // "Dirty" = un shot de espresso agregado a la base de chai —
-          // constante, no escala con el tamaño (mismo criterio que un
-          // "shot extra" de café en cualquier otra bebida).
+  const dirtyChaiTemps: ChaiTemp[] = [
+    { suffix: "Caliente", price: [51, 57, 63] },
+    { suffix: "Frío", price: [52, 58, 64], hielo: [80, 100, 120] },
+    { suffix: "Frappé", price: [59, 66, 73], hielo: [100, 130, 160] },
+  ];
+
+  function buildChaiVariants(temps: ChaiTemp[], dirty: boolean) {
+    const variants: VariantSpec[] = [];
+    (["Chico", "Mediano", "Grande"] as const).forEach((size, i) => {
+      for (const temp of temps) {
+        const lines = recetaLecheEsencia(i, lecheChaiMl, [6, 8, 10], temp.hielo);
+        if (dirty) {
           lines.unshift({ ingredientId: cafe.id, quantity: 1, unit: "ESPRESSO_SHOT" });
         }
-        return { label, price: c.price[i], recipe: lines };
-      }),
+        variants.push({
+          label: `${size} ${temp.suffix}`,
+          price: temp.price[i],
+          milkMl: lecheChaiMl[i],
+          recipe: lines,
+        });
+      }
     });
+    return variants;
   }
 
+  await seedProduct({
+    id: "lapso-chai",
+    name: "Chai",
+    categoryId: catChai,
+    flavorGroup: saborChai,
+    variants: buildChaiVariants(chaiTemps, false),
+  });
+  await seedProduct({
+    id: "lapso-dirty-chai",
+    name: "Dirty Chai",
+    categoryId: catChai,
+    flavorGroup: saborChai,
+    variants: buildChaiVariants(dirtyChaiTemps, true),
+  });
+
   // -----------------------------------------------------------------------
-  // MALTEADA — mismo criterio: sabor sin costo, un solo producto.
+  // MALTEADA — sabor sin costo, un solo producto.
   // -----------------------------------------------------------------------
+  const lecheMalteadaMl = [180, 220, 260];
   await seedProduct({
     id: "lapso-malteada",
     name: "Malteada",
@@ -743,12 +930,14 @@ async function main() {
     variants: (["Chico", "Mediano", "Grande"] as const).map((label, i) => ({
       label,
       price: [43, 49, 54][i],
-      recipe: recetaLecheEsencia(i, [180, 220, 260], [8, 10, 12], [60, 80, 100]),
+      milkMl: lecheMalteadaMl[i],
+      recipe: recetaLecheEsencia(i, lecheMalteadaMl, [8, 10, 12], [60, 80, 100]),
     })),
   });
 
   // -----------------------------------------------------------------------
-  // SODA ITALIANA — mismo criterio, muchas más opciones de sabor.
+  // SODA ITALIANA — mismo criterio, muchas más opciones de sabor. Sin
+  // leche (agua + esencia), no gana grupo de tipo de leche.
   // -----------------------------------------------------------------------
   await seedProduct({
     id: "lapso-soda-italiana",
@@ -778,24 +967,38 @@ async function main() {
   });
 
   // -----------------------------------------------------------------------
-  // BOCADILLOS, POSTRES, SOUVENIRS, TARJETA DE REGALO, CAFÉ EN GRANO
-  // — reventa directa: precio único, sin receta (no pasan por el modelo de
-  // consumo por ingrediente, ver ProductType.REVENTA_DIRECTA en el schema).
+  // BOCADILLOS (Bagels / Otros Bocadillos), POSTRES, SOUVENIRS, TARJETA DE
+  // REGALO, CAFÉ EN GRANO — reventa directa: precio único, sin receta (no
+  // pasan por el modelo de consumo por ingrediente, ver
+  // ProductType.REVENTA_DIRECTA en el schema).
   // -----------------------------------------------------------------------
-  const bocadillos: { id: string; name: string; price: number }[] = [
-    { id: "lapso-croissant", name: "Croissant (Jamón o Vegetariano)", price: 45 },
+  const bagels: { id: string; name: string; price: number }[] = [
     { id: "lapso-bagel-jamon-pavo", name: "Bagel (Jamón Serrano o de Pavo)", price: 66 },
     { id: "lapso-bagel-chipotle-queso", name: "Bagel Chipotle y Queso", price: 68 },
     { id: "lapso-bagel-queso-mermelada", name: "Bagel con Queso Crema y Mermelada", price: 40 },
+  ];
+  for (const b of bagels) {
+    await seedProduct({
+      id: b.id,
+      name: b.name,
+      categoryId: catBagels,
+      type: "REVENTA_DIRECTA",
+      isPerishable: true,
+      variants: [{ label: "Único", price: b.price }],
+    });
+  }
+
+  const otrosBocadillos: { id: string; name: string; price: number }[] = [
+    { id: "lapso-croissant", name: "Croissant (Jamón o Vegetariano)", price: 45 },
     { id: "lapso-ciabatta", name: "Ciabatta LAPSO", price: 68 },
     { id: "lapso-ensalada-espinacas", name: "Ensalada de Espinacas", price: 49 },
     { id: "lapso-pizza-pita", name: "Pizza Pita (individual)", price: 57 },
   ];
-  for (const b of bocadillos) {
+  for (const b of otrosBocadillos) {
     await seedProduct({
       id: b.id,
       name: b.name,
-      categoryId: catBocadillos,
+      categoryId: catOtrosBocadillos,
       type: "REVENTA_DIRECTA",
       isPerishable: true,
       variants: [{ label: "Único", price: b.price }],

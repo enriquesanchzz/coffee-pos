@@ -4,17 +4,29 @@ import { Coffee, Minus, Plus, Trash2 } from "lucide-react";
 import type { SaleOrderType } from "@prisma/client";
 import { useCartStore, lineUnitPrice } from "./cart-store";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn, formatCurrency, posAccentClass } from "@/lib/utils";
 
+// "Mesa" = CONSUMO_LOCAL (el valor del enum no cambió, solo la etiqueta —
+// punto 8, "Mejoras avanzadas de POS").
 const orderTypes: { value: SaleOrderType; label: string }[] = [
-  { value: "CONSUMO_LOCAL", label: "En sucursal" },
+  { value: "CONSUMO_LOCAL", label: "Mesa" },
   { value: "PARA_LLEVAR", label: "Para llevar" },
   { value: "DOMICILIO", label: "A domicilio" },
 ];
 
 export function CartPanel({ onCheckout }: { onCheckout: () => void }) {
-  const { lines, incrementLine, decrementLine, removeLine, subtotal, orderType, setOrderType } =
-    useCartStore();
+  const {
+    lines,
+    incrementLine,
+    decrementLine,
+    removeLine,
+    subtotal,
+    orderType,
+    setOrderType,
+    tableNumber,
+    setTableNumber,
+  } = useCartStore();
 
   return (
     <div className="flex h-full flex-col border-l border-border">
@@ -35,6 +47,14 @@ export function CartPanel({ onCheckout }: { onCheckout: () => void }) {
             </button>
           ))}
         </div>
+        {orderType === "CONSUMO_LOCAL" && (
+          <Input
+            value={tableNumber}
+            onChange={(e) => setTableNumber(e.target.value)}
+            placeholder="Número de mesa"
+            className="h-9"
+          />
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-3">
