@@ -5,7 +5,6 @@ import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
 import { formatCurrency, cn, posAccentClass, posAccentBorderClass } from "@/lib/utils";
 import {
   resolveProductVariant,
@@ -19,6 +18,7 @@ import type { CartExtraIngredient, CartModifier } from "./cart-store";
 const temperatureLabels: Record<VariantTemperature, string> = {
   CALIENTE: "Caliente",
   FRIO: "Frío",
+  FRAPPE: "Frappé",
 };
 
 export function ProductDialog({
@@ -51,6 +51,8 @@ export function ProductDialog({
   const [extras, setExtras] = useState<CartExtraIngredient[]>([]);
   const [addingExtraId, setAddingExtraId] = useState("");
   const [addingExtraQty, setAddingExtraQty] = useState("1");
+  const [extraQuery, setExtraQuery] = useState("");
+  const [extraListOpen, setExtraListOpen] = useState(false);
 
   useEffect(() => {
     if (product && open) {
@@ -62,6 +64,7 @@ export function ProductDialog({
       setExtras([]);
       setAddingExtraId("");
       setAddingExtraQty("1");
+      setExtraQuery("");
     }
   }, [product, open]);
 
@@ -97,6 +100,17 @@ export function ProductDialog({
 
   if (!product) return null;
 
+  const filteredExtraOptions = extraQuery.trim()
+    ? extraIngredientOptions.filter((o) => o.name.toLowerCase().includes(extraQuery.toLowerCase()))
+    : extraIngredientOptions;
+  const selectedExtraOption = extraIngredientOptions.find((o) => o.id === addingExtraId) ?? null;
+
+  function handleSelectExtraOption(option: ExtraIngredientOption) {
+    setAddingExtraId(option.id);
+    setExtraQuery(option.name);
+    setExtraListOpen(false);
+  }
+
   function toggleOption(groupId: string, option: CatalogModifierOption, allowMultiple: boolean) {
     setSelected((prev) => {
       const current = new Set(prev[groupId] ?? []);
@@ -127,6 +141,7 @@ export function ProductDialog({
     ]);
     setAddingExtraId("");
     setAddingExtraQty("1");
+    setExtraQuery("");
   }
 
   function removeExtra(index: number) {
@@ -245,26 +260,50 @@ export function ProductDialog({
         <div>
           <p className="mb-2 text-sm font-medium">Agregar otro ingrediente</p>
           <div className="flex items-end gap-2">
-            <Select
-              className="flex-1"
-              value={addingExtraId}
-              onChange={(e) => setAddingExtraId(e.target.value)}
-            >
-              <option value="">Selecciona un ingrediente…</option>
-              {extraIngredientOptions.map((ingredient) => (
-                <option key={ingredient.id} value={ingredient.id}>
-                  {ingredient.name}
-                </option>
-              ))}
-            </Select>
-            <Input
-              type="number"
-              min="0"
-              step="0.01"
-              className="w-20"
-              value={addingExtraQty}
-              onChange={(e) => setAddingExtraQty(e.target.value)}
-            />
+            <div className="relative flex-1">
+              <Input
+                value={extraQuery}
+                onChange={(e) => {
+                  setExtraQuery(e.target.value);
+                  setAddingExtraId("");
+                  setExtraListOpen(true);
+                }}
+                onFocus={() => setExtraListOpen(true)}
+                onBlur={() => setTimeout(() => setExtraListOpen(false), 150)}
+                placeholder="Buscar ingrediente…"
+                autoComplete="off"
+              />
+              {extraListOpen && filteredExtraOptions.length > 0 && (
+                <ul className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-md border border-border bg-background shadow-md">
+                  {filteredExtraOptions.map((ingredient) => (
+                    <li key={ingredient.id}>
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => handleSelectExtraOption(ingredient)}
+                        className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                      >
+                        {ingredient.name}
+                        <span className="text-muted-foreground"> · {ingredient.baseUnit}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                className="w-20"
+                value={addingExtraQty}
+                onChange={(e) => setAddingExtraQty(e.target.value)}
+              />
+              {selectedExtraOption && (
+                <span className="text-xs text-muted-foreground">{selectedExtraOption.baseUnit}</span>
+              )}
+            </div>
             <Button type="button" variant="outline" onClick={handleAddExtra} disabled={!addingExtraId}>
               Agregar
             </Button>

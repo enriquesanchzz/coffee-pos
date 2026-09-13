@@ -22,6 +22,8 @@ Claude Code) pueda retomarlo sin arqueología.
 | **Clientes + Lealtad + Descuentos** (Fase 4) | ✅ Construido (`/clientes`, rama `feature/modulo-clientes`). Ver sección dedicada abajo. |
 | **Cambios Punto de Venta** (categorías verticales, imagen, extras libres, notas, Frío/Caliente, sustitución real, búsqueda de cliente) | ✅ Construido (rama `cambios-punto-venta`). Ver sección dedicada abajo. |
 | **Reskin visual del POS** (estilo "Purr'Coffee": tarjetas con selección rápida, tipo de orden, buscador) | ✅ Construido (rama `pos-reskin-purrcoffee`). Ver sección dedicada abajo. |
+| **Menú real de LAPSO** (68 productos reales reemplazan el catálogo de demo) | ✅ Sembrado (`prisma/seed-lapso.ts`). Ver sección dedicada abajo. |
+| **Mejoras avanzadas de POS** (subcategorías, búsqueda global, Frío/Caliente/tipo de leche reales, mesa, cliente/domicilio inline, código de lealtad, nota de transferencia) | ✅ Construido (rama `pos-mejoras-avanzadas`). Ver sección dedicada abajo. |
 | Multi-sucursal en UI (Fase 5) | ⚪ No construido. `DEFAULT_BRANCH_ID` fijo en `lib/constants.ts`. |
 
 ## Qué se verificó en esta sesión
@@ -574,10 +576,199 @@ Fuera de alcance deliberadamente: descripciones de producto en la tarjeta
 mockup, foto de perfil del empleado en la barra superior (no hay avatar en
 `Employee`).
 
+## Menú real de LAPSO (`prisma/seed-lapso.ts`)
+
+El usuario compartió fotos del menú físico de LAPSO (cafetería real, Ciudad
+Guzmán) y pidió sembrar sus ~90 productos para trabajar sobre un catálogo
+real en vez del demo (Latte/Capuccino/Mocha de `prisma/seed-demo.ts` y
+datos manuales de sesiones anteriores). Se acotó el alcance con 3
+preguntas antes de escribir el script, porque construir recetas reales
+para ~90 productos sin cantidades de ingredientes reales habría inventado
+datos de costo falsos:
+
+- **Costeo real solo con 3 ingredientes dados por el usuario**: Leche
+  $30/L, Café $300/kg, Esencia $120/L. `ESPRESSO_SHOT` = 18 g (ya
+  documentado en el enum `UnitOfMeasure` del schema) → café sale a
+  $5.40/shot. Con eso se construyó una receta aproximada (mismas fórmulas
+  por familia de bebida, no una por producto — café+leche para
+  Capuccino/Latte, leche+esencia para Chocolates/Chai/Malteada/Smoothie,
+  agua+esencia para Soda Italiana) para las categorías que sí tienen base
+  de café/leche/esencia. Los productos sin esa base (Té, Tisanas,
+  Bocadillos, Postres, Souvenirs, Tarjeta de regalo, Café en grano) se
+  sembraron **sin receta** — se venden con su precio real pero no
+  descuentan inventario ni tienen costo en Reportes hasta que se defina
+  una receta real. Ningún ingrediente/costo se inventó sin base: donde no
+  hubo dato, no se modeló receta.
+- **El catálogo de demo se "reemplaza" desactivando, no borrando**:
+  `Sale.recipeVersionId`/`productVariantId` son `ON DELETE SET NULL`, pero
+  `SaleItemModifier.modifierOptionId` es `ON DELETE RESTRICT` — un borrado
+  real del catálogo viejo con ventas históricas reales (ya las había, de
+  sesiones anteriores) podía fallar por FK o forzar a borrar ventas de
+  verdad. En vez de eso, el script hace
+  `Product.updateMany({ data: { isActive: false } })` al inicio (afecta a
+  **todos** los productos existentes, no solo los de seed-demo) y luego
+  crea el menú real con `isActive: true` — reversible, no toca ninguna
+  fila de venta. `getCatalog` (`lib/catalog.ts`) ya filtra por
+  `isActive`, así que el efecto en el POS es idéntico a haber borrado el
+  catálogo viejo.
+- **Todo el menú, no solo bebidas**: Bocadillos, Postres (Galletas/
+  Pasteles/Pies y Tartas/Macarons, como categorías separadas igual que en
+  el menú impreso), Souvenirs, Tarjeta de regalo y Café en grano se
+  sembraron como `ProductType.REVENTA_DIRECTA` (ya existía en el schema
+  para exactamente este caso: precio único, sin pasar por el modelo de
+  receta/inventario por ingrediente).
+
+Decisiones de modelado sin schema nuevo, reusando infraestructura ya
+construida en fases anteriores:
+- **Sabor sin costo como grupo de modificador obligatorio**: Chai/Dirty
+  Chai (Tradicional/Té Verde/Manzana), Malteada (Chocolate/Vainilla/
+  Fresa) y Soda Italiana (11 sabores) tienen el mismo precio sin importar
+  el sabor elegido, así que se modelaron como **un solo producto** con un
+  `VariantModifierGroup` `isRequired: true` (en vez de 6/1/1 productos
+  separados) — el sabor no afecta receta/costo, solo es una anotación en
+  la venta. Esta es la primera vez que se siembra un grupo `isRequired`,
+  lo que expuso un bug real en `ProductCard` (ver abajo).
+- **"Extras" del menú (Aderezo, Crema batida, Salsa, Extracción, Vaso de
+  leche, Leche de almendras/coco, etc.) vía el mecanismo de extras libres**
+  ya construido en "Cambios Punto de Venta" (`SaleItemIngredientAdjustment`
+  `AGREGAR_EXTRA`, precio = costo cotizado × cantidad): cada extra del
+  menú se sembró como su propio `Ingredient` (`baseUnit: PIEZA`) con
+  `IngredientSupplier.cost` fijado **igual al precio de venta del extra**,
+  no a un costo mayorista real — simplificación explícita, porque el
+  sistema no modela un margen aparte para extras libres (ver comentario
+  en `actions/pos.ts`). Al agregar 1 pieza desde "Agregar otro
+  ingrediente" en el POS, cobra exactamente el precio del menú.
+- **"Tipos de leche" (sin costo adicional) quedó fuera de alcance**: no se
+  construyó un `VariantModifierGroup` de sustitución de leche para los
+  ~40 productos con leche del menú real — hubiera significado replicar el
+  grupo "Tipo de leche" (ya usado para Latte/Capuccino en seed-demo) en
+  decenas de variantes, y como en el menú real es gratis (no cambia
+  precio ni justifica el esfuerzo de UI todavía), se dejó pendiente.
+
+**Bug real encontrado y corregido durante la verificación**: `ProductCard`
+(tarjeta de catálogo, del reskin anterior) nunca validaba si la variante
+tenía un grupo de modificador `isRequired` — el botón "Agregar" (que no
+tiene UI para elegir modificadores) dejaba agregar Chai/Malteada/Soda
+Italiana al carrito **sin sabor elegido**. No se había detectado antes
+porque ningún dato sembrado hasta ahora tenía un grupo obligatorio. Se
+corrigió: si la variante resuelta tiene algún grupo `isRequired`,
+"Agregar" se deshabilita y se muestra "Elige opciones en 'Personalizar'."
+— mismo criterio que ya usa `ProductDialog` para su propio botón.
+
+Verificado end-to-end con Playwright contra Postgres real: catálogo
+completo visible por categoría (19 categorías, 68 productos activos),
+receta de Latte Caliente confirmada en DB (café+leche+vaso escalados por
+tamaño), grupo de sabor obligatorio de Chai (bloquea "Agregar" hasta
+personalizar, sabor "Manzana" guardado en `SaleItemModifier`), y un
+Bagel (REVENTA_DIRECTA) vendido sin generar ningún `InventoryMovement`.
+Datos de la verificación limpiados de la base al terminar.
+
+Para correr el seed: `npm run prisma:seed-lapso` (requiere
+`npm run prisma:seed` primero; no requiere `prisma:seed-demo`, ambos son
+compatibles entre sí si se corren en cualquier orden — comparten los
+mismos IDs de ingrediente base).
+
+Fuera de alcance deliberadamente: receta real para Té/Tisanas/Bocadillos/
+Postres (no hay costo de insumo dado), ingredientes de sabor distintos por
+variante (se usa una sola "Esencia de sabor" genérica para todos los
+sabores) — la sustitución de tipo de leche sí se agregó después, ver
+siguiente sección.
+
+## Mejoras avanzadas de POS (rama `pos-mejoras-avanzadas`)
+
+El usuario compartió un PDF con 13 cambios sobre capturas reales del
+sistema (no un mockup externo) tras probar el menú de LAPSO. Se acotaron 4
+decisiones antes de planear: diseñar ahora el árbol completo de
+subcategorías (no solo la capacidad), usar costos estimados para las
+leches alternativas (no había precio real dado), asumir un lector físico
+tipo teclado para el código de tarjeta de lealtad (no cámara), y revertir
+la tarjeta de catálogo a imagen+nombre+precio simple (clic abre el
+diálogo) en vez del "agregar rápido" del Reskin anterior.
+
+**Schema** (migración `pos_mejoras_avanzadas`, aditiva): `ProductCategory`
+gana auto-relación `parentId`/`parent`/`children` (árbol de 2 niveles);
+`Sale.tableNumber`; `Customer.address`; `LoyaltyCard.code`
+(`@unique @default(cuid())` — solo las tarjetas nuevas lo tienen, las
+existentes quedan en `null`, sin backfill); `SalePayment.note`.
+
+**Árbol de categorías**: las 19 categorías del menú de LAPSO se
+reorganizaron bajo 7 categorías padre (Café y Espresso, Chocolates y Tés,
+Bebidas Frías, Bocadillos —dividido en Bagels/Otros Bocadillos—, Postres,
+Souvenirs y Tarjetas, más "Café en grano" que se queda sin hijas).
+`components/pos/catalog-browser.tsx` renderiza un acordeón de 2 niveles;
+`lib/catalog.ts` (`getCatalog`) manda `parentId`/`parentName`
+denormalizado por categoría.
+
+**Búsqueda global**: con texto en el buscador, el grid ignora la
+categoría activa y filtra sobre todo el catálogo (aplanado); sin texto,
+vuelve al filtrado por categoría/subcategoría de siempre.
+
+**Frío/Caliente como opción real** (no productos duplicados): se
+consolidaron Americano/Americano Frío, Latte Caliente/Frío, Chocolate
+Frío/Tradicional y Tisana Caliente/Fría en un solo producto cada uno,
+usando el eje de variante `"{Tamaño} {Temperatura}"` ya construido en
+"Cambios Punto de Venta". **Té** vivía como grupo de modificador
+"Temperatura" sin costo — un bug real, porque el menú real cobra distinto
+por Frío ($39/43/47) que por Caliente ($37/41/45) y el modificador no
+podía representarlo; se reconstruyó con el mismo eje de variante,
+corrigiendo el precio. Chai/Dirty Chai necesitaban un 3er estado
+("Frappé") — se extendió `VariantTemperature` en `lib/catalog.ts` a
+`"CALIENTE" | "FRIO" | "FRAPPE"` (solo lógica de aplicación, no hay enum
+de DB de por medio). Al reemplazar el conjunto de variantes de un
+producto que ya existía (Té, Americano), `seedProduct()` en
+`prisma/seed-lapso.ts` ahora desactiva las variantes viejas que ya no
+están en la receta actual — si no, hubieran quedado dos veces en el POS
+(bug real encontrado y corregido durante la verificación).
+
+**Tipo de leche con costo real**: se agregaron 4 ingredientes (Light,
+Deslactosada, Deslactosada Light, Soya) con costo **estimado** por litro
+(documentado en `prisma/seed-lapso.ts`, ajustable en
+`/compras/proveedores`). Los 18 productos con leche en su receta ganaron
+un grupo "Tipo de leche" por variante (Entera sin costo + las 4
+alternativas como sustitución real con `priceDelta` = diferencia de costo
+× la misma cantidad de ml que ya usa esa variante).
+
+**Extras del diálogo**: el selector de "Agregar otro ingrediente" pasó de
+`<select>` a un input de búsqueda con lista filtrada (mismo patrón que la
+búsqueda de cliente), y ahora muestra la unidad del ingrediente
+seleccionado junto al campo de cantidad.
+
+**Carrito y checkout**: la pestaña `CONSUMO_LOCAL` ahora dice "Mesa" (el
+valor del enum no cambió) y al seleccionarla aparece un campo de número de
+mesa (`cart-store.ts` → `tableNumber`). El buscador de cliente en
+`checkout-dialog.tsx` ahora también compara contra `LoyaltyCard.code`, y
+cuando no encuentra resultados ofrece "+ Crear cliente nuevo" inline
+(reusa `createCustomer`, ya en el permiso base de BARISTA vía
+`CLIENTE_CONFIGURAR`) — con domicilio si `orderType = DOMICILIO`. Con
+domicilio y cliente seleccionado se muestra el teléfono (solo lectura) y
+el domicilio (editable, se guarda de vuelta al cliente con
+`updateCustomer` si cambió). Pago por transferencia gana un campo de nota
+opcional (banco/referencia).
+
+Verificado end-to-end con Playwright contra Postgres real: nav de 2
+niveles (expandir "Café y Espresso" → Latte), búsqueda global trayendo
+resultados de otra categoría, Latte Frío + tipo de leche Deslactosada con
+`priceDelta` recalculado para la nueva cantidad de ml del tamaño/temperatura
+elegidos, Cortado (Sencillo/Doble, sin eje de temperatura) también con
+tipo de leche, Mesa con número capturado, cliente nuevo creado inline
+durante una venta A domicilio con domicilio guardado en `Customer.address`,
+búsqueda de cliente por código de tarjeta de lealtad, y pago por
+transferencia con nota — todo confirmado en DB. Datos de prueba (incluido
+el cliente de prueba) limpiados de la base al terminar; no se tocaron las
+ventas reales que el usuario ya había hecho probando el sistema antes de
+dar este feedback.
+
+Fuera de alcance deliberadamente: escaneo de QR por cámara (se asume
+lector físico tipo teclado), backfill de `code` en tarjetas de lealtad ya
+existentes, UI de administración para reorganizar categorías/subcategorías
+manualmente (el árbol se siembra fijo en `seed-lapso.ts`), pagos divididos
+con nota individual por pago.
+
 ## Próximos pasos recomendados (en orden)
 
-Fases 1, 2, 3 y 4 están cerradas, más los ajustes "Cambios Punto de Venta"
-y "Reskin visual del POS". Lo que sigue:
+Fases 1, 2, 3 y 4 están cerradas, más los ajustes "Cambios Punto de Venta",
+"Reskin visual del POS", el menú real de LAPSO y "Mejoras avanzadas de
+POS". Lo que sigue:
 
 1. **Fase 5 (Multi-sucursal)** — la única fase que queda del roadmap
    original. Quitar el `DEFAULT_BRANCH_ID` fijo, UI de selección/gestión
@@ -587,19 +778,30 @@ y "Reskin visual del POS". Lo que sigue:
 2. Resolver las simplificaciones documentadas en
    `docs/pos-module.md` (impuestos, pagos divididos en la UI, cancelación
    de venta) según prioridad de negocio.
-3. Simplificaciones deliberadas de Administración/Recetas/Compras/
-   Transferencias/Reportes/Clientes/Cambios Punto de Venta/Reskin del POS
-   documentadas arriba (`EmployeePermissionOverride`, ingredientes
-   compuestos nuevos, alertas de caducidad, cancelar orden,
-   `ReorderPoint`, ordenar en `purchaseUnit` real, revertir una
-   transferencia en tránsito, costo histórico por fecha, gráficas,
-   fulfillment de premio de lealtad, gestión de niveles, UI de
-   modificadores, upload real de imágenes, descripciones de producto,
-   avatar de empleado) — atender si el negocio los necesita.
-4. Si se decide adoptar Supabase Auth más adelante: reemplazar
+3. **Recetas reales para Té/Tisanas/Bocadillos/Postres/Smoothie** del menú
+   de LAPSO — hoy se venden sin descuento de inventario porque no había
+   costo de insumo real para dársela. En cuanto el negocio dé el costo de
+   té/hierbas/harinas/etc., completar `prisma/seed-lapso.ts` (o editar
+   directo desde `/recetas`) con recetas reales.
+4. **Costo real de las leches alternativas** (Light/Deslactosada/
+   Deslactosada Light/Soya) — hoy son estimaciones (ver
+   `prisma/seed-lapso.ts`), ajustar en `/compras/proveedores` en cuanto se
+   tenga el precio real por litro de cada una.
+5. Simplificaciones deliberadas de Administración/Recetas/Compras/
+   Transferencias/Reportes/Clientes/Cambios Punto de Venta/Reskin del
+   POS/Menú de LAPSO/Mejoras avanzadas de POS documentadas arriba
+   (`EmployeePermissionOverride`, ingredientes compuestos nuevos, alertas
+   de caducidad, cancelar orden, `ReorderPoint`, ordenar en `purchaseUnit`
+   real, revertir una transferencia en tránsito, costo histórico por
+   fecha, gráficas, fulfillment de premio de lealtad, gestión de niveles,
+   UI de modificadores, upload real de imágenes, descripciones de
+   producto, avatar de empleado, escaneo de QR por cámara, UI de admin
+   para categorías/subcategorías) — atender si el negocio los necesita.
+6. Si se decide adoptar Supabase Auth más adelante: reemplazar
    `lib/password.ts`/`lib/session.ts` por la integración real, el modelo de
    datos ya está listo para ese cambio sin migraciones.
-5. Mergear el PR pendiente de `pos-reskin-purrcoffee` a `main`.
+7. Mergear los PRs pendientes (`pos-reskin-purrcoffee`/menú de LAPSO,
+   `pos-mejoras-avanzadas`) a `main` si no se han mergeado ya.
 
 ## Convenciones a mantener
 

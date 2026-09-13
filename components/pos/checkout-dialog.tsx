@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { PaymentMethod, DiscountType, ManualDiscountReason } from "@prisma/client";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Select } from "@/components/ui/select";
 import { cn, formatCurrency, posAccentClass, posAccentBorderClass } from "@/lib/utils";
 import { createSale } from "@/actions/pos";
 import { findDiscountCodeByCode, type FoundDiscountCode } from "@/actions/discounts";
+import { createCustomer, updateCustomer } from "@/actions/customers";
 import type { CustomerOption } from "@/lib/customers";
 import { useCartStore } from "./cart-store";
 
@@ -67,11 +68,29 @@ export function CheckoutDialog({
   employeeId: string;
   customers: CustomerOption[];
 }) {
-  const { lines, subtotal, clear, orderType, setOrderType } = useCartStore();
+  const { lines, subtotal, clear, orderType, setOrderType, tableNumber, setTableNumber } = useCartStore();
   const [method, setMethod] = useState<PaymentMethod>("EFECTIVO");
+  const [transferNote, setTransferNote] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [customerQuery, setCustomerQuery] = useState("");
   const [customerListOpen, setCustomerListOpen] = useState(false);
+  // Clientes creados desde este mismo diálogo (punto 10/11) — el prop
+  // `customers` viene del server component padre y no se refresca solo;
+  // se mezclan localmente para que aparezcan de inmediato en esta venta.
+  const [localCustomers, setLocalCustomers] = useState<CustomerOption[]>([]);
+  const allCustomers = [...customers, ...localCustomers];
+
+  const [showNewCustomerForm, setShowNewCustomerForm] = useState(false);
+  const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerPhone, setNewCustomerPhone] = useState("");
+  const [newCustomerAddress, setNewCustomerAddress] = useState("");
+  const [newCustomerError, setNewCustomerError] = useState<string | null>(null);
+  const [isCreatingCustomer, startCreatingCustomer] = useTransition();
+
+  // Domicilio (punto 10): dirección editable, precargada de la del
+  // cliente seleccionado — se guarda de vuelta al cliente al confirmar la
+  // venta si cambió.
+  const [domicilioAddress, setDomicilioAddress] = useState("");
 
   const [discountMode, setDiscountMode] = useState<DiscountMode>("NINGUNO");
   const [codeInput, setCodeInput] = useState("");
@@ -87,24 +106,69 @@ export function CheckoutDialog({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const selectedCustomer = customers.find((c) => c.id === customerId) ?? null;
+  const selectedCustomer = allCustomers.find((c) => c.id === customerId) ?? null;
   const filteredCustomers = customerQuery.trim()
-    ? customers.filter(
+    ? allCustomers.filter(
         (c) =>
           c.name.toLowerCase().includes(customerQuery.toLowerCase()) ||
-          c.phone?.includes(customerQuery)
+          c.phone?.includes(customerQuery) ||
+          (c.loyaltyCode && c.loyaltyCode === customerQuery.trim())
       )
-    : customers;
+    : allCustomers;
+
+  useEffect(() => {
+    setDomicilioAddress(selectedCustomer?.address ?? "");
+  }, [selectedCustomer]);
 
   function handleSelectCustomer(customer: CustomerOption) {
     setCustomerId(customer.id);
     setCustomerQuery(customer.name);
     setCustomerListOpen(false);
+    setShowNewCustomerForm(false);
   }
 
   function handleClearCustomer() {
     setCustomerId("");
     setCustomerQuery("");
+  }
+
+  function handleOpenNewCustomerForm() {
+    setNewCustomerName(customerQuery.trim());
+    setNewCustomerPhone("");
+    setNewCustomerAddress("");
+    setNewCustomerError(null);
+    setShowNewCustomerForm(true);
+    setCustomerListOpen(false);
+  }
+
+  function handleCreateCustomer() {
+    setNewCustomerError(null);
+    const name = newCustomerName.trim();
+    if (!name) {
+      setNewCustomerError("El nombre del cliente es obligatorio.");
+      return;
+    }
+    startCreatingCustomer(async () => {
+      try {
+        const created = await createCustomer({
+          employeeId,
+          name,
+          phone: newCustomerPhone.trim() || undefined,
+          address: orderType === "DOMICILIO" ? newCustomerAddress.trim() || undefined : undefined,
+        });
+        const option: CustomerOption = {
+          id: created.id,
+          name,
+          phone: newCustomerPhone.trim() || null,
+          address: orderType === "DOMICILIO" ? newCustomerAddress.trim() || null : null,
+          loyaltyCode: null,
+        };
+        setLocalCustomers((prev) => [...prev, option]);
+        handleSelectCustomer(option);
+      } catch (err) {
+        setNewCustomerError(err instanceof Error ? err.message : "No se pudo crear el cliente.");
+      }
+    });
   }
 
   const rawSubtotal = subtotal();
@@ -141,6 +205,22 @@ export function CheckoutDialog({
     setError(null);
     startTransition(async () => {
       try {
+        // Domicilio (punto 10): si el cliente ya existía pero cambió el
+        // domicilio para esta entrega, se guarda de vuelta.
+        if (
+          orderType === "DOMICILIO" &&
+          selectedCustomer &&
+          domicilioAddress.trim() !== (selectedCustomer.address ?? "")
+        ) {
+          await updateCustomer({
+            employeeId,
+            customerId: selectedCustomer.id,
+            name: selectedCustomer.name,
+            phone: selectedCustomer.phone ?? undefined,
+            address: domicilioAddress.trim() || undefined,
+          });
+        }
+
         await createSale({
           branchId,
           shiftId,
@@ -157,8 +237,15 @@ export function CheckoutDialog({
           })),
           // El checkout hoy solo soporta un método por venta. El modelo
           // (SalePayment) ya permite pagos divididos — falta la UI.
-          payments: [{ method, amount: total }],
+          payments: [
+            {
+              method,
+              amount: total,
+              note: method === "TRANSFERENCIA" ? transferNote.trim() || undefined : undefined,
+            },
+          ],
           orderType,
+          tableNumber: orderType === "CONSUMO_LOCAL" ? tableNumber.trim() || undefined : undefined,
           customerId: customerId || undefined,
           discountCodeId: discountMode === "CODIGO" ? resolvedCode?.id : undefined,
           manualDiscount:
@@ -176,6 +263,9 @@ export function CheckoutDialog({
         setDiscountMode("NINGUNO");
         resetDiscountState();
         setOrderType("PARA_LLEVAR");
+        setTableNumber("");
+        setTransferNote("");
+        setLocalCustomers([]);
         onOpenChange(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo registrar la venta.");
@@ -199,10 +289,10 @@ export function CheckoutDialog({
               }}
               onFocus={() => setCustomerListOpen(true)}
               onBlur={() => setTimeout(() => setCustomerListOpen(false), 150)}
-              placeholder="Buscar por nombre o teléfono…"
+              placeholder="Buscar por nombre, teléfono o código de tarjeta…"
               autoComplete="off"
             />
-            {customerListOpen && filteredCustomers.length > 0 && (
+            {customerListOpen && (filteredCustomers.length > 0 || customerQuery.trim()) && (
               <ul className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-md border border-border bg-background shadow-md">
                 {filteredCustomers.map((customer) => (
                   <li key={customer.id}>
@@ -219,6 +309,18 @@ export function CheckoutDialog({
                     </button>
                   </li>
                 ))}
+                {customerQuery.trim() && (
+                  <li>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={handleOpenNewCustomerForm}
+                      className="block w-full border-t border-border px-3 py-2 text-left text-sm font-medium text-primary hover:bg-muted"
+                    >
+                      + Crear &ldquo;{customerQuery.trim()}&rdquo; como cliente nuevo
+                    </button>
+                  </li>
+                )}
               </ul>
             )}
           </div>
@@ -229,6 +331,66 @@ export function CheckoutDialog({
                 quitar
               </button>
             </p>
+          )}
+
+          {showNewCustomerForm && (
+            <div className="mt-1 flex flex-col gap-2 rounded-md border border-border p-3">
+              <p className="text-sm font-medium">Cliente nuevo</p>
+              <Input
+                value={newCustomerName}
+                onChange={(e) => setNewCustomerName(e.target.value)}
+                placeholder="Nombre"
+              />
+              <Input
+                value={newCustomerPhone}
+                onChange={(e) => setNewCustomerPhone(e.target.value)}
+                placeholder="Teléfono (opcional)"
+              />
+              {orderType === "DOMICILIO" && (
+                <Input
+                  value={newCustomerAddress}
+                  onChange={(e) => setNewCustomerAddress(e.target.value)}
+                  placeholder="Domicilio de entrega"
+                />
+              )}
+              {newCustomerError && <p className="text-sm text-destructive">{newCustomerError}</p>}
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleCreateCustomer}
+                  disabled={isCreatingCustomer}
+                >
+                  {isCreatingCustomer ? "Creando…" : "Crear y seleccionar"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setShowNewCustomerForm(false)}
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {orderType === "DOMICILIO" && selectedCustomer && (
+            <div className="mt-1 flex flex-col gap-2 rounded-md border border-border p-3">
+              <p className="text-sm">
+                <span className="text-muted-foreground">Teléfono:</span>{" "}
+                {selectedCustomer.phone ?? "sin registrar"}
+              </p>
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="domicilio-address">Domicilio de entrega</Label>
+                <Input
+                  id="domicilio-address"
+                  value={domicilioAddress}
+                  onChange={(e) => setDomicilioAddress(e.target.value)}
+                  placeholder="Calle, número, colonia…"
+                />
+              </div>
+            </div>
           )}
         </div>
 
@@ -375,6 +537,14 @@ export function CheckoutDialog({
               </button>
             ))}
           </div>
+          {method === "TRANSFERENCIA" && (
+            <Input
+              className="mt-2"
+              value={transferNote}
+              onChange={(e) => setTransferNote(e.target.value)}
+              placeholder="Nota (banco, referencia, etc.)"
+            />
+          )}
         </div>
 
         {error && <p className="text-sm text-destructive">{error}</p>}

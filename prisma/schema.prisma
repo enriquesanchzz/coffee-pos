@@ -402,9 +402,15 @@ model UnitConversion {
 // PRODUCTOS / VARIANTES / RECETAS
 // =========================================================================
 
+// Árbol de 2 niveles: una categoría con parentId es "hija" (subcategoría).
+// Los productos siempre cuelgan de la hoja (categoryId), nunca del padre
+// directamente salvo que el padre no tenga hijas (ej. "Café en grano").
 model ProductCategory {
   id       String            @id @default(cuid())
   name     String            @unique // ej. "Café caliente", "Café frío", "Sin café", "Cafe de expendio"
+  parentId String?
+  parent   ProductCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children ProductCategory[] @relation("CategoryHierarchy")
   products Product[]
 
   @@map("product_categories")
@@ -981,6 +987,7 @@ model Customer {
   birthDate DateTime?
   email     String?   @unique
   phone     String?   @unique
+  address   String? // para pedidos "A domicilio"
   createdAt DateTime  @default(now())
 
   loyaltyCard LoyaltyCard?
@@ -996,6 +1003,11 @@ model LoyaltyCard {
   stamps     Int          @default(0) // sellos acumulados, reinician cada 5
   tierId     String?
   tier       LoyaltyTier? @relation(fields: [tierId], references: [id])
+  // Código único de la tarjeta física (impreso como QR) — un lector tipo
+  // teclado lo escribe tal cual en la búsqueda de cliente del checkout.
+  // Con @default, solo las tarjetas creadas a partir de este cambio lo
+  // tienen; las ya existentes quedan en null (no hay backfill).
+  code       String?      @unique @default(cuid())
   createdAt  DateTime     @default(now())
 
   @@map("loyalty_cards")
@@ -1028,6 +1040,7 @@ model Sale {
   customer   Customer?  @relation(fields: [customerId], references: [id])
   status     SaleStatus @default(COMPLETADA)
   orderType  SaleOrderType @default(PARA_LLEVAR)
+  tableNumber String? // solo aplica cuando orderType = CONSUMO_LOCAL ("Mesa")
   subtotal   Decimal    @db.Decimal(10, 2)
   discountTotal Decimal @default(0) @db.Decimal(10, 2)
   total      Decimal    @db.Decimal(10, 2) // IVA incluido
@@ -1101,6 +1114,7 @@ model SalePayment {
   sale   Sale          @relation(fields: [saleId], references: [id])
   method PaymentMethod
   amount Decimal       @db.Decimal(10, 2)
+  note   String? // ej. banco/referencia cuando method = TRANSFERENCIA
 
   @@map("sale_payments")
 }

@@ -33,8 +33,10 @@ export type CreateSaleInput = {
   shiftId: string;
   employeeId: string;
   items: CreateSaleItemInput[];
-  payments: { method: PaymentMethod; amount: number }[];
+  payments: { method: PaymentMethod; amount: number; note?: string }[];
   orderType: SaleOrderType;
+  // Solo aplica cuando orderType = CONSUMO_LOCAL ("Mesa").
+  tableNumber?: string;
   customerId?: string;
   discountCodeId?: string;
   manualDiscount?: ManualDiscountInput;
@@ -359,6 +361,7 @@ export async function createSale(input: CreateSaleInput) {
         shiftId: input.shiftId,
         employeeId: input.employeeId,
         orderType: input.orderType,
+        tableNumber: input.orderType === "CONSUMO_LOCAL" ? input.tableNumber?.trim() || null : null,
         customerId: input.customerId || null,
         discountCodeId: input.discountCodeId || null,
         subtotal,
@@ -366,7 +369,7 @@ export async function createSale(input: CreateSaleInput) {
         total,
         ...(manualDiscountData ? { manualDiscount: { create: manualDiscountData } } : {}),
         payments: {
-          create: input.payments.map((p) => ({ method: p.method, amount: p.amount })),
+          create: input.payments.map((p) => ({ method: p.method, amount: p.amount, note: p.note?.trim() || null })),
         },
       },
     });

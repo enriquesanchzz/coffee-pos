@@ -16,7 +16,7 @@ export type CatalogModifierGroup = {
   options: CatalogModifierOption[];
 };
 
-export type VariantTemperature = "CALIENTE" | "FRIO";
+export type VariantTemperature = "CALIENTE" | "FRIO" | "FRAPPE";
 
 export type CatalogVariant = {
   id: string;
@@ -40,9 +40,14 @@ export type CatalogProduct = {
   variants: CatalogVariant[];
 };
 
+// parentId/parentName: árbol de 2 niveles (ver ProductCategory en el
+// schema). Una categoría sin padre (parentId null) es su propio nivel
+// superior en la nav — ej. "Café en grano", que no tiene hijas.
 export type CatalogCategory = {
   id: string;
   name: string;
+  parentId: string | null;
+  parentName: string | null;
   products: CatalogProduct[];
 };
 
@@ -50,6 +55,10 @@ const TEMPERATURE_SUFFIXES: Record<string, VariantTemperature> = {
   caliente: "CALIENTE",
   frio: "FRIO",
   frío: "FRIO",
+  fria: "FRIO",
+  fría: "FRIO",
+  frappe: "FRAPPE",
+  frappé: "FRAPPE",
 };
 
 // Convención de nombre de variante: "{Tamaño} {Temperatura}" (ej. "Chico
@@ -111,6 +120,7 @@ export async function getCatalog(
   const categories = await prisma.productCategory.findMany({
     orderBy: { name: "asc" },
     include: {
+      parent: true,
       products: {
         where: {
           isActive: true,
@@ -137,6 +147,8 @@ export async function getCatalog(
     .map((category) => ({
       id: category.id,
       name: category.name,
+      parentId: category.parentId,
+      parentName: category.parent?.name ?? null,
       products: category.products.map((product) => ({
         id: product.id,
         name: product.name,

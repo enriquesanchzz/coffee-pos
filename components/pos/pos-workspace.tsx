@@ -57,20 +57,7 @@ export function PosWorkspace({
         <div className="flex-1 overflow-hidden">
           <CatalogBrowser
             catalog={catalog}
-            onQuickAdd={(product, variant, quantity) =>
-              addLine({
-                productVariantId: variant.id,
-                productName: product.name,
-                variantName: variant.name,
-                imageUrl: product.imageUrl,
-                unitBasePrice: variant.price,
-                modifiers: [],
-                extraIngredients: [],
-                notes: "",
-                quantity,
-              })
-            }
-            onCustomize={(product) => {
+            onSelectProduct={(product) => {
               setSelectedProduct(product);
               setProductDialogOpen(true);
             }}

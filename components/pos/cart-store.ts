@@ -88,6 +88,9 @@ type CartState = {
   lines: CartLine[];
   orderType: SaleOrderType;
   setOrderType: (orderType: SaleOrderType) => void;
+  // Solo aplica cuando orderType = CONSUMO_LOCAL ("Mesa").
+  tableNumber: string;
+  setTableNumber: (tableNumber: string) => void;
   addLine: (input: AddLineInput) => void;
   incrementLine: (lineId: string) => void;
   decrementLine: (lineId: string) => void;
@@ -100,6 +103,8 @@ export const useCartStore = create<CartState>((set, get) => ({
   lines: [],
   orderType: "PARA_LLEVAR",
   setOrderType: (orderType) => set({ orderType }),
+  tableNumber: "",
+  setTableNumber: (tableNumber) => set({ tableNumber }),
 
   // Agrupa por variante + mismo set de modificadores/extras/nota (misma
   // "receta" exacta), sumando cantidad en vez de crear una línea duplicada.
