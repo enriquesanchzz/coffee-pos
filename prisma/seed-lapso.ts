@@ -1,4 +1,4 @@
-import { PrismaClient, UnitOfMeasure, ProductType } from "@prisma/client";
+import { PrismaClient, UnitOfMeasure, ProductType, VariantTemperature } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -21,15 +21,17 @@ const DEFAULT_STOCK_LOCATION_ID = "stock-branch-principal";
 //      borrado real de catálogo con historial de ventas real puede fallar
 //      o, peor, forzar a borrar ventas reales. Desactivar es reversible y
 //      no toca ninguna fila de venta).
-//   2. Siembra ingredientes base (café/leche/vaso/agua/hielo) con los
-//      mismos IDs que seed-demo.ts, para que ambos scripts sean
-//      compatibles sin importar el orden en que se corran, y actualiza su
+//   2. Siembra ingredientes base (café/leche/vasos por tamaño/agua/hielo)
+//      con los mismos IDs que seed-demo.ts donde aplica, y actualiza su
 //      costo cotizado a precios reales dados por el usuario.
 //   3. Siembra el árbol de categorías (padre → hijas, ver "Mejoras
 //      avanzadas de POS") y el menú real: productos, variantes, recetas
-//      aproximadas donde hay costo real, Frío/Caliente/Frappé como eje de
-//      variante (no productos duplicados), y "Tipo de leche" como
-//      modificador de sustitución con costo real estimado.
+//      aproximadas donde hay costo real. Frío/Caliente/Frappé y el tamaño
+//      en onzas viven como campos reales de ProductVariant
+//      (`temperature`, `sizeOz` — ver "Módulo Productos" en
+//      docs/CONTINUE.md), no como texto en el nombre — el vaso que se
+//      descuenta en cada venta se elige automáticamente por `sizeOz`
+//      (actions/pos.ts), no como línea de receta manual.
 //
 // Requiere `prisma/seed.ts` ya corrido (roles/permisos + sucursal + stock
 // location). No requiere `prisma/seed-demo.ts`.
@@ -47,7 +49,14 @@ const COSTO_ESENCIA_POR_ML = 120 / 1000; // 0.12
 // segundo costo distinto del mismo ingrediente físico.
 const COSTO_AGUA_POR_ML = 0.001;
 const COSTO_HIELO_POR_G = 0.002;
-const COSTO_VASO_POR_PIEZA = 2.5;
+
+// Costo estimado por vaso según capacidad — antes había un solo vaso
+// genérico a $2.5/pieza; documentado como estimación, ajustable en
+// /compras/proveedores.
+const COSTO_VASO_3OZ = 1.5;
+const COSTO_VASO_8OZ = 2.0;
+const COSTO_VASO_12OZ = 2.5;
+const COSTO_VASO_16OZ = 3.0;
 
 // Leches alternativas (punto 5, "Mejoras avanzadas de POS"): el menú real
 // las ofrece "sin costo adicional", pero el negocio pidió mostrar su costo
@@ -58,6 +67,11 @@ const COSTO_LECHE_DESLACTOSADA_POR_ML = 38 / 1000;
 const COSTO_LECHE_DESLACTOSADA_LIGHT_POR_ML = 40 / 1000;
 const COSTO_LECHE_SOYA_POR_ML = 46 / 1000;
 
+// Tamaño real en onzas por etiqueta de tamaño — usado para
+// ProductVariant.sizeOz (vaso automático) en toda receta de tamaño
+// Chico/Mediano/Grande.
+const SIZE_OZ: Record<string, number> = { Chico: 8, Mediano: 12, Grande: 16 };
+
 type RecipeLineSpec = {
   ingredientId?: string;
   composedRecipeId?: string;
@@ -65,13 +79,11 @@ type RecipeLineSpec = {
   unit: UnitOfMeasure;
 };
 
-// "Chico"/"Mediano"/"Grande [Temperatura]" -> índice 0/1/2 para las
-// funciones de receta por tamaño de abajo.
-type SizeLabel = string;
-
 type VariantSpec = {
-  label: SizeLabel;
+  label: string; // ej. "Chico", "Sencillo", "Único" — sin sufijo de temperatura
   price: number;
+  temperature?: VariantTemperature;
+  sizeOz?: number;
   recipe?: RecipeLineSpec[];
   // ml de leche entera que ya usa la receta de esta variante — si se da,
   // seedProduct() agrega el grupo "Tipo de leche" automáticamente (ver
@@ -103,6 +115,14 @@ function slug(s: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
+// Id determinístico por variante — incluye la temperatura (cuando la hay)
+// porque el label ya no la lleva (antes "Chico Frío", ahora label="Chico"
+// + temperature="FRIO"), y dos variantes con el mismo label pero distinta
+// temperatura deben tener ids distintos.
+function variantId(productId: string, variant: Pick<VariantSpec, "label" | "temperature">): string {
+  return `${productId}-${slug(variant.label)}${variant.temperature ? `-${slug(variant.temperature)}` : ""}`;
+}
+
 async function main() {
   const branch = await prisma.branch.findUnique({ where: { id: DEFAULT_BRANCH_ID } });
   if (!branch) {
@@ -114,7 +134,7 @@ async function main() {
   console.log("Desactivando catálogo anterior (Product.isActive = false)...");
   await prisma.product.updateMany({ data: { isActive: false } });
 
-  console.log("Sembrando ingredientes base (café, leche, vaso, agua, hielo)...");
+  console.log("Sembrando ingredientes base (café, leche, vasos, agua, hielo)...");
 
   const cafe = await prisma.ingredient.upsert({
     where: { id: "ing-cafe" },
@@ -142,17 +162,69 @@ async function main() {
     },
   });
 
-  const vaso = await prisma.ingredient.upsert({
+  // Vasos por tamaño real (punto 7, "Mejoras avanzadas de POS") — antes
+  // era un solo "Vaso con tapa desechable" agregado a mano en cada
+  // receta; ahora createSale (actions/pos.ts) elige automáticamente el
+  // más chico que alcance según ProductVariant.sizeOz. "ing-vaso" se
+  // conserva con ese id (lo usa también prisma/seed-demo.ts) pero pasa a
+  // representar el vaso de 12oz.
+  const vaso12oz = await prisma.ingredient.upsert({
     where: { id: "ing-vaso" },
-    update: {},
+    update: { name: "Vaso 12oz", cupCapacityOz: 12 },
     create: {
       id: "ing-vaso",
-      name: "Vaso con tapa desechable",
+      name: "Vaso 12oz",
       category: "INSUMOS",
       kind: "ATOMICO",
       baseUnit: "PIEZA",
       purchaseUnit: "PIEZA",
       tracksExpiration: false,
+      cupCapacityOz: 12,
+    },
+  });
+
+  const vaso3oz = await prisma.ingredient.upsert({
+    where: { id: "ing-vaso-3oz" },
+    update: { cupCapacityOz: 3 },
+    create: {
+      id: "ing-vaso-3oz",
+      name: "Vaso Espresso 3oz",
+      category: "INSUMOS",
+      kind: "ATOMICO",
+      baseUnit: "PIEZA",
+      purchaseUnit: "PIEZA",
+      tracksExpiration: false,
+      cupCapacityOz: 3,
+    },
+  });
+
+  const vaso8oz = await prisma.ingredient.upsert({
+    where: { id: "ing-vaso-8oz" },
+    update: { cupCapacityOz: 8 },
+    create: {
+      id: "ing-vaso-8oz",
+      name: "Vaso 8oz",
+      category: "INSUMOS",
+      kind: "ATOMICO",
+      baseUnit: "PIEZA",
+      purchaseUnit: "PIEZA",
+      tracksExpiration: false,
+      cupCapacityOz: 8,
+    },
+  });
+
+  const vaso16oz = await prisma.ingredient.upsert({
+    where: { id: "ing-vaso-16oz" },
+    update: { cupCapacityOz: 16 },
+    create: {
+      id: "ing-vaso-16oz",
+      name: "Vaso 16oz",
+      category: "INSUMOS",
+      kind: "ATOMICO",
+      baseUnit: "PIEZA",
+      purchaseUnit: "PIEZA",
+      tracksExpiration: false,
+      cupCapacityOz: 16,
     },
   });
 
@@ -305,7 +377,10 @@ async function main() {
   const costos: { ingredientId: string; cost: number }[] = [
     { ingredientId: cafe.id, cost: COSTO_CAFE_POR_SHOT },
     { ingredientId: leche.id, cost: COSTO_LECHE_POR_ML },
-    { ingredientId: vaso.id, cost: COSTO_VASO_POR_PIEZA },
+    { ingredientId: vaso3oz.id, cost: COSTO_VASO_3OZ },
+    { ingredientId: vaso8oz.id, cost: COSTO_VASO_8OZ },
+    { ingredientId: vaso12oz.id, cost: COSTO_VASO_12OZ },
+    { ingredientId: vaso16oz.id, cost: COSTO_VASO_16OZ },
     { ingredientId: agua.id, cost: COSTO_AGUA_POR_ML },
     { ingredientId: hielo.id, cost: COSTO_HIELO_POR_G },
     { ingredientId: esenciaSabor.id, cost: COSTO_ESENCIA_POR_ML },
@@ -333,7 +408,10 @@ async function main() {
   const initialStock: { ingredientId: string; quantity: number }[] = [
     { ingredientId: cafe.id, quantity: 1000 },
     { ingredientId: leche.id, quantity: 40000 },
-    { ingredientId: vaso.id, quantity: 1000 },
+    { ingredientId: vaso3oz.id, quantity: 500 },
+    { ingredientId: vaso8oz.id, quantity: 1000 },
+    { ingredientId: vaso12oz.id, quantity: 1000 },
+    { ingredientId: vaso16oz.id, quantity: 1000 },
     { ingredientId: agua.id, quantity: 20000 },
     { ingredientId: hielo.id, quantity: 30000 },
     { ingredientId: esenciaSabor.id, quantity: 20000 },
@@ -398,13 +476,10 @@ async function main() {
   // -----------------------------------------------------------------------
   // Recetas por familia de bebida — fórmulas aproximadas, mismo criterio en
   // toda la categoría (no una por producto), documentadas aquí en vez de
-  // repetidas como comentario en cada línea. Todas incluyen 1 vaso.
+  // repetidas como comentario en cada línea. El vaso ya NO se agrega aquí
+  // — se descuenta automáticamente por ProductVariant.sizeOz (actions/pos.ts).
   // Escalado por tamaño: índice 0 = Chico, 1 = Mediano, 2 = Grande.
   // -----------------------------------------------------------------------
-
-  function base(...lines: RecipeLineSpec[]): RecipeLineSpec[] {
-    return [...lines, { ingredientId: vaso.id, quantity: 1, unit: "PIEZA" }];
-  }
 
   // Café/agua, sin leche — Americano y similares.
   function recetaAmericano(i: number, shots: number[], aguaMl: number[], hieloG?: number[]): RecipeLineSpec[] {
@@ -413,7 +488,7 @@ async function main() {
       { ingredientId: agua.id, quantity: aguaMl[i], unit: "ML" },
     ];
     if (hieloG) lines.push({ ingredientId: hielo.id, quantity: hieloG[i], unit: "G" });
-    return base(...lines);
+    return lines;
   }
 
   // Café + leche (+ esencia opcional) — Capuccino/Latte.
@@ -432,7 +507,7 @@ async function main() {
       lines.push({ ingredientId: esenciaSabor.id, quantity: esenciaMl[i], unit: "ML" });
     }
     if (hieloG) lines.push({ ingredientId: hielo.id, quantity: hieloG[i], unit: "G" });
-    return base(...lines);
+    return lines;
   }
 
   // Leche + esencia, sin café — Chocolates/Chai/Malteada/Smoothie.
@@ -447,7 +522,7 @@ async function main() {
       { ingredientId: esenciaSabor.id, quantity: esenciaMl[i], unit: "ML" },
     ];
     if (hieloG) lines.push({ ingredientId: hielo.id, quantity: hieloG[i], unit: "G" });
-    return base(...lines);
+    return lines;
   }
 
   // Agua + esencia, sin leche ni café — Soda italiana, Chocolate en agua.
@@ -462,7 +537,7 @@ async function main() {
       { ingredientId: esenciaSabor.id, quantity: esenciaMl[i], unit: "ML" },
     ];
     if (hieloG) lines.push({ ingredientId: hielo.id, quantity: hieloG[i], unit: "G" });
-    return base(...lines);
+    return lines;
   }
 
   async function seedProduct(spec: ProductSpec) {
@@ -486,15 +561,28 @@ async function main() {
     });
 
     for (const variant of spec.variants) {
-      const variantId = `${spec.id}-${slug(variant.label)}`;
+      const vId = variantId(spec.id, variant);
       const productVariant = await prisma.productVariant.upsert({
-        where: { id: variantId },
-        update: { name: variant.label, price: variant.price, isActive: true },
-        create: { id: variantId, productId: product.id, name: variant.label, price: variant.price },
+        where: { id: vId },
+        update: {
+          name: variant.label,
+          price: variant.price,
+          isActive: true,
+          temperature: variant.temperature ?? null,
+          sizeOz: variant.sizeOz ?? null,
+        },
+        create: {
+          id: vId,
+          productId: product.id,
+          name: variant.label,
+          price: variant.price,
+          temperature: variant.temperature ?? null,
+          sizeOz: variant.sizeOz ?? null,
+        },
       });
 
       if (variant.recipe) {
-        const recipeId = `${variantId}-recipe`;
+        const recipeId = `${vId}-recipe`;
         const recipe = await prisma.recipe.upsert({
           where: { id: recipeId },
           update: {},
@@ -520,7 +608,7 @@ async function main() {
       }
 
       if (spec.flavorGroup) {
-        const groupId = `${variantId}-flavor`;
+        const groupId = `${vId}-flavor`;
         const group = await prisma.variantModifierGroup.upsert({
           where: { id: groupId },
           update: {},
@@ -554,7 +642,7 @@ async function main() {
       // sustitución por categoría (LECHE) ya construido en actions/pos.ts.
       if (variant.milkMl) {
         const milkMl = variant.milkMl;
-        const groupId = `${variantId}-leche`;
+        const groupId = `${vId}-leche`;
         const group = await prisma.variantModifierGroup.upsert({
           where: { id: groupId },
           update: {},
@@ -567,19 +655,25 @@ async function main() {
           },
         });
 
+        // Id determinístico por ingrediente (no por el nombre corto de
+        // exhibición) — mismo esquema que actions/recipes.ts
+        // (applyModifierGroups), para que re-sembrar y editar una
+        // variante desde /productos actualicen las mismas filas en vez
+        // de duplicarlas. Migrado desde el esquema anterior (`-entera`,
+        // `-${slug(nombre)}`) el 2026-09-12.
         await prisma.modifierOption.upsert({
-          where: { id: `${groupId}-entera` },
+          where: { id: `${groupId}-base` },
           update: {},
-          create: { id: `${groupId}-entera`, groupId: group.id, name: "Entera", priceDelta: 0 },
+          create: { id: `${groupId}-base`, groupId: group.id, name: "Entera", priceDelta: 0 },
         });
 
         for (const milk of milkAlternatives) {
           const priceDelta = Math.round((milk.costPerMl - COSTO_LECHE_POR_ML) * milkMl * 100) / 100;
           await prisma.modifierOption.upsert({
-            where: { id: `${groupId}-${slug(milk.name)}` },
+            where: { id: `${groupId}-${milk.id}` },
             update: {},
             create: {
-              id: `${groupId}-${slug(milk.name)}`,
+              id: `${groupId}-${milk.id}`,
               groupId: group.id,
               name: milk.name,
               priceDelta,
@@ -593,37 +687,32 @@ async function main() {
       }
     }
 
-    // Si el producto cambió su conjunto de variantes entre corridas (ej.
-    // "Té"/"Americano" al agregarles el eje de temperatura), las
-    // variantes que ya no están en spec.variants se desactivan — nunca se
-    // borran (mismo criterio de "desactivar, no borrar" del resto del
-    // script), así que no se pierden ventas históricas que las usaron.
-    const currentVariantIds = spec.variants.map((v) => `${spec.id}-${slug(v.label)}`);
+    // Si el producto cambió su conjunto de variantes entre corridas, las
+    // que ya no están en spec.variants se desactivan — nunca se borran
+    // (mismo criterio de "desactivar, no borrar" del resto del script),
+    // así que no se pierden ventas históricas que las usaron.
+    const currentVariantIds = spec.variants.map((v) => variantId(spec.id, v));
     await prisma.productVariant.updateMany({
       where: { productId: product.id, id: { notIn: currentVariantIds }, isActive: true },
       data: { isActive: false },
     });
   }
 
-  // Productos consolidados de aquí en adelante usan el mismo eje de
-  // variante "{Tamaño} {Temperatura}" ya construido en "Cambios Punto de
-  // Venta" (ver parseVariantName en lib/catalog.ts), sin cambios de
-  // schema. Frappé es un 3er estado agregado a VariantTemperature.
-
   // -----------------------------------------------------------------------
-  // CAFÉ — "Americano" consolida Americano/Americano Frío en un producto.
+  // CAFÉ — "Americano" consolida Americano/Americano Frío en un producto,
+  // con temperatura como campo real (no texto en el nombre).
   // -----------------------------------------------------------------------
   await seedProduct({
     id: "lapso-americano",
     name: "Americano",
     categoryId: catCafe,
     variants: [
-      { label: "Chico Caliente", price: 27, recipe: recetaAmericano(0, [1, 1, 2], [150, 200, 250]) },
-      { label: "Mediano Caliente", price: 34, recipe: recetaAmericano(1, [1, 1, 2], [150, 200, 250]) },
-      { label: "Grande Caliente", price: 37, recipe: recetaAmericano(2, [1, 1, 2], [150, 200, 250]) },
-      { label: "Chico Frío", price: 28, recipe: recetaAmericano(0, [1, 1, 2], [100, 130, 160], [100, 130, 160]) },
-      { label: "Mediano Frío", price: 35, recipe: recetaAmericano(1, [1, 1, 2], [100, 130, 160], [100, 130, 160]) },
-      { label: "Grande Frío", price: 39, recipe: recetaAmericano(2, [1, 1, 2], [100, 130, 160], [100, 130, 160]) },
+      { label: "Chico", temperature: "CALIENTE", price: 27, sizeOz: SIZE_OZ.Chico, recipe: recetaAmericano(0, [1, 1, 2], [150, 200, 250]) },
+      { label: "Mediano", temperature: "CALIENTE", price: 34, sizeOz: SIZE_OZ.Mediano, recipe: recetaAmericano(1, [1, 1, 2], [150, 200, 250]) },
+      { label: "Grande", temperature: "CALIENTE", price: 37, sizeOz: SIZE_OZ.Grande, recipe: recetaAmericano(2, [1, 1, 2], [150, 200, 250]) },
+      { label: "Chico", temperature: "FRIO", price: 28, sizeOz: SIZE_OZ.Chico, recipe: recetaAmericano(0, [1, 1, 2], [100, 130, 160], [100, 130, 160]) },
+      { label: "Mediano", temperature: "FRIO", price: 35, sizeOz: SIZE_OZ.Mediano, recipe: recetaAmericano(1, [1, 1, 2], [100, 130, 160], [100, 130, 160]) },
+      { label: "Grande", temperature: "FRIO", price: 39, sizeOz: SIZE_OZ.Grande, recipe: recetaAmericano(2, [1, 1, 2], [100, 130, 160], [100, 130, 160]) },
     ],
   });
   await seedProduct({
@@ -631,7 +720,15 @@ async function main() {
     name: "Prensa Francesa",
     categoryId: catCafe,
     variants: [
-      { label: "Único", price: 55, recipe: base({ ingredientId: cafe.id, quantity: 3, unit: "ESPRESSO_SHOT" }, { ingredientId: agua.id, quantity: 300, unit: "ML" }) },
+      {
+        label: "Único",
+        price: 55,
+        sizeOz: SIZE_OZ.Mediano,
+        recipe: [
+          { ingredientId: cafe.id, quantity: 3, unit: "ESPRESSO_SHOT" },
+          { ingredientId: agua.id, quantity: 300, unit: "ML" },
+        ],
+      },
     ],
   });
 
@@ -643,9 +740,9 @@ async function main() {
     name: "Espresso Americano",
     categoryId: catEspresso,
     variants: [
-      { label: "Chico", price: 36, recipe: recetaAmericano(0, [1, 1, 2], [100, 130, 160]) },
-      { label: "Mediano", price: 45, recipe: recetaAmericano(1, [1, 1, 2], [100, 130, 160]) },
-      { label: "Grande", price: 50, recipe: recetaAmericano(2, [1, 1, 2], [100, 130, 160]) },
+      { label: "Chico", price: 36, sizeOz: SIZE_OZ.Chico, recipe: recetaAmericano(0, [1, 1, 2], [100, 130, 160]) },
+      { label: "Mediano", price: 45, sizeOz: SIZE_OZ.Mediano, recipe: recetaAmericano(1, [1, 1, 2], [100, 130, 160]) },
+      { label: "Grande", price: 50, sizeOz: SIZE_OZ.Grande, recipe: recetaAmericano(2, [1, 1, 2], [100, 130, 160]) },
     ],
   });
   await seedProduct({
@@ -653,8 +750,8 @@ async function main() {
     name: "Espresso",
     categoryId: catEspresso,
     variants: [
-      { label: "Sencillo", price: 26, recipe: base({ ingredientId: cafe.id, quantity: 1, unit: "ESPRESSO_SHOT" }) },
-      { label: "Doble", price: 31, recipe: base({ ingredientId: cafe.id, quantity: 2, unit: "ESPRESSO_SHOT" }) },
+      { label: "Sencillo", price: 26, sizeOz: 3, recipe: [{ ingredientId: cafe.id, quantity: 1, unit: "ESPRESSO_SHOT" }] },
+      { label: "Doble", price: 31, sizeOz: 3, recipe: [{ ingredientId: cafe.id, quantity: 2, unit: "ESPRESSO_SHOT" }] },
     ],
   });
   await seedProduct({
@@ -662,8 +759,8 @@ async function main() {
     name: "Cortado",
     categoryId: catEspresso,
     variants: [
-      { label: "Sencillo", price: 32, milkMl: 20, recipe: base({ ingredientId: cafe.id, quantity: 1, unit: "ESPRESSO_SHOT" }, { ingredientId: leche.id, quantity: 20, unit: "ML" }) },
-      { label: "Doble", price: 37, milkMl: 30, recipe: base({ ingredientId: cafe.id, quantity: 2, unit: "ESPRESSO_SHOT" }, { ingredientId: leche.id, quantity: 30, unit: "ML" }) },
+      { label: "Sencillo", price: 32, sizeOz: 3, milkMl: 20, recipe: [{ ingredientId: cafe.id, quantity: 1, unit: "ESPRESSO_SHOT" }, { ingredientId: leche.id, quantity: 20, unit: "ML" }] },
+      { label: "Doble", price: 37, sizeOz: 3, milkMl: 30, recipe: [{ ingredientId: cafe.id, quantity: 2, unit: "ESPRESSO_SHOT" }, { ingredientId: leche.id, quantity: 30, unit: "ML" }] },
     ],
   });
   await seedProduct({
@@ -671,8 +768,8 @@ async function main() {
     name: "Macciato",
     categoryId: catEspresso,
     variants: [
-      { label: "Sencillo", price: 32, milkMl: 10, recipe: base({ ingredientId: cafe.id, quantity: 1, unit: "ESPRESSO_SHOT" }, { ingredientId: leche.id, quantity: 10, unit: "ML" }) },
-      { label: "Doble", price: 37, milkMl: 15, recipe: base({ ingredientId: cafe.id, quantity: 2, unit: "ESPRESSO_SHOT" }, { ingredientId: leche.id, quantity: 15, unit: "ML" }) },
+      { label: "Sencillo", price: 32, sizeOz: 3, milkMl: 10, recipe: [{ ingredientId: cafe.id, quantity: 1, unit: "ESPRESSO_SHOT" }, { ingredientId: leche.id, quantity: 10, unit: "ML" }] },
+      { label: "Doble", price: 37, sizeOz: 3, milkMl: 15, recipe: [{ ingredientId: cafe.id, quantity: 2, unit: "ESPRESSO_SHOT" }, { ingredientId: leche.id, quantity: 15, unit: "ML" }] },
     ],
   });
   await seedProduct({
@@ -680,8 +777,8 @@ async function main() {
     name: "Con Panna",
     categoryId: catEspresso,
     variants: [
-      { label: "Sencillo", price: 36, recipe: base({ ingredientId: cafe.id, quantity: 1, unit: "ESPRESSO_SHOT" }, { ingredientId: cremaBatida.id, quantity: 1, unit: "PIEZA" }) },
-      { label: "Doble", price: 41, recipe: base({ ingredientId: cafe.id, quantity: 2, unit: "ESPRESSO_SHOT" }, { ingredientId: cremaBatida.id, quantity: 1, unit: "PIEZA" }) },
+      { label: "Sencillo", price: 36, sizeOz: 3, recipe: [{ ingredientId: cafe.id, quantity: 1, unit: "ESPRESSO_SHOT" }, { ingredientId: cremaBatida.id, quantity: 1, unit: "PIEZA" }] },
+      { label: "Doble", price: 41, sizeOz: 3, recipe: [{ ingredientId: cafe.id, quantity: 2, unit: "ESPRESSO_SHOT" }, { ingredientId: cremaBatida.id, quantity: 1, unit: "PIEZA" }] },
     ],
   });
 
@@ -703,6 +800,7 @@ async function main() {
       variants: (["Chico", "Mediano", "Grande"] as const).map((label, i) => ({
         label,
         price: c.price[i],
+        sizeOz: SIZE_OZ[label],
         milkMl: lecheCapuccinoMl[i],
         recipe: recetaCafeConLeche(i, [1, 1, 2], lecheCapuccinoMl, c.esencia),
       })),
@@ -719,12 +817,12 @@ async function main() {
     name: "Latte",
     categoryId: catLatte,
     variants: [
-      { label: "Chico Caliente", price: 43, milkMl: lecheLatteCalienteMl[0], recipe: recetaCafeConLeche(0, [1, 1, 2], lecheLatteCalienteMl) },
-      { label: "Mediano Caliente", price: 49, milkMl: lecheLatteCalienteMl[1], recipe: recetaCafeConLeche(1, [1, 1, 2], lecheLatteCalienteMl) },
-      { label: "Grande Caliente", price: 54, milkMl: lecheLatteCalienteMl[2], recipe: recetaCafeConLeche(2, [1, 1, 2], lecheLatteCalienteMl) },
-      { label: "Chico Frío", price: 45, milkMl: lecheLatteFrioMl[0], recipe: recetaCafeConLeche(0, [1, 1, 2], lecheLatteFrioMl, undefined, [100, 130, 160]) },
-      { label: "Mediano Frío", price: 52, milkMl: lecheLatteFrioMl[1], recipe: recetaCafeConLeche(1, [1, 1, 2], lecheLatteFrioMl, undefined, [100, 130, 160]) },
-      { label: "Grande Frío", price: 57, milkMl: lecheLatteFrioMl[2], recipe: recetaCafeConLeche(2, [1, 1, 2], lecheLatteFrioMl, undefined, [100, 130, 160]) },
+      { label: "Chico", temperature: "CALIENTE", price: 43, sizeOz: SIZE_OZ.Chico, milkMl: lecheLatteCalienteMl[0], recipe: recetaCafeConLeche(0, [1, 1, 2], lecheLatteCalienteMl) },
+      { label: "Mediano", temperature: "CALIENTE", price: 49, sizeOz: SIZE_OZ.Mediano, milkMl: lecheLatteCalienteMl[1], recipe: recetaCafeConLeche(1, [1, 1, 2], lecheLatteCalienteMl) },
+      { label: "Grande", temperature: "CALIENTE", price: 54, sizeOz: SIZE_OZ.Grande, milkMl: lecheLatteCalienteMl[2], recipe: recetaCafeConLeche(2, [1, 1, 2], lecheLatteCalienteMl) },
+      { label: "Chico", temperature: "FRIO", price: 45, sizeOz: SIZE_OZ.Chico, milkMl: lecheLatteFrioMl[0], recipe: recetaCafeConLeche(0, [1, 1, 2], lecheLatteFrioMl, undefined, [100, 130, 160]) },
+      { label: "Mediano", temperature: "FRIO", price: 52, sizeOz: SIZE_OZ.Mediano, milkMl: lecheLatteFrioMl[1], recipe: recetaCafeConLeche(1, [1, 1, 2], lecheLatteFrioMl, undefined, [100, 130, 160]) },
+      { label: "Grande", temperature: "FRIO", price: 57, sizeOz: SIZE_OZ.Grande, milkMl: lecheLatteFrioMl[2], recipe: recetaCafeConLeche(2, [1, 1, 2], lecheLatteFrioMl, undefined, [100, 130, 160]) },
     ],
   });
   const lecheLatteBananaMl = [180, 220, 260];
@@ -735,6 +833,7 @@ async function main() {
     variants: (["Chico", "Mediano", "Grande"] as const).map((label, i) => ({
       label,
       price: [52, 60, 66][i],
+      sizeOz: SIZE_OZ[label],
       milkMl: lecheLatteBananaMl[i],
       recipe: recetaCafeConLeche(i, [1, 1, 2], lecheLatteBananaMl, [5, 7, 10]),
     })),
@@ -750,12 +849,12 @@ async function main() {
     name: "Chocolate",
     categoryId: catChocolates,
     variants: [
-      { label: "Chico Caliente", price: 42, milkMl: lecheChocolateMl[0], recipe: recetaLecheEsencia(0, lecheChocolateMl, [8, 10, 12]) },
-      { label: "Mediano Caliente", price: 48, milkMl: lecheChocolateMl[1], recipe: recetaLecheEsencia(1, lecheChocolateMl, [8, 10, 12]) },
-      { label: "Grande Caliente", price: 53, milkMl: lecheChocolateMl[2], recipe: recetaLecheEsencia(2, lecheChocolateMl, [8, 10, 12]) },
-      { label: "Chico Frío", price: 42, milkMl: lecheChocolateMl[0], recipe: recetaLecheEsencia(0, lecheChocolateMl, [8, 10, 12]) },
-      { label: "Mediano Frío", price: 48, milkMl: lecheChocolateMl[1], recipe: recetaLecheEsencia(1, lecheChocolateMl, [8, 10, 12]) },
-      { label: "Grande Frío", price: 53, milkMl: lecheChocolateMl[2], recipe: recetaLecheEsencia(2, lecheChocolateMl, [8, 10, 12]) },
+      { label: "Chico", temperature: "CALIENTE", price: 42, sizeOz: SIZE_OZ.Chico, milkMl: lecheChocolateMl[0], recipe: recetaLecheEsencia(0, lecheChocolateMl, [8, 10, 12]) },
+      { label: "Mediano", temperature: "CALIENTE", price: 48, sizeOz: SIZE_OZ.Mediano, milkMl: lecheChocolateMl[1], recipe: recetaLecheEsencia(1, lecheChocolateMl, [8, 10, 12]) },
+      { label: "Grande", temperature: "CALIENTE", price: 53, sizeOz: SIZE_OZ.Grande, milkMl: lecheChocolateMl[2], recipe: recetaLecheEsencia(2, lecheChocolateMl, [8, 10, 12]) },
+      { label: "Chico", temperature: "FRIO", price: 42, sizeOz: SIZE_OZ.Chico, milkMl: lecheChocolateMl[0], recipe: recetaLecheEsencia(0, lecheChocolateMl, [8, 10, 12]) },
+      { label: "Mediano", temperature: "FRIO", price: 48, sizeOz: SIZE_OZ.Mediano, milkMl: lecheChocolateMl[1], recipe: recetaLecheEsencia(1, lecheChocolateMl, [8, 10, 12]) },
+      { label: "Grande", temperature: "FRIO", price: 53, sizeOz: SIZE_OZ.Grande, milkMl: lecheChocolateMl[2], recipe: recetaLecheEsencia(2, lecheChocolateMl, [8, 10, 12]) },
     ],
   });
 
@@ -766,6 +865,7 @@ async function main() {
     variants: (["Chico", "Mediano", "Grande"] as const).map((label, i) => ({
       label,
       price: [40, 46, 51][i],
+      sizeOz: SIZE_OZ[label],
       recipe: recetaAguaEsencia(i, [200, 250, 300], [8, 10, 12]),
     })),
   });
@@ -785,6 +885,7 @@ async function main() {
       variants: (["Chico", "Mediano", "Grande"] as const).map((label, i) => ({
         label,
         price: c.price[i],
+        sizeOz: SIZE_OZ[label],
         milkMl: lecheChocolateMl[i],
         recipe: recetaLecheEsencia(i, lecheChocolateMl, c.esencia),
       })),
@@ -794,8 +895,8 @@ async function main() {
   // -----------------------------------------------------------------------
   // TÉ — antes vivía como grupo de modificador "Temperatura" sin costo,
   // pero el menú real cobra distinto por Frío ($39/43/47) que por
-  // Caliente ($37/41/45) — se reconstruye como el mismo eje de variante
-  // que el resto (punto 4, Mejoras avanzadas de POS), sin receta (no hay
+  // Caliente ($37/41/45) — se modela con el campo real
+  // ProductVariant.temperature (no un modificador), sin receta (no hay
   // costo de té/hierbas dado).
   // -----------------------------------------------------------------------
   await seedProduct({
@@ -803,12 +904,12 @@ async function main() {
     name: "Té",
     categoryId: catTe,
     variants: [
-      { label: "Chico Caliente", price: 37 },
-      { label: "Mediano Caliente", price: 41 },
-      { label: "Grande Caliente", price: 45 },
-      { label: "Chico Frío", price: 39 },
-      { label: "Mediano Frío", price: 43 },
-      { label: "Grande Frío", price: 47 },
+      { label: "Chico", temperature: "CALIENTE", price: 37, sizeOz: SIZE_OZ.Chico },
+      { label: "Mediano", temperature: "CALIENTE", price: 41, sizeOz: SIZE_OZ.Mediano },
+      { label: "Grande", temperature: "CALIENTE", price: 45, sizeOz: SIZE_OZ.Grande },
+      { label: "Chico", temperature: "FRIO", price: 39, sizeOz: SIZE_OZ.Chico },
+      { label: "Mediano", temperature: "FRIO", price: 43, sizeOz: SIZE_OZ.Mediano },
+      { label: "Grande", temperature: "FRIO", price: 47, sizeOz: SIZE_OZ.Grande },
     ],
   });
 
@@ -821,12 +922,12 @@ async function main() {
     name: "Tisana",
     categoryId: catTisanas,
     variants: [
-      { label: "Chico Caliente", price: 37 },
-      { label: "Mediano Caliente", price: 41 },
-      { label: "Grande Caliente", price: 45 },
-      { label: "Chico Frío", price: 39 },
-      { label: "Mediano Frío", price: 43 },
-      { label: "Grande Frío", price: 47 },
+      { label: "Chico", temperature: "CALIENTE", price: 37, sizeOz: SIZE_OZ.Chico },
+      { label: "Mediano", temperature: "CALIENTE", price: 41, sizeOz: SIZE_OZ.Mediano },
+      { label: "Grande", temperature: "CALIENTE", price: 45, sizeOz: SIZE_OZ.Grande },
+      { label: "Chico", temperature: "FRIO", price: 39, sizeOz: SIZE_OZ.Chico },
+      { label: "Mediano", temperature: "FRIO", price: 43, sizeOz: SIZE_OZ.Mediano },
+      { label: "Grande", temperature: "FRIO", price: 47, sizeOz: SIZE_OZ.Grande },
     ],
   });
 
@@ -840,7 +941,7 @@ async function main() {
       id: t.id,
       name: t.name,
       categoryId: catTisanas,
-      variants: (["Chico", "Mediano", "Grande"] as const).map((label, i) => ({ label, price: t.price[i] })),
+      variants: (["Chico", "Mediano", "Grande"] as const).map((label, i) => ({ label, price: t.price[i], sizeOz: SIZE_OZ[label] })),
     });
   }
 
@@ -857,6 +958,7 @@ async function main() {
       variants: (["Chico", "Mediano", "Grande"] as const).map((label, i) => ({
         label,
         price: [43, 48, 53][i],
+        sizeOz: SIZE_OZ[label],
         milkMl: lecheSmoothieMl[i],
         recipe: recetaLecheEsencia(i, lecheSmoothieMl, [10, 13, 16], [80, 100, 120]),
       })),
@@ -865,23 +967,24 @@ async function main() {
 
   // -----------------------------------------------------------------------
   // CHAI / DIRTY CHAI — "Chai" y "Dirty Chai" consolidan Frío/Caliente/
-  // Frappé como eje de variante (9 variantes: 3 tamaños × 3 temperaturas),
-  // conservando el grupo de sabor (Tradicional/Té Verde/Manzana, sin
-  // costo) en cada una. "Dirty" agrega un shot de espresso constante.
+  // Frappé como campo real de temperatura (9 variantes: 3 tamaños × 3
+  // temperaturas), conservando el grupo de sabor (Tradicional/Té Verde/
+  // Manzana, sin costo) en cada una. "Dirty" agrega un shot de espresso
+  // constante.
   // -----------------------------------------------------------------------
   const saborChai = { name: "Sabor", options: ["Tradicional", "Té Verde", "Manzana"] };
   const lecheChaiMl = [150, 200, 250];
 
-  type ChaiTemp = { suffix: string; price: [number, number, number]; hielo?: [number, number, number] };
+  type ChaiTemp = { temperature: VariantTemperature; price: [number, number, number]; hielo?: [number, number, number] };
   const chaiTemps: ChaiTemp[] = [
-    { suffix: "Caliente", price: [47, 54, 59] },
-    { suffix: "Frío", price: [48, 55, 61], hielo: [80, 100, 120] },
-    { suffix: "Frappé", price: [56, 63, 69], hielo: [100, 130, 160] },
+    { temperature: "CALIENTE", price: [47, 54, 59] },
+    { temperature: "FRIO", price: [48, 55, 61], hielo: [80, 100, 120] },
+    { temperature: "FRAPPE", price: [56, 63, 69], hielo: [100, 130, 160] },
   ];
   const dirtyChaiTemps: ChaiTemp[] = [
-    { suffix: "Caliente", price: [51, 57, 63] },
-    { suffix: "Frío", price: [52, 58, 64], hielo: [80, 100, 120] },
-    { suffix: "Frappé", price: [59, 66, 73], hielo: [100, 130, 160] },
+    { temperature: "CALIENTE", price: [51, 57, 63] },
+    { temperature: "FRIO", price: [52, 58, 64], hielo: [80, 100, 120] },
+    { temperature: "FRAPPE", price: [59, 66, 73], hielo: [100, 130, 160] },
   ];
 
   function buildChaiVariants(temps: ChaiTemp[], dirty: boolean) {
@@ -893,8 +996,10 @@ async function main() {
           lines.unshift({ ingredientId: cafe.id, quantity: 1, unit: "ESPRESSO_SHOT" });
         }
         variants.push({
-          label: `${size} ${temp.suffix}`,
+          label: size,
+          temperature: temp.temperature,
           price: temp.price[i],
+          sizeOz: SIZE_OZ[size],
           milkMl: lecheChaiMl[i],
           recipe: lines,
         });
@@ -930,6 +1035,7 @@ async function main() {
     variants: (["Chico", "Mediano", "Grande"] as const).map((label, i) => ({
       label,
       price: [43, 49, 54][i],
+      sizeOz: SIZE_OZ[label],
       milkMl: lecheMalteadaMl[i],
       recipe: recetaLecheEsencia(i, lecheMalteadaMl, [8, 10, 12], [60, 80, 100]),
     })),
@@ -962,6 +1068,7 @@ async function main() {
     variants: (["Chico", "Mediano", "Grande"] as const).map((label, i) => ({
       label,
       price: [41, 46, 50][i],
+      sizeOz: SIZE_OZ[label],
       recipe: recetaAguaEsencia(i, [150, 180, 210], [15, 20, 25], [100, 130, 160]),
     })),
   });
@@ -970,7 +1077,7 @@ async function main() {
   // BOCADILLOS (Bagels / Otros Bocadillos), POSTRES, SOUVENIRS, TARJETA DE
   // REGALO, CAFÉ EN GRANO — reventa directa: precio único, sin receta (no
   // pasan por el modelo de consumo por ingrediente, ver
-  // ProductType.REVENTA_DIRECTA en el schema).
+  // ProductType.REVENTA_DIRECTA en el schema). Sin sizeOz — no son bebidas.
   // -----------------------------------------------------------------------
   const bagels: { id: string; name: string; price: number }[] = [
     { id: "lapso-bagel-jamon-pavo", name: "Bagel (Jamón Serrano o de Pavo)", price: 66 },

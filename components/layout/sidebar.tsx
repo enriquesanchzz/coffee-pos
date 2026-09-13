@@ -18,7 +18,7 @@ const modules = [
   { href: "/pos", label: "Punto de Venta", icon: ShoppingCart, enabled: true },
   { href: "/caja", label: "Caja", icon: Wallet, enabled: true },
   { href: "/inventario", label: "Inventario", icon: Package, enabled: true },
-  { href: "/recetas", label: "Recetas", icon: BookOpen, enabled: true },
+  { href: "/productos", label: "Productos", icon: BookOpen, enabled: true },
   { href: "/compras", label: "Compras", icon: Truck, enabled: true },
   { href: "/reportes", label: "Reportes", icon: BarChart3, enabled: true },
   { href: "/clientes", label: "Clientes", icon: Users, enabled: true },

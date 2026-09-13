@@ -140,6 +140,13 @@ enum SaleOrderType {
   DOMICILIO
 }
 
+// Eje de temperatura de una variante de bebida (ver ProductVariant.temperature).
+enum VariantTemperature {
+  CALIENTE
+  FRIO
+  FRAPPE
+}
+
 enum DiscountType {
   PORCENTAJE
   MONTO_FIJO
@@ -263,6 +270,11 @@ model Ingredient {
   // Días de anticipación con que se dispara la alerta de caducidad próxima
   // para este ingrediente. Varía por tipo — ej. leche 5 días, jarabe 30 días.
   expirationAlertDays Int?
+  // Si no es null, este ingrediente es un vaso/contenedor con esta
+  // capacidad — createSale (actions/pos.ts) lo usa para elegir
+  // automáticamente el vaso más chico que alcance según
+  // ProductVariant.sizeOz, en vez de que la receta lo liste a mano.
+  cupCapacityOz     Decimal?           @db.Decimal(6, 2)
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
@@ -450,6 +462,21 @@ model ProductVariant {
   name      String // ej. "Chico", "Mediano", "Grande", "Único", "Por Kilo"
   price     Decimal  @db.Decimal(10, 2)
   isActive  Boolean  @default(true)
+
+  // Eje de temperatura real (antes se inferría parseando el nombre de la
+  // variante, ver docs/CONTINUE.md "Mejoras avanzadas de POS") — null si
+  // el producto no usa este eje.
+  temperature VariantTemperature?
+  // Tamaño real de la bebida en onzas — createSale (actions/pos.ts) lo usa
+  // para elegir automáticamente el vaso (Ingredient.cupCapacityOz) que se
+  // descuenta, sin que la receta lo liste como ingrediente. Null si el
+  // producto no es una bebida (ej. REVENTA_DIRECTA) o no aplica.
+  sizeOz      Decimal?             @db.Decimal(6, 2)
+  // Solo para merch/souvenirs (ProductType.REVENTA_DIRECTA) — talla/color/
+  // nota opcionales, sin uso en bebidas.
+  size        String?
+  color       String?
+  note        String?
 
   // Costo de producción calculado en el momento en que se fijó/revisó
   // `price` por última vez. Se compara contra el costo actual calculado de

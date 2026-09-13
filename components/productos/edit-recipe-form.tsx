@@ -2,14 +2,16 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { UnitOfMeasure } from "@prisma/client";
-import type { VariantRecipeDetail, IngredientOption, ComposedRecipeOption } from "@/lib/recipes";
+import type { UnitOfMeasure, VariantTemperature } from "@prisma/client";
+import type { VariantRecipeDetail, IngredientOption, ComposedRecipeOption, ModifierOptionDetail } from "@/lib/recipes";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { updateVariantRecipe, type RecipeLineInput } from "@/actions/recipes";
-import { RecipeLinesEditor, type LineDraft } from "./recipe-lines-editor";
+import { type LineDraft } from "./recipe-lines-editor";
+import { modifierOptionsToInput, type ModifierOptionDraft } from "./modifier-options-editor";
+import { VariantFields } from "./variant-fields";
 
 // key = line.id (el id real de RecipeIngredient, ya estable/único) en vez de
 // crypto.randomUUID() — useState corre en SSR y al hidratar, un valor
@@ -21,6 +23,15 @@ function linesFromDetail(detail: VariantRecipeDetail): LineDraft[] {
     ref: line.ingredientId ? `ingredient:${line.ingredientId}` : `composed:${line.composedRecipeId}`,
     quantity: String(line.quantity),
     unit: line.unit as UnitOfMeasure,
+  }));
+}
+
+function optionsFromDetail(options: ModifierOptionDetail[]): ModifierOptionDraft[] {
+  return options.map((o) => ({
+    key: o.id,
+    ingredientId: o.ingredientId ?? "",
+    quantity: String(o.quantity ?? 1),
+    priceDelta: String(o.priceDelta),
   }));
 }
 
@@ -38,7 +49,14 @@ export function EditRecipeForm({
   const [imageUrl, setImageUrl] = useState(detail.productImageUrl ?? "");
   const [price, setPrice] = useState(String(detail.price));
   const [isActive, setIsActive] = useState(detail.isActive);
+  const [temperature, setTemperature] = useState<VariantTemperature | "">(detail.temperature ?? "");
+  const [sizeOz, setSizeOz] = useState(detail.sizeOz !== null ? String(detail.sizeOz) : "");
+  const [size, setSize] = useState(detail.size ?? "");
+  const [color, setColor] = useState(detail.color ?? "");
+  const [note, setNote] = useState(detail.note ?? "");
   const [lines, setLines] = useState<LineDraft[]>(linesFromDetail(detail));
+  const [milkOptions, setMilkOptions] = useState<ModifierOptionDraft[]>(optionsFromDetail(detail.milkOptions));
+  const [extraOptions, setExtraOptions] = useState<ModifierOptionDraft[]>(optionsFromDetail(detail.extraOptions));
   const [ingredients, setIngredients] = useState(ingredientOptions.ingredients);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -68,8 +86,15 @@ export function EditRecipeForm({
           isActive,
           lines: lineInputs,
           imageUrl,
+          temperature: temperature || undefined,
+          sizeOz: sizeOz ? Number(sizeOz) : undefined,
+          milkOptions: modifierOptionsToInput(milkOptions),
+          extraOptions: modifierOptionsToInput(extraOptions),
+          size: size || undefined,
+          color: color || undefined,
+          note: note || undefined,
         });
-        router.push("/recetas");
+        router.push("/productos");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo guardar la receta.");
       }
@@ -80,10 +105,11 @@ export function EditRecipeForm({
     <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
       <div>
         <h1 className="text-lg font-semibold">
-          Editar receta — {detail.productName} {detail.variantName}
+          Editar producto — {detail.productName} {detail.variantName}
         </h1>
         <p className="text-sm text-muted-foreground">
-          {detail.categoryName} · versión activa actual: v{detail.activeVersionNumber}
+          {detail.categoryName}
+          {detail.activeVersionNumber !== null && ` · versión activa actual: v${detail.activeVersionNumber}`}
         </p>
       </div>
 
@@ -92,24 +118,6 @@ export function EditRecipeForm({
           <CardTitle>Variante</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <div className="flex gap-4">
-            <div className="flex flex-1 flex-col gap-1">
-              <Label htmlFor="variant-name">Nombre</Label>
-              <Input id="variant-name" value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div className="flex w-32 flex-col gap-1">
-              <Label htmlFor="variant-price">Precio</Label>
-              <Input
-                id="variant-price"
-                type="number"
-                min="0"
-                step="0.01"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-              />
-            </div>
-          </div>
-
           <div className="flex flex-col gap-1">
             <Label htmlFor="product-image">Imagen del producto (URL, opcional)</Label>
             <Input
@@ -120,6 +128,35 @@ export function EditRecipeForm({
             />
           </div>
 
+          <VariantFields
+            idPrefix="variant"
+            productType={detail.productType}
+            name={name}
+            onNameChange={setName}
+            price={price}
+            onPriceChange={setPrice}
+            temperature={temperature}
+            onTemperatureChange={setTemperature}
+            sizeOz={sizeOz}
+            onSizeOzChange={setSizeOz}
+            size={size}
+            onSizeChange={setSize}
+            color={color}
+            onColorChange={setColor}
+            note={note}
+            onNoteChange={setNote}
+            lines={lines}
+            onLinesChange={setLines}
+            milkOptions={milkOptions}
+            onMilkOptionsChange={setMilkOptions}
+            extraOptions={extraOptions}
+            onExtraOptionsChange={setExtraOptions}
+            ingredients={ingredients}
+            composedRecipes={ingredientOptions.composedRecipes}
+            onIngredientCreated={(ingredient) => setIngredients((prev) => [...prev, ingredient])}
+            employeeId={employeeId}
+          />
+
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -128,22 +165,6 @@ export function EditRecipeForm({
             />
             Variante activa (disponible para vender)
           </label>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Receta (se guardará como nueva versión)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <RecipeLinesEditor
-            lines={lines}
-            onChange={setLines}
-            ingredients={ingredients}
-            composedRecipes={ingredientOptions.composedRecipes}
-            onIngredientCreated={(ingredient) => setIngredients((prev) => [...prev, ingredient])}
-            employeeId={employeeId}
-          />
         </CardContent>
       </Card>
 
