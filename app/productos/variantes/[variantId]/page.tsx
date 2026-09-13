@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentEmployee } from "@/lib/session";
 import { getVariantRecipeDetail, getIngredientPickerOptions } from "@/lib/recipes";
 import { Sidebar } from "@/components/layout/sidebar";
-import { EditRecipeForm } from "@/components/recetas/edit-recipe-form";
+import { EditRecipeForm } from "@/components/productos/edit-recipe-form";
 
 export default async function EditarRecetaPage({
   params,

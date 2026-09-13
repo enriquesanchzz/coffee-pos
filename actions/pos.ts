@@ -183,6 +183,15 @@ export async function createSale(input: CreateSaleInput) {
       }
     }
 
+    // Vasos por tamaño (ver ProductVariant.sizeOz, "Módulo Productos") —
+    // se cargan una sola vez; createSale elige el más chico que alcance
+    // para cada variante con sizeOz, en vez de que la receta lo liste como
+    // ingrediente manual.
+    const cupIngredients = await tx.ingredient.findMany({
+      where: { cupCapacityOz: { not: null }, isActive: true },
+      orderBy: { cupCapacityOz: "asc" },
+    });
+
     let subtotal = new Prisma.Decimal(0);
     const saleItemsData: {
       productVariantId: string;
@@ -208,6 +217,16 @@ export async function createSale(input: CreateSaleInput) {
       const variant = await tx.productVariant.findUniqueOrThrow({
         where: { id: item.productVariantId },
       });
+
+      if (variant.sizeOz) {
+        const cup = cupIngredients.find((c) => c.cupCapacityOz!.gte(variant.sizeOz!));
+        if (!cup) {
+          throw new Error(
+            `No hay un vaso registrado con capacidad suficiente para ${variant.sizeOz}oz (variante "${variant.name}").`
+          );
+        }
+        addConsumption(cup.id, new Prisma.Decimal(item.quantity));
+      }
 
       const activeRecipe = await tx.recipe.findFirst({
         where: { productVariantId: variant.id, kind: "PRODUCTO_VENDIBLE" },

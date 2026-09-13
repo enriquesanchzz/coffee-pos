@@ -68,10 +68,11 @@ export function ProductDialog({
     }
   }, [product, open]);
 
-  // Ejes disponibles, derivados de las variantes del producto (ver
-  // parseVariantName en lib/catalog.ts). Un producto que solo usa
-  // "Chico"/"Grande" (sin convención de temperatura) se comporta idéntico
-  // a antes de este cambio: un solo selector de tamaño.
+  // Ejes disponibles, derivados de las variantes del producto — tamaño
+  // viene del nombre de la variante, temperatura de
+  // ProductVariant.temperature (campo real, ver lib/catalog.ts). Un
+  // producto que solo usa "Chico"/"Grande" (sin temperatura) se comporta
+  // idéntico a un solo selector de tamaño.
   const sizes = useMemo(() => {
     if (!product) return [];
     const seen = new Set<string>();

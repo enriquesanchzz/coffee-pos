@@ -1,5 +1,8 @@
+import type { VariantTemperature } from "@prisma/client";
 import { prisma } from "./prisma";
 import { DEFAULT_BRANCH_ID } from "./constants";
+
+export type { VariantTemperature };
 
 export type CatalogModifierOption = {
   id: string;
@@ -16,18 +19,17 @@ export type CatalogModifierGroup = {
   options: CatalogModifierOption[];
 };
 
-export type VariantTemperature = "CALIENTE" | "FRIO" | "FRAPPE";
-
 export type CatalogVariant = {
   id: string;
   name: string;
   price: number;
-  // Ejes derivados del nombre de la variante (ver parseVariantName) — si
-  // un producto define variantes "Chico Frío"/"Chico Caliente", el POS
-  // puede mostrar dos selectores (tamaño + temperatura) en vez de una
-  // lista plana. Si el producto no usa la convención (como hoy, solo
-  // "Chico"/"Grande"), temperature queda null y el comportamiento es
-  // idéntico al actual.
+  // sizeLabel es siempre el `name` de la variante (ej. "Chico") —
+  // temperature es un campo real (ProductVariant.temperature), no un
+  // sufijo en el nombre. Si un producto tiene variantes con ambos
+  // tamaño y temperatura, el POS puede mostrar dos selectores en vez de
+  // una lista plana; si no usa el eje de temperatura (como Capuccino),
+  // temperature queda null y el comportamiento es idéntico al de un
+  // producto con un solo eje.
   sizeLabel: string | null;
   temperature: VariantTemperature | null;
   modifierGroups: CatalogModifierGroup[];
@@ -50,37 +52,6 @@ export type CatalogCategory = {
   parentName: string | null;
   products: CatalogProduct[];
 };
-
-const TEMPERATURE_SUFFIXES: Record<string, VariantTemperature> = {
-  caliente: "CALIENTE",
-  frio: "FRIO",
-  frío: "FRIO",
-  fria: "FRIO",
-  fría: "FRIO",
-  frappe: "FRAPPE",
-  frappé: "FRAPPE",
-};
-
-// Convención de nombre de variante: "{Tamaño} {Temperatura}" (ej. "Chico
-// Frío"). La palabra final se compara contra CALIENTE/FRÍO — si no
-// coincide, el nombre completo se trata como tamaño y no hay eje de
-// temperatura (mismo comportamiento que antes de este cambio).
-export function parseVariantName(name: string): {
-  sizeLabel: string | null;
-  temperature: VariantTemperature | null;
-} {
-  const trimmed = name.trim();
-  const words = trimmed.split(/\s+/);
-  const lastWord = words[words.length - 1]?.toLowerCase();
-  const temperature = lastWord ? (TEMPERATURE_SUFFIXES[lastWord] ?? null) : null;
-
-  if (!temperature) {
-    return { sizeLabel: trimmed || null, temperature: null };
-  }
-
-  const sizeLabel = words.slice(0, -1).join(" ").trim();
-  return { sizeLabel: sizeLabel || null, temperature };
-}
 
 // Resuelve la variante exacta para una combinación tamaño×temperatura.
 // Si el producto no usa esos ejes (sizeLabel/temperature en null en todas
@@ -154,13 +125,12 @@ export async function getCatalog(
         name: product.name,
         imageUrl: product.imageUrl,
         variants: product.variants.map((variant) => {
-          const { sizeLabel, temperature } = parseVariantName(variant.name);
           return {
             id: variant.id,
             name: variant.name,
             price: Number(variant.price),
-            sizeLabel,
-            temperature,
+            sizeLabel: variant.name,
+            temperature: variant.temperature,
             modifierGroups: variant.modifierGroups.map((group) => ({
               id: group.id,
               name: group.name,

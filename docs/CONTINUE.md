@@ -14,7 +14,7 @@ Claude Code) pueda retomarlo sin arqueología.
 | Seed de demo (productos, recetas, empleados, turno) | ✅ `prisma/seed-demo.ts`. |
 | Módulo **Caja** (doble confirmación de apertura/cierre, corte, retiros/ingresos) | ✅ Construido. Doble confirmación ahora valida permiso real (`CAJA_ABRIR`/`CAJA_CERRAR`), no solo "empleado distinto" — ver sección Administración abajo. |
 | Módulo **Inventario** (consulta, ajustes) | ✅ Construido (`/inventario`). Alertas de caducidad (`IngredientBatch.expirationDate`) no incluidas — no hay lotes sembrados con fecha todavía. |
-| UI de **Recetas** (alta de producto+receta, edición versionada) | ✅ Construido (`/recetas`). |
+| UI de **Recetas** (alta de producto+receta, edición versionada) | ✅ Construido, luego reemplazado por el Módulo Productos (`/productos`) — ver más abajo. |
 | **Administración** (auth real, gestión de empleados/roles, permisos reales) | ✅ Construido (`/administracion`). Ver sección dedicada abajo. |
 | Módulo **Compras** — Proveedores + Órdenes de compra (Fase 2) | ✅ Construido y mergeado a `main` (PR #3). |
 | **Transferencias + Conteos físicos** (resto de Fase 2) | ✅ Construido y mergeado a `main` (PR #4, `/compras/transferencias`, `/compras/conteos`). |
@@ -24,6 +24,7 @@ Claude Code) pueda retomarlo sin arqueología.
 | **Reskin visual del POS** (estilo "Purr'Coffee": tarjetas con selección rápida, tipo de orden, buscador) | ✅ Construido (rama `pos-reskin-purrcoffee`). Ver sección dedicada abajo. |
 | **Menú real de LAPSO** (68 productos reales reemplazan el catálogo de demo) | ✅ Sembrado (`prisma/seed-lapso.ts`). Ver sección dedicada abajo. |
 | **Mejoras avanzadas de POS** (subcategorías, búsqueda global, Frío/Caliente/tipo de leche reales, mesa, cliente/domicilio inline, código de lealtad, nota de transferencia) | ✅ Construido (rama `pos-mejoras-avanzadas`). Ver sección dedicada abajo. |
+| **Módulo Productos** (antes Recetas: temperatura/tamaño/vaso reales, tipo de leche y extras editables desde la UI, merch/souvenirs/tarjetas, agregar variante) | ✅ Construido (rama `modulo-productos`). Ver sección dedicada abajo. |
 | Multi-sucursal en UI (Fase 5) | ⚪ No construido. `DEFAULT_BRANCH_ID` fijo en `lib/constants.ts`. |
 
 ## Qué se verificó en esta sesión
@@ -764,11 +765,132 @@ existentes, UI de administración para reorganizar categorías/subcategorías
 manualmente (el árbol se siembra fijo en `seed-lapso.ts`), pagos divididos
 con nota individual por pago.
 
+## Módulo Productos (antes Recetas, rama `modulo-productos`)
+
+El usuario compartió un PDF con 9 cambios para la pantalla de Recetas,
+pidiendo explícitamente reencuadrarla como una pantalla de **Productos**
+general (para dar de alta merch/souvenirs/tarjetas de regalo desde ahí,
+no solo bebidas con receta) y exponer en la UI varias capacidades que
+antes solo existían sembradas a mano en `prisma/seed-lapso.ts`. Se
+acotaron 4 decisiones antes de planear: renombrar a "Productos" en
+URL/nav/componentes, mover la temperatura de un truco de parseo de
+nombre a una columna real de la base de datos, resolver el vaso a
+descontar automáticamente por tamaño (oz) en vez de una línea de receta
+manual, y construir los 9 puntos en una sola pasada.
+
+**`app/recetas/**` → `app/productos/**`**, **`components/recetas/**` →
+`components/productos/**`**, nav (`components/layout/sidebar.tsx`)
+renombrada. La ruta de editar variante quedó en
+`app/productos/variantes/[variantId]/` (no `app/productos/[variantId]/`)
+porque Next.js no permite dos segmentos dinámicos con nombre distinto
+(`[variantId]` vs `[productId]`) como hermanos al mismo nivel — el nuevo
+`app/productos/[productId]/variantes/nueva/` obligó a anidar el primero
+bajo un segmento estático.
+
+**Temperatura como campo real**: se reemplazó `parseVariantName()` (un
+parser de sufijo en `ProductVariant.name`, construido en "Mejoras
+avanzadas de POS") por una columna real `ProductVariant.temperature
+VariantTemperature?` (nuevo enum de Prisma `CALIENTE|FRIO|FRAPPE`).
+Migración 100% compatible con el POS ya construido: `sizeLabel` ya era
+efectivamente `variant.name` en todos los casos, así que
+`resolveProductVariant`/`ProductDialog` no cambiaron ni de firma ni de
+comportamiento — solo cambió de dónde sale el valor.
+
+**Vaso automático por tamaño** (antes: línea de receta manual en cada
+receta): `ProductVariant.sizeOz Decimal?` + `Ingredient.cupCapacityOz
+Decimal?`. En `createSale` (`actions/pos.ts`), antes del loop de items se
+cargan los ingredientes-vaso activos ordenados por capacidad ascendente;
+por cada item con `variant.sizeOz`, se busca el vaso más chico cuya
+`cupCapacityOz >= sizeOz` y se descuenta 1 por unidad vendida. Si no hay
+ningún vaso con capacidad suficiente, la venta falla con un error
+explícito (nunca vende sin saber qué vaso descontar). `prisma/seed-lapso.ts`
+se reescribió para registrar 4 vasos (3oz/8oz/12oz/16oz, costo estimado)
+y quitar la línea de vaso manual de todas las recetas.
+
+**Merch/souvenirs/tarjetas desde la misma pantalla**: `Product.type`
+(`RECETA`/`REVENTA_DIRECTA`) ahora se elige en "Nuevo producto"; con
+`REVENTA_DIRECTA` cada variante pide `size`/`color`/`note` (3 campos
+opcionales, sin receta) en vez de líneas de receta. Nueva acción
+`addVariantToProduct` (+ pantalla `/productos/[productId]/variantes/nueva`)
+permite agregar una variante a un producto ya existente sin recrearlo.
+
+**Secciones "Tipo de leche" y "Extras"** expuestas por primera vez en la
+UI (antes solo las creaba `seed-lapso.ts` a mano): nuevo componente
+`components/productos/modifier-options-editor.tsx` (filas
+ingrediente+cantidad+precio) usado dos veces por `VariantFields`. Al
+guardar, `actions/recipes.ts` (`applyModifierGroups`) crea/actualiza
+`VariantModifierGroup`+`ModifierOption` — "Tipo de leche" con
+`allowMultiple:false` y una opción "base" auto-generada (detecta la línea
+LECHE de la receta recién guardada, sin que el admin la capture a mano);
+"Extras" con `allowMultiple:true`, todas las filas como adiciones puras.
+**Nunca borra** opciones existentes (upsert por id determinístico
+`${groupId}-base` / `${groupId}-${ingredientId}`) — `ModifierOption` no
+tiene borrado suave y `SaleItemModifier.modifierOptionId` es
+`ON DELETE RESTRICT`; quitar una fila del formulario no la borra de la
+base, queda huérfana hasta limpiarla a mano en Prisma Studio.
+
+**Bug real encontrado y corregido durante la verificación** (el más
+importante de esta fase): el esquema de ids con el que `seed-lapso.ts`
+ya venía creando `ModifierOption` para "Tipo de leche" (base = `${groupId}-entera`,
+alternativas = `${groupId}-${slug(nombreCorto)}`, ej. `-deslactosada`,
+`-soya`) **no coincidía** con el esquema que usa la acción nueva
+(`${groupId}-base` / `${groupId}-${ingredientId}`). Como el upsert
+resuelve por id, la primera vez que alguien editara y guardara una
+variante ya sembrada (ej. Chocolate, Latte, Chai — prácticamente todo el
+menú activo), en vez de actualizar las opciones existentes creaba
+**opciones duplicadas** (ej. "Soya" del seed + "Leche Soya" de la UI,
+ambas seleccionables por separado en el POS). Se corrigió: (1)
+`prisma/seed-lapso.ts` ahora usa el mismo esquema de ids que
+`actions/recipes.ts` (`${groupId}-base` / `${groupId}-${milk.id}`); (2)
+migración de datos en caliente (SQL, dentro de una transacción) que
+renombró las **322 filas** de `ModifierOption` ya existentes al nuevo
+esquema — seguro porque `sale_item_modifiers_modifierOptionId_fkey` tiene
+`ON UPDATE CASCADE` (confirmado antes de correrla: las 3 referencias
+reales de ventas ya hechas se actualizaron solas al nuevo id, sin perder
+la relación). Verificado que re-sembrar (`npm run prisma:seed-lapso`) ya
+no vuelve a duplicar nada.
+
+**Otro efecto secundario confirmado (no introducido en esta fase, ya
+existía)**: `seed-lapso.ts` empieza con `Product.updateMany({ isActive:
+false })` — desactiva **todos** los productos, incluidos los creados a
+mano desde `/productos` (ej. el producto de prueba "Playera LAPSO"
+quedó inactivo tras re-sembrar durante esta verificación, hubo que
+reactivarlo). Si el negocio empieza a dar de alta merch real desde esta
+pantalla, correr `prisma:seed-lapso` después los va a desactivar —
+documentado aquí para que no sorprenda.
+
+Verificado end-to-end con Playwright contra Postgres real: `/productos`
+agrupado por categoría padre; alta de "Playera LAPSO" (REVENTA_DIRECTA)
+con talla/color/nota; "+ Agregar variante" en un producto existente
+(Mocha) con checkbox de temperatura, tamaño en oz, una línea de receta,
+una alternativa de leche y un extra — confirmado en DB que se crearon
+`VariantModifierGroup`/`ModifierOption` correctos (incluida la opción
+base auto-generada); edición de una variante ya sembrada (Chocolate
+Grande Caliente) agregando una opción nueva a Extras, confirmando que
+actualiza en el lugar correcto tras la corrección del esquema de ids;
+venta completa en `/pos` de Chocolate Grande Caliente con sustitución a
+leche de Soya y extra de esencia de vainilla — confirmado en
+`inventory_movements` que se descontó el vaso de 16oz correcto (por
+`sizeOz`), la leche de soya (no la leche entera de la receta base) y el
+extra, y que el total cobrado incluyó ambos `priceDelta`. Venta e
+inventario de prueba limpiados; el producto "Playera LAPSO", la variante
+"Grande" agregada a Mocha y la opción "Esencia de vainilla" agregada a
+Extras de Chocolate se dejaron tal cual por decisión explícita del
+usuario (no son datos de prueba descartables, son ejemplo funcional de
+las nuevas capacidades).
+
+Fuera de alcance deliberadamente: borrar `ModifierOption`/
+`VariantModifierGroup` desde la UI (ver nota de arriba sobre por qué),
+campo `cupCapacityOz` en el diálogo "+ Nuevo ingrediente" (se sigue
+registrando vía seed o Prisma Studio), costo real de los vasos por
+tamaño (estimado, igual que las leches alternativas), combos
+multi-producto.
+
 ## Próximos pasos recomendados (en orden)
 
 Fases 1, 2, 3 y 4 están cerradas, más los ajustes "Cambios Punto de Venta",
-"Reskin visual del POS", el menú real de LAPSO y "Mejoras avanzadas de
-POS". Lo que sigue:
+"Reskin visual del POS", el menú real de LAPSO, "Mejoras avanzadas de
+POS" y el "Módulo Productos". Lo que sigue:
 
 1. **Fase 5 (Multi-sucursal)** — la única fase que queda del roadmap
    original. Quitar el `DEFAULT_BRANCH_ID` fijo, UI de selección/gestión
@@ -789,19 +911,22 @@ POS". Lo que sigue:
    tenga el precio real por litro de cada una.
 5. Simplificaciones deliberadas de Administración/Recetas/Compras/
    Transferencias/Reportes/Clientes/Cambios Punto de Venta/Reskin del
-   POS/Menú de LAPSO/Mejoras avanzadas de POS documentadas arriba
-   (`EmployeePermissionOverride`, ingredientes compuestos nuevos, alertas
-   de caducidad, cancelar orden, `ReorderPoint`, ordenar en `purchaseUnit`
-   real, revertir una transferencia en tránsito, costo histórico por
-   fecha, gráficas, fulfillment de premio de lealtad, gestión de niveles,
-   UI de modificadores, upload real de imágenes, descripciones de
-   producto, avatar de empleado, escaneo de QR por cámara, UI de admin
-   para categorías/subcategorías) — atender si el negocio los necesita.
+   POS/Menú de LAPSO/Mejoras avanzadas de POS/Módulo Productos
+   documentadas arriba (`EmployeePermissionOverride`, ingredientes
+   compuestos nuevos, alertas de caducidad, cancelar orden,
+   `ReorderPoint`, ordenar en `purchaseUnit` real, revertir una
+   transferencia en tránsito, costo histórico por fecha, gráficas,
+   fulfillment de premio de lealtad, gestión de niveles, borrar
+   `ModifierOption`/`VariantModifierGroup` desde la UI, upload real de
+   imágenes, descripciones de producto, avatar de empleado, escaneo de QR
+   por cámara, UI de admin para categorías/subcategorías, costo real de
+   los vasos por tamaño) — atender si el negocio los necesita.
 6. Si se decide adoptar Supabase Auth más adelante: reemplazar
    `lib/password.ts`/`lib/session.ts` por la integración real, el modelo de
    datos ya está listo para ese cambio sin migraciones.
 7. Mergear los PRs pendientes (`pos-reskin-purrcoffee`/menú de LAPSO,
-   `pos-mejoras-avanzadas`) a `main` si no se han mergeado ya.
+   `pos-mejoras-avanzadas`, `modulo-productos`) a `main` si no se han
+   mergeado ya.
 
 ## Convenciones a mantener
 
