@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { unitLabels } from "./enum-labels";
+import { unitStep } from "@/lib/utils";
 
 export type ModifierOptionDraft = {
   key: string;
@@ -69,7 +70,17 @@ export function ModifierOptionsEditor({
             <Select
               className="flex-1"
               value={row.ingredientId}
-              onChange={(e) => updateRow(row.key, { ingredientId: e.target.value })}
+              onChange={(e) => {
+                const ingredientId = e.target.value;
+                const selected = ingredientById.get(ingredientId);
+                updateRow(row.key, {
+                  ingredientId,
+                  // Dosis estándar al elegir el ingrediente (ej. "1 pump"
+                  // de vainilla) en vez de dejar la cantidad de la fila
+                  // anterior, que era para otro ingrediente.
+                  ...(selected ? { quantity: String(selected.standardDoseQuantity ?? 1) } : {}),
+                });
+              }}
             >
               <option value="">Selecciona un ingrediente…</option>
               {ingredientOptions.map((i) => (
@@ -81,14 +92,16 @@ export function ModifierOptionsEditor({
             <Input
               type="number"
               min="0"
-              step="0.01"
+              step={unitStep(ingredient ? ingredient.standardDoseUnit ?? ingredient.baseUnit : undefined)}
               className="w-20"
               value={row.quantity}
               onChange={(e) => updateRow(row.key, { quantity: e.target.value })}
             />
             {ingredient && (
               <span className="w-10 text-xs text-muted-foreground">
-                {unitLabels[ingredient.baseUnit as UnitOfMeasure] ?? ingredient.baseUnit}
+                {unitLabels[(ingredient.standardDoseUnit ?? ingredient.baseUnit) as UnitOfMeasure] ??
+                  ingredient.standardDoseUnit ??
+                  ingredient.baseUnit}
               </span>
             )}
             <Input

@@ -1,8 +1,10 @@
 "use client";
 
+import { useState, useTransition } from "react";
 import { Coffee, Minus, Plus, Trash2 } from "lucide-react";
 import type { SaleOrderType } from "@prisma/client";
-import { useCartStore, lineUnitPrice } from "./cart-store";
+import { useCartStore, lineUnitPrice, cartLineToSaleItemInput } from "./cart-store";
+import { openTab, addItemsToTab, type OpenTabDetail } from "@/actions/pos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn, formatCurrency, posAccentClass } from "@/lib/utils";
@@ -15,7 +17,22 @@ const orderTypes: { value: SaleOrderType; label: string }[] = [
   { value: "DOMICILIO", label: "A domicilio" },
 ];
 
-export function CartPanel({ onCheckout }: { onCheckout: () => void }) {
+export function CartPanel({
+  onCheckout,
+  branchId,
+  shiftId,
+  employeeId,
+  activeTabSummary,
+  onTabChanged,
+}: {
+  onCheckout: () => void;
+  branchId: string;
+  shiftId: string;
+  employeeId: string;
+  // Resumen de la cuenta que se está retomando (null = carrito normal).
+  activeTabSummary: OpenTabDetail | null;
+  onTabChanged: () => void;
+}) {
   const {
     lines,
     incrementLine,
@@ -26,7 +43,37 @@ export function CartPanel({ onCheckout }: { onCheckout: () => void }) {
     setOrderType,
     tableNumber,
     setTableNumber,
+    activeTabId,
+    setActiveTabId,
   } = useCartStore();
+  const [tabError, setTabError] = useState<string | null>(null);
+  const [isSavingTab, startSavingTab] = useTransition();
+
+  function handleLeaveOpen() {
+    setTabError(null);
+    if (lines.length === 0) return;
+
+    startSavingTab(async () => {
+      try {
+        const items = lines.map(cartLineToSaleItemInput);
+        if (activeTabId) {
+          await addItemsToTab({ saleId: activeTabId, branchId, shiftId, employeeId, items });
+        } else {
+          if (!tableNumber.trim()) {
+            setTabError("Captura el número de mesa.");
+            return;
+          }
+          await openTab({ branchId, shiftId, employeeId, tableNumber, items });
+        }
+        useCartStore.getState().clear();
+        setActiveTabId(null);
+        setTableNumber("");
+        onTabChanged();
+      } catch (err) {
+        setTabError(err instanceof Error ? err.message : "No se pudo dejar la cuenta abierta.");
+      }
+    });
+  }
 
   return (
     <div className="flex h-full flex-col border-l border-border">
@@ -53,7 +100,14 @@ export function CartPanel({ onCheckout }: { onCheckout: () => void }) {
             onChange={(e) => setTableNumber(e.target.value)}
             placeholder="Número de mesa"
             className="h-9"
+            disabled={Boolean(activeTabId)}
           />
+        )}
+        {activeTabSummary && (
+          <p className="rounded-md border border-border bg-muted/40 px-2 py-1.5 text-xs text-muted-foreground">
+            Retomando cuenta abierta · {activeTabSummary.items.length} productos ya
+            registrados · {formatCurrency(activeTabSummary.total)}
+          </p>
         )}
       </div>
 
@@ -135,16 +189,29 @@ export function CartPanel({ onCheckout }: { onCheckout: () => void }) {
 
       <div className="border-t border-border p-4">
         <div className="mb-3 flex items-center justify-between text-sm font-medium">
-          <span>Total</span>
+          <span>Total{activeTabSummary && " (esta ronda)"}</span>
           <span>{formatCurrency(subtotal())}</span>
         </div>
-        <Button
-          className={cn("w-full", posAccentClass)}
-          disabled={lines.length === 0}
-          onClick={onCheckout}
-        >
-          Cobrar
-        </Button>
+        {tabError && <p className="mb-2 text-xs text-destructive">{tabError}</p>}
+        <div className="flex gap-2">
+          {orderType === "CONSUMO_LOCAL" && (
+            <Button
+              variant="outline"
+              className="flex-1"
+              disabled={lines.length === 0 || isSavingTab}
+              onClick={handleLeaveOpen}
+            >
+              {isSavingTab ? "Guardando..." : activeTabId ? "Agregar a la cuenta" : "Dejar cuenta abierta"}
+            </Button>
+          )}
+          <Button
+            className={cn("flex-1", posAccentClass)}
+            disabled={lines.length === 0 && !activeTabId}
+            onClick={onCheckout}
+          >
+            Cobrar
+          </Button>
+        </div>
       </div>
     </div>
   );

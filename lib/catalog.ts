@@ -48,6 +48,7 @@ export type CatalogProduct = {
 export type CatalogCategory = {
   id: string;
   name: string;
+  icon: string | null;
   parentId: string | null;
   parentName: string | null;
   products: CatalogProduct[];
@@ -118,6 +119,7 @@ export async function getCatalog(
     .map((category) => ({
       id: category.id,
       name: category.name,
+      icon: category.icon,
       parentId: category.parentId,
       parentName: category.parent?.name ?? null,
       products: category.products.map((product) => ({
@@ -153,7 +155,18 @@ export type ExtraIngredientOption = {
   id: string;
   name: string;
   baseUnit: string;
-  unitCost: number; // costo cotizado en Compras (IngredientSupplier.isSelected), 0 si nadie lo ha cotizado
+  // Costo cotizado en Compras (IngredientSupplier.isSelected), 0 si
+  // nadie lo ha cotizado — YA convertido a costo por standardDoseUnit
+  // cuando existe (ver abajo), para que "cantidad × unitCost" en el
+  // cliente sea correcto sin que el cliente necesite conocer factores de
+  // conversión.
+  unitCost: number;
+  // Dosis estándar de captura (ej. "1 pump" de vainilla, "30 ml" de
+  // leche) — el diálogo de "agregar otro ingrediente" la usa como valor
+  // inicial en vez de "1" del baseUnit crudo. null = sigue usando
+  // baseUnit con cantidad "1", como antes.
+  standardDoseQuantity: number | null;
+  standardDoseUnit: string | null;
 };
 
 // Para "agregar otro ingrediente" libre en el POS (fuera de los
@@ -161,18 +174,36 @@ export type ExtraIngredientOption = {
 // previa, actions/pos.ts recalcula el precio real con el mismo costo al
 // confirmar la venta.
 export async function getExtraIngredientOptions(): Promise<ExtraIngredientOption[]> {
-  const ingredients = await prisma.ingredient.findMany({
-    where: { isActive: true },
-    orderBy: { name: "asc" },
-    include: { suppliers: { where: { isSelected: true }, take: 1 } },
-  });
+  const [ingredients, conversions] = await Promise.all([
+    prisma.ingredient.findMany({
+      where: { isActive: true },
+      orderBy: { name: "asc" },
+      include: { suppliers: { where: { isSelected: true }, take: 1 } },
+    }),
+    prisma.unitConversion.findMany(),
+  ]);
 
-  return ingredients.map((ingredient) => ({
-    id: ingredient.id,
-    name: ingredient.name,
-    baseUnit: ingredient.baseUnit,
-    unitCost: ingredient.suppliers[0]?.cost.toNumber() ?? 0,
-  }));
+  return ingredients.map((ingredient) => {
+    const costPerBaseUnit = ingredient.suppliers[0]?.cost.toNumber() ?? 0;
+    // fromUnit * factor = toUnit (ver UnitConversion en el schema) — si
+    // standardDoseUnit -> baseUnit tiene un factor, "costo por dosis" =
+    // "costo por baseUnit" × ese factor (1 dosis = factor baseUnits).
+    const doseFactor = ingredient.standardDoseUnit
+      ? conversions.find(
+          (c) => c.fromUnit === ingredient.standardDoseUnit && c.toUnit === ingredient.baseUnit
+        )?.factor
+      : null;
+    const unitCost = doseFactor ? costPerBaseUnit * doseFactor.toNumber() : costPerBaseUnit;
+
+    return {
+      id: ingredient.id,
+      name: ingredient.name,
+      baseUnit: ingredient.baseUnit,
+      unitCost,
+      standardDoseQuantity: ingredient.standardDoseQuantity?.toNumber() ?? null,
+      standardDoseUnit: ingredient.standardDoseUnit,
+    };
+  });
 }
 
 // Turno ABIERTO de la sucursal, si existe. `Sale.shiftId` es obligatorio en

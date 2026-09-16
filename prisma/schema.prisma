@@ -132,12 +132,23 @@ enum CashMovementType {
 enum SaleStatus {
   COMPLETADA
   CANCELADA
+  // Cuenta de Mesa dejada abierta a propósito (ver Sale.tableNumber) — ya
+  // tiene items con inventario descontado, pero todavía no se cobra ni
+  // tiene SalePayment. Se cierra vía closeTab() (actions/pos.ts), que la
+  // pasa a COMPLETADA.
+  ABIERTA
 }
 
 enum SaleOrderType {
   CONSUMO_LOCAL
   PARA_LLEVAR
   DOMICILIO
+}
+
+// Solo aplica cuando SaleOrderType = DOMICILIO — cómo llegó el pedido.
+enum DomicilioOrigen {
+  TELEFONO
+  APP
 }
 
 // Eje de temperatura de una variante de bebida (ver ProductVariant.temperature).
@@ -214,6 +225,11 @@ model Branch {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  // % de costo de alimentos objetivo para el precio sugerido al crear/
+  // editar una receta (precio sugerido = costo ÷ este %) — ajustable
+  // desde Administración, ver actions/settings.ts. null se trata como 30
+  // (lib/recipes.ts getTargetFoodCostPercent).
+  targetFoodCostPercent Decimal? @db.Decimal(5, 2)
 
   employeeBranches EmployeeBranch[]
   branchProducts   BranchProduct[]
@@ -275,6 +291,15 @@ model Ingredient {
   // automáticamente el vaso más chico que alcance según
   // ProductVariant.sizeOz, en vez de que la receta lo liste a mano.
   cupCapacityOz     Decimal?           @db.Decimal(6, 2)
+  // Dosis estándar para capturar este ingrediente como línea de receta,
+  // opción de modificador, o extra libre en el POS — evita pedir mililitros
+  // crudos para cosas como "1 pump de vainilla" o "1 splash de leche".
+  // Requiere un UnitConversion de standardDoseUnit → baseUnit para poder
+  // convertir al costear/descontar inventario (mismo mecanismo que ya usa
+  // toBaseUnit() en actions/pos.ts). null = se sigue capturando en baseUnit,
+  // como antes.
+  standardDoseQuantity Decimal?        @db.Decimal(8, 2)
+  standardDoseUnit     UnitOfMeasure?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
@@ -420,6 +445,10 @@ model UnitConversion {
 model ProductCategory {
   id       String            @id @default(cuid())
   name     String            @unique // ej. "Café caliente", "Café frío", "Sin café", "Cafe de expendio"
+  // Nombre de ícono Lucide (ej. "Coffee", "Snowflake") — validado contra
+  // una lista fija en components/productos/category-icon-picker.tsx, no
+  // cualquier string. null = sin ícono (fallback visual genérico).
+  icon     String?
   parentId String?
   parent   ProductCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
   children ProductCategory[] @relation("CategoryHierarchy")
@@ -1068,6 +1097,7 @@ model Sale {
   status     SaleStatus @default(COMPLETADA)
   orderType  SaleOrderType @default(PARA_LLEVAR)
   tableNumber String? // solo aplica cuando orderType = CONSUMO_LOCAL ("Mesa")
+  domicilioOrigen DomicilioOrigen? // solo aplica cuando orderType = DOMICILIO
   subtotal   Decimal    @db.Decimal(10, 2)
   discountTotal Decimal @default(0) @db.Decimal(10, 2)
   total      Decimal    @db.Decimal(10, 2) // IVA incluido

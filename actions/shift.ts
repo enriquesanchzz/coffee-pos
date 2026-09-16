@@ -136,6 +136,16 @@ export async function closeShift(input: CloseShiftInput) {
       throw new Error("No hay un turno abierto válido para cerrar.");
     }
 
+    // Cuentas de Mesa dejadas abiertas (ver actions/pos.ts openTab) —
+    // hay que cobrarlas o decidir qué hacer con ellas antes de cerrar el
+    // turno, no se pueden arrastrar a otro turno en silencio.
+    const openTabsCount = await tx.sale.count({ where: { shiftId: input.shiftId, status: "ABIERTA" } });
+    if (openTabsCount > 0) {
+      throw new Error(
+        `Hay ${openTabsCount} cuenta(s) abierta(s) sin cobrar en este turno — ciérralas antes de cerrar el turno.`
+      );
+    }
+
     const openingCash = shift.openingCash.toNumber();
     const { expectedCash } = await computeExpectedCash(tx, input.shiftId, openingCash);
     const cashDifference = input.closingCash - expectedCash;

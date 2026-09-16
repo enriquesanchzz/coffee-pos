@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import type { IngredientCategory, UnitOfMeasure } from "@prisma/client";
+import type { IngredientOption } from "@/lib/recipes";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,12 +22,7 @@ export function CreateIngredientDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreated: (ingredient: {
-    id: string;
-    name: string;
-    category: string;
-    baseUnit: string;
-  }) => void;
+  onCreated: (ingredient: IngredientOption) => void;
   employeeId: string;
 }) {
   const [name, setName] = useState("");

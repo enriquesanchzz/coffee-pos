@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import type { SaleOrderType } from "@prisma/client";
+import type { SaleOrderType, UnitOfMeasure } from "@prisma/client";
+import type { CreateSaleItemInput } from "@/actions/pos";
 
 export type CartModifier = {
   modifierOptionId: string;
@@ -91,6 +92,11 @@ type CartState = {
   // Solo aplica cuando orderType = CONSUMO_LOCAL ("Mesa").
   tableNumber: string;
   setTableNumber: (tableNumber: string) => void;
+  // Cuenta abierta que se está retomando (ver open-tabs-dialog.tsx) — los
+  // productos del carrito son la SIGUIENTE ronda a agregarle, no una
+  // venta nueva. null = venta normal de un solo paso, sin cambios.
+  activeTabId: string | null;
+  setActiveTabId: (activeTabId: string | null) => void;
   addLine: (input: AddLineInput) => void;
   incrementLine: (lineId: string) => void;
   decrementLine: (lineId: string) => void;
@@ -105,6 +111,8 @@ export const useCartStore = create<CartState>((set, get) => ({
   setOrderType: (orderType) => set({ orderType }),
   tableNumber: "",
   setTableNumber: (tableNumber) => set({ tableNumber }),
+  activeTabId: null,
+  setActiveTabId: (activeTabId) => set({ activeTabId }),
 
   // Agrupa por variante + mismo set de modificadores/extras/nota (misma
   // "receta" exacta), sumando cantidad en vez de crear una línea duplicada.
@@ -175,3 +183,20 @@ export const useCartStore = create<CartState>((set, get) => ({
 }));
 
 export { lineUnitPrice };
+
+// Mismo mapeo CartLine -> CreateSaleItemInput que checkout-dialog.tsx
+// usa al cobrar — reusado también por "Dejar cuenta abierta"
+// (openTab/addItemsToTab) para no duplicarlo.
+export function cartLineToSaleItemInput(line: CartLine): CreateSaleItemInput {
+  return {
+    productVariantId: line.productVariantId,
+    quantity: line.quantity,
+    modifierOptionIds: line.modifiers.map((m) => m.modifierOptionId),
+    extraIngredients: line.extraIngredients.map((e) => ({
+      ingredientId: e.ingredientId,
+      quantity: e.quantity,
+      unit: e.unit as UnitOfMeasure,
+    })),
+    notes: line.notes || undefined,
+  };
+}

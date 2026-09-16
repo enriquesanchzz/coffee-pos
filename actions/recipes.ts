@@ -7,6 +7,7 @@ import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getSessionEmployeeId } from "@/lib/session";
 import { requirePermission } from "@/lib/permissions";
 import { recordRecipeCostSnapshot } from "@/lib/recipe-cost";
+import { getVariantRecipeDetail } from "@/lib/recipes";
 
 export type CreateIngredientInput = {
   employeeId: string;
@@ -43,6 +44,11 @@ export async function createIngredient(input: CreateIngredientInput) {
     name: ingredient.name,
     category: ingredient.category,
     baseUnit: ingredient.baseUnit,
+    // Un ingrediente recién creado no tiene proveedor cotizado ni dosis
+    // estándar todavía.
+    costPerUnit: null,
+    standardDoseQuantity: null,
+    standardDoseUnit: null,
   };
 }
 
@@ -165,7 +171,7 @@ async function applyModifierGroups(
           priceDelta: opt.priceDelta,
           ingredientId: opt.ingredientId,
           quantityDelta: opt.quantity,
-          unit: ingredient.baseUnit,
+          unit: ingredient.standardDoseUnit ?? ingredient.baseUnit,
           isSubstitution: true,
         },
         create: {
@@ -175,7 +181,7 @@ async function applyModifierGroups(
           priceDelta: opt.priceDelta,
           ingredientId: opt.ingredientId,
           quantityDelta: opt.quantity,
-          unit: ingredient.baseUnit,
+          unit: ingredient.standardDoseUnit ?? ingredient.baseUnit,
           isSubstitution: true,
         },
       });
@@ -201,7 +207,7 @@ async function applyModifierGroups(
           priceDelta: opt.priceDelta,
           ingredientId: opt.ingredientId,
           quantityDelta: opt.quantity,
-          unit: ingredient.baseUnit,
+          unit: ingredient.standardDoseUnit ?? ingredient.baseUnit,
           isSubstitution: false,
         },
         create: {
@@ -211,7 +217,7 @@ async function applyModifierGroups(
           priceDelta: opt.priceDelta,
           ingredientId: opt.ingredientId,
           quantityDelta: opt.quantity,
-          unit: ingredient.baseUnit,
+          unit: ingredient.standardDoseUnit ?? ingredient.baseUnit,
           isSubstitution: false,
         },
       });
@@ -225,6 +231,7 @@ export type CreateProductWithRecipeInput = {
   imageUrl?: string;
   categoryId?: string;
   newCategoryName?: string;
+  newCategoryIcon?: string;
   // RECETA (bebida con receta, default) o REVENTA_DIRECTA (merch/
   // souvenirs/tarjetas — sin receta, con talla/color/nota en su lugar).
   type?: ProductType;
@@ -273,7 +280,9 @@ export async function createProductWithRecipe(input: CreateProductWithRecipeInpu
 
   const productId = await prisma.$transaction(async (tx) => {
     const category = newCategoryName
-      ? await tx.productCategory.create({ data: { name: newCategoryName } })
+      ? await tx.productCategory.create({
+          data: { name: newCategoryName, icon: input.newCategoryIcon || null },
+        })
       : await tx.productCategory.findUniqueOrThrow({ where: { id: input.categoryId } });
 
     const product = await tx.product.create({
@@ -514,4 +523,47 @@ export async function updateVariantRecipe(input: UpdateVariantRecipeInput) {
   revalidatePath("/pos");
 
   return { variantId: input.variantId };
+}
+
+// Envoltura delgada de lib/recipes.ts (lectura pura) como Server Action —
+// el workspace de /productos (client) la llama al abrir una variante
+// desde el menú de variantes, en vez de precargar el detalle completo
+// (recetas, modificadores) de todo el catálogo de una vez.
+export async function fetchVariantRecipeDetail(variantId: string) {
+  return getVariantRecipeDetail(variantId);
+}
+
+export type UpdateProductCategoryInput = {
+  employeeId: string;
+  categoryId: string;
+  name: string;
+  icon?: string;
+  parentId?: string;
+};
+
+// Primera UI real para editar una categoría ya existente (antes solo se
+// creaban, vía "+ Nueva categoría" dentro de Nuevo producto) — nombre,
+// ícono (components/productos/category-icon-picker.tsx) y categoría
+// padre.
+export async function updateProductCategory(input: UpdateProductCategoryInput) {
+  if (input.employeeId !== (await getSessionEmployeeId())) {
+    throw new Error("El empleado no coincide con la sesión activa.");
+  }
+  const name = input.name.trim();
+  if (!name) {
+    throw new Error("El nombre de la categoría es obligatorio.");
+  }
+  if (input.parentId === input.categoryId) {
+    throw new Error("Una categoría no puede ser su propia categoría padre.");
+  }
+
+  await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "PRODUCTO_CREAR");
+
+  await prisma.productCategory.update({
+    where: { id: input.categoryId },
+    data: { name, icon: input.icon || null, parentId: input.parentId || null },
+  });
+
+  revalidatePath("/productos");
+  revalidatePath("/pos");
 }

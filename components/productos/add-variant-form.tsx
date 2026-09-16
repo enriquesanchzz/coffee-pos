@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import type { VariantTemperature } from "@prisma/client";
 import type { ProductBasicInfo, IngredientOption, ComposedRecipeOption } from "@/lib/recipes";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,12 +17,15 @@ export function AddVariantForm({
   product,
   ingredientOptions,
   employeeId,
+  targetFoodCostPercent,
+  onSaved,
 }: {
   product: ProductBasicInfo;
   ingredientOptions: { ingredients: IngredientOption[]; composedRecipes: ComposedRecipeOption[] };
   employeeId: string;
+  targetFoodCostPercent: number;
+  onSaved: () => void;
 }) {
-  const router = useRouter();
   const [name, setName] = useState("");
   const [price, setPrice] = useState("0");
   const [temperature, setTemperature] = useState<VariantTemperature | "">("");
@@ -71,7 +73,7 @@ export function AddVariantForm({
             note: note || undefined,
           },
         });
-        router.push("/productos");
+        onSaved();
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo agregar la variante.");
       }
@@ -117,6 +119,7 @@ export function AddVariantForm({
             composedRecipes={ingredientOptions.composedRecipes}
             onIngredientCreated={(ingredient) => setIngredients((prev) => [...prev, ingredient])}
             employeeId={employeeId}
+            targetFoodCostPercent={targetFoodCostPercent}
           />
         </CardContent>
       </Card>

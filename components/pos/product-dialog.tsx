@@ -5,7 +5,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { formatCurrency, cn, posAccentClass, posAccentBorderClass } from "@/lib/utils";
+import { formatCurrency, cn, posAccentClass, posAccentBorderClass, unitStep } from "@/lib/utils";
 import {
   resolveProductVariant,
   type CatalogModifierOption,
@@ -59,7 +59,19 @@ export function ProductDialog({
       const first = product.variants[0] ?? null;
       setSizeLabel(first?.sizeLabel ?? null);
       setTemperature(first?.temperature ?? null);
-      setSelected({});
+      // "Leche entera" (la opción base auto-generada, ver "Módulo
+      // Productos") viene preseleccionada por default en el grupo "Tipo
+      // de leche" — el cliente pide sustituir solo cuando de verdad
+      // quiere otra leche. Se identifica por nombre de grupo (no solo
+      // por isSubstitution:false, que "Extras" también usa para todas
+      // sus opciones y esas NO deben preseleccionarse).
+      const initialSelected: Record<string, Set<string>> = {};
+      for (const group of first?.modifierGroups ?? []) {
+        if (group.name !== "Tipo de leche") continue;
+        const base = group.options.find((o) => !o.isSubstitution);
+        if (base) initialSelected[group.id] = new Set([base.id]);
+      }
+      setSelected(initialSelected);
       setNotes("");
       setExtras([]);
       setAddingExtraId("");
@@ -110,6 +122,9 @@ export function ProductDialog({
     setAddingExtraId(option.id);
     setExtraQuery(option.name);
     setExtraListOpen(false);
+    // Dosis estándar (ej. "1 pump" de vainilla, "30 ml" de leche) en vez
+    // de "1" del baseUnit crudo — ver Ingredient.standardDoseQuantity.
+    setAddingExtraQty(String(option.standardDoseQuantity ?? 1));
   }
 
   function toggleOption(groupId: string, option: CatalogModifierOption, allowMultiple: boolean) {
@@ -136,7 +151,9 @@ export function ProductDialog({
         ingredientId: option.id,
         name: option.name,
         quantity,
-        unit: option.baseUnit,
+        unit: option.standardDoseUnit ?? option.baseUnit,
+        // Vista previa — actions/pos.ts recalcula el precio real
+        // convirtiendo a baseUnit (unitCost está en baseUnit).
         priceDelta: quantity * option.unitCost,
       },
     ]);
@@ -285,7 +302,10 @@ export function ProductDialog({
                         className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
                       >
                         {ingredient.name}
-                        <span className="text-muted-foreground"> · {ingredient.baseUnit}</span>
+                        <span className="text-muted-foreground">
+                          {" "}
+                          · {ingredient.standardDoseUnit ?? ingredient.baseUnit}
+                        </span>
                       </button>
                     </li>
                   ))}
@@ -296,13 +316,17 @@ export function ProductDialog({
               <Input
                 type="number"
                 min="0"
-                step="0.01"
+                step={unitStep(
+                  selectedExtraOption ? selectedExtraOption.standardDoseUnit ?? selectedExtraOption.baseUnit : undefined
+                )}
                 className="w-20"
                 value={addingExtraQty}
                 onChange={(e) => setAddingExtraQty(e.target.value)}
               />
               {selectedExtraOption && (
-                <span className="text-xs text-muted-foreground">{selectedExtraOption.baseUnit}</span>
+                <span className="text-xs text-muted-foreground">
+                  {selectedExtraOption.standardDoseUnit ?? selectedExtraOption.baseUnit}
+                </span>
               )}
             </div>
             <Button type="button" variant="outline" onClick={handleAddExtra} disabled={!addingExtraId}>

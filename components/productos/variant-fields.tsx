@@ -4,10 +4,12 @@ import type { ProductType, VariantTemperature } from "@prisma/client";
 import type { IngredientOption, ComposedRecipeOption } from "@/lib/recipes";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { cn, formatCurrency } from "@/lib/utils";
 import { temperatureLabels } from "./enum-labels";
 import { RecipeLinesEditor, type LineDraft } from "./recipe-lines-editor";
 import { ModifierOptionsEditor, type ModifierOptionDraft } from "./modifier-options-editor";
+import { computeLinesCost } from "./recipe-cost";
 
 const TEMPERATURE_CHOICES: (VariantTemperature | "")[] = ["", "CALIENTE", "FRIO", "FRAPPE"];
 
@@ -44,6 +46,7 @@ export function VariantFields({
   composedRecipes,
   onIngredientCreated,
   employeeId,
+  targetFoodCostPercent,
 }: {
   idPrefix: string;
   productType: ProductType;
@@ -71,7 +74,13 @@ export function VariantFields({
   composedRecipes: ComposedRecipeOption[];
   onIngredientCreated: (i: IngredientOption) => void;
   employeeId: string;
+  // % de food cost objetivo (Branch.targetFoodCostPercent), para el
+  // precio sugerido debajo de la receta — ver Administración.
+  targetFoodCostPercent: number;
 }) {
+  const recipeCost = computeLinesCost(lines, ingredients, composedRecipes);
+  const suggestedPrice = recipeCost > 0 ? recipeCost / (targetFoodCostPercent / 100) : 0;
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex gap-4">
@@ -146,6 +155,30 @@ export function VariantFields({
               onIngredientCreated={onIngredientCreated}
               employeeId={employeeId}
             />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 rounded-md border border-border bg-muted/40 p-3 text-sm">
+            <p>
+              Costo de ingredientes: <span className="font-medium">{formatCurrency(recipeCost)}</span>
+            </p>
+            {recipeCost > 0 ? (
+              <>
+                <p>
+                  Precio sugerido (food cost {targetFoodCostPercent}%):{" "}
+                  <span className="font-medium">{formatCurrency(suggestedPrice)}</span>
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onPriceChange(suggestedPrice.toFixed(2))}
+                >
+                  Usar precio sugerido
+                </Button>
+              </>
+            ) : (
+              <p className="text-muted-foreground">Agrega ingredientes con costo para ver un precio sugerido.</p>
+            )}
           </div>
 
           <ModifierOptionsEditor
