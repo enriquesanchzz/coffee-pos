@@ -326,6 +326,34 @@ async function main() {
     milkAlternatives.push(milk);
   }
 
+  console.log("Sembrando dosis estándar de captura (pump, splash)...");
+
+  // "Módulo Productos y POS 2" — evita pedir mililitros crudos al
+  // agregar leche como extra libre en el POS (ej. a un Americano): la
+  // cantidad default pasa de "1" a "30" (splash), mismo baseUnit (ML) —
+  // updateMany (no update) porque algunas de estas leches las siembra
+  // seed-demo.ts, no este script, y no debe tronar si esa fila no
+  // existe todavía.
+  await prisma.ingredient.updateMany({
+    where: { category: "LECHE", baseUnit: "ML" },
+    data: { standardDoseQuantity: 30, standardDoseUnit: "ML" },
+  });
+
+  // Esencia de vainilla específicamente (no esenciaSabor/escencia chai,
+  // que sí llevan cantidad variable real por receta según tamaño) — "1
+  // pump" en vez de mililitros crudos, ESTIMADO (1 pump ≈ 5ml, ver
+  // UnitConversion PUMP→ML abajo), ajustable después.
+  await prisma.ingredient.updateMany({
+    where: { id: "ing-esencia-vainilla" },
+    data: { standardDoseQuantity: 1, standardDoseUnit: "PUMP" },
+  });
+
+  await prisma.unitConversion.upsert({
+    where: { fromUnit_toUnit: { fromUnit: "PUMP", toUnit: "ML" } },
+    update: {},
+    create: { fromUnit: "PUMP", toUnit: "ML", factor: 5 },
+  });
+
   console.log("Sembrando ingredientes de la sección Extras del menú...");
 
   // Los "Extras" del menú (Aderezo, Salsa, Extracción, etc.) son cargos

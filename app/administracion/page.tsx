@@ -4,10 +4,12 @@ import { requirePasswordSession } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getEmployees } from "@/lib/employees";
+import { getTargetFoodCostPercent } from "@/lib/recipes";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { logoutAction } from "@/actions/session";
+import { SettingsForm } from "@/components/administracion/settings-form";
 
 export default async function AdministracionPage() {
   const actor = await requirePasswordSession();
@@ -18,7 +20,16 @@ export default async function AdministracionPage() {
     (await hasPermission(actor.id, DEFAULT_BRANCH_ID, "EMPLEADO_MODIFICAR"));
   if (!canManage) redirect("/pos");
 
-  const employees = await getEmployees();
+  const canManageSettings = await hasPermission(
+    actor.id,
+    DEFAULT_BRANCH_ID,
+    "CONFIGURACION_SISTEMA_GESTIONAR"
+  );
+
+  const [employees, targetFoodCostPercent] = await Promise.all([
+    getEmployees(),
+    canManageSettings ? getTargetFoodCostPercent() : Promise.resolve(null),
+  ]);
 
   return (
     <div className="flex h-screen">
@@ -77,6 +88,17 @@ export default async function AdministracionPage() {
               ))}
             </CardContent>
           </Card>
+
+          {canManageSettings && targetFoodCostPercent !== null && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Configuración</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <SettingsForm targetFoodCostPercent={targetFoodCostPercent} />
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

@@ -1,7 +1,15 @@
-import type { ProductType, VariantTemperature } from "@prisma/client";
+import { Prisma, type ProductType, type VariantTemperature } from "@prisma/client";
 import { prisma } from "./prisma";
+import { DEFAULT_BRANCH_ID } from "./constants";
+import { calculateRecipeVersionCost } from "./recipe-cost";
 
-export type ProductCategoryOption = { id: string; name: string; parentId: string | null; parentName: string | null };
+export type ProductCategoryOption = {
+  id: string;
+  name: string;
+  icon: string | null;
+  parentId: string | null;
+  parentName: string | null;
+};
 
 export type ProductBasicInfo = { id: string; name: string; type: ProductType; categoryName: string };
 
@@ -23,9 +31,19 @@ export async function getProductCategories(): Promise<ProductCategoryOption[]> {
   return categories.map((c) => ({
     id: c.id,
     name: c.name,
+    icon: c.icon,
     parentId: c.parentId,
     parentName: c.parent?.name ?? null,
   }));
+}
+
+// % de costo de alimentos objetivo para el precio sugerido (precio =
+// costo ÷ este %), configurable desde Administración (ver
+// actions/settings.ts, CONFIGURACION_SISTEMA_GESTIONAR). null en DB
+// (sucursal sin ajustar todavía) cae a 30 por defecto.
+export async function getTargetFoodCostPercent(): Promise<number> {
+  const branch = await prisma.branch.findUnique({ where: { id: DEFAULT_BRANCH_ID } });
+  return branch?.targetFoodCostPercent?.toNumber() ?? 30;
 }
 
 export type IngredientOption = {
@@ -33,9 +51,19 @@ export type IngredientOption = {
   name: string;
   category: string;
   baseUnit: string;
+  // Costo actual por baseUnit (IngredientSupplier.isSelected), null si
+  // nadie lo ha cotizado todavía — mismo criterio que
+  // calculateRecipeVersionCost (lib/recipe-cost.ts). Sin conversión de
+  // unidad, misma limitación heredada.
+  costPerUnit: number | null;
+  // Dosis estándar de captura (ver Ingredient.standardDoseQuantity) —
+  // RecipeLinesEditor/ModifierOptionsEditor la usan como unidad fija en
+  // vez de baseUnit cuando existe.
+  standardDoseQuantity: number | null;
+  standardDoseUnit: string | null;
 };
 
-export type ComposedRecipeOption = { id: string; name: string };
+export type ComposedRecipeOption = { id: string; name: string; currentCost: number };
 
 export type IngredientPickerOptions = {
   ingredients: IngredientOption[];
@@ -58,12 +86,27 @@ export async function getIngredientPickerOptions(): Promise<IngredientPickerOpti
     prisma.ingredient.findMany({
       where: { isActive: true, category: { not: "INSUMOS" } },
       orderBy: { name: "asc" },
+      include: { suppliers: { where: { isSelected: true }, take: 1 } },
     }),
     prisma.recipe.findMany({
       where: { kind: "INGREDIENTE_COMPUESTO" },
       orderBy: { name: "asc" },
+      include: { versions: { where: { isActive: true }, take: 1 } },
     }),
   ]);
+
+  // Costo de cada receta compuesta (jarabe casero, etc.) en un solo
+  // $transaction — calculateRecipeVersionCost (lib/recipe-cost.ts) es
+  // recursivo y ya se usa igual en lib/reports.ts.
+  const composedCosts = await prisma.$transaction((tx) =>
+    Promise.all(
+      composedRecipes.map(async (r) => {
+        const version = r.versions[0];
+        if (!version) return new Prisma.Decimal(0);
+        return calculateRecipeVersionCost(tx, version.id);
+      })
+    )
+  );
 
   return {
     ingredients: ingredients.map((i) => ({
@@ -71,8 +114,15 @@ export async function getIngredientPickerOptions(): Promise<IngredientPickerOpti
       name: i.name,
       category: i.category,
       baseUnit: i.baseUnit,
+      costPerUnit: i.suppliers[0]?.cost.toNumber() ?? null,
+      standardDoseQuantity: i.standardDoseQuantity?.toNumber() ?? null,
+      standardDoseUnit: i.standardDoseUnit,
     })),
-    composedRecipes: composedRecipes.map((r) => ({ id: r.id, name: r.name ?? "(sin nombre)" })),
+    composedRecipes: composedRecipes.map((r, idx) => ({
+      id: r.id,
+      name: r.name ?? "(sin nombre)",
+      currentCost: composedCosts[idx].toNumber(),
+    })),
   };
 }
 
@@ -92,6 +142,8 @@ export type RecipeOverviewVariant = {
 export type RecipeOverviewProduct = {
   id: string;
   name: string;
+  imageUrl: string | null;
+  isActive: boolean;
   type: ProductType;
   categoryId: string;
   categoryName: string;
@@ -128,6 +180,8 @@ export async function getRecipeOverview(): Promise<RecipeOverviewProduct[]> {
   return products.map((product) => ({
     id: product.id,
     name: product.name,
+    imageUrl: product.imageUrl,
+    isActive: product.isActive,
     type: product.type,
     categoryId: product.categoryId,
     categoryName: product.category.name,

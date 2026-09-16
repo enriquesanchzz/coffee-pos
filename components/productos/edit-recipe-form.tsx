@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import type { UnitOfMeasure, VariantTemperature } from "@prisma/client";
 import type { VariantRecipeDetail, IngredientOption, ComposedRecipeOption, ModifierOptionDetail } from "@/lib/recipes";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,12 +38,15 @@ export function EditRecipeForm({
   detail,
   ingredientOptions,
   employeeId,
+  targetFoodCostPercent,
+  onSaved,
 }: {
   detail: VariantRecipeDetail;
   ingredientOptions: { ingredients: IngredientOption[]; composedRecipes: ComposedRecipeOption[] };
   employeeId: string;
+  targetFoodCostPercent: number;
+  onSaved: () => void;
 }) {
-  const router = useRouter();
   const [name, setName] = useState(detail.variantName);
   const [imageUrl, setImageUrl] = useState(detail.productImageUrl ?? "");
   const [price, setPrice] = useState(String(detail.price));
@@ -94,7 +96,7 @@ export function EditRecipeForm({
           color: color || undefined,
           note: note || undefined,
         });
-        router.push("/productos");
+        onSaved();
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo guardar la receta.");
       }
@@ -155,6 +157,7 @@ export function EditRecipeForm({
             composedRecipes={ingredientOptions.composedRecipes}
             onIngredientCreated={(ingredient) => setIngredients((prev) => [...prev, ingredient])}
             employeeId={employeeId}
+            targetFoodCostPercent={targetFoodCostPercent}
           />
 
           <label className="flex items-center gap-2 text-sm">

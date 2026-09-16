@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { CreateIngredientDialog } from "./create-ingredient-dialog";
 import { unitLabels } from "./enum-labels";
+import { unitStep } from "@/lib/utils";
 
 export type LineDraft = {
   key: string;
@@ -74,11 +75,19 @@ export function RecipeLinesEditor({
                   refKind === "ingredient" ? ingredientById.get(refId) : undefined;
                 updateLine(line.key, {
                   ref,
-                  // La unidad de una línea de ingrediente atómico siempre es su
-                  // baseUnit — ver nota en actions/recipes.ts sobre por qué no
-                  // se deja elegir libremente (evita romper la conversión al
-                  // vender, que exige un UnitConversion registrado).
-                  ...(selectedIngredient ? { unit: selectedIngredient.baseUnit as UnitOfMeasure } : {}),
+                  // La unidad de una línea de ingrediente atómico siempre es
+                  // fija — su dosis estándar si tiene (ej. "1 pump" de
+                  // vainilla) o si no su baseUnit — ver nota en
+                  // actions/recipes.ts sobre por qué no se deja elegir
+                  // libremente (evita romper la conversión al vender, que
+                  // exige un UnitConversion registrado).
+                  ...(selectedIngredient
+                    ? {
+                        unit: (selectedIngredient.standardDoseUnit ??
+                          selectedIngredient.baseUnit) as UnitOfMeasure,
+                        quantity: String(selectedIngredient.standardDoseQuantity ?? 1),
+                      }
+                    : {}),
                 });
               }}
             >
@@ -104,7 +113,7 @@ export function RecipeLinesEditor({
             <Input
               type="number"
               min="0"
-              step="0.01"
+              step={unitStep(ingredient ? ingredient.standardDoseUnit ?? ingredient.baseUnit : line.unit)}
               className="w-24"
               value={line.quantity}
               onChange={(e) => updateLine(line.key, { quantity: e.target.value })}
@@ -112,7 +121,9 @@ export function RecipeLinesEditor({
 
             {ingredient ? (
               <span className="w-14 text-sm text-muted-foreground">
-                {unitLabels[ingredient.baseUnit as UnitOfMeasure] ?? ingredient.baseUnit}
+                {unitLabels[(ingredient.standardDoseUnit ?? ingredient.baseUnit) as UnitOfMeasure] ??
+                  ingredient.standardDoseUnit ??
+                  ingredient.baseUnit}
               </span>
             ) : (
               <Select

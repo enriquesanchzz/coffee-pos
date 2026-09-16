@@ -111,6 +111,7 @@ async function main() {
     create: {
       id: "branch-principal",
       name: "Sucursal Principal",
+      targetFoodCostPercent: 30,
     },
   });
 

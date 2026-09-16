@@ -1,18 +1,18 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { PaymentMethod, DiscountType, ManualDiscountReason } from "@prisma/client";
+import { PaymentMethod, DiscountType, ManualDiscountReason, DomicilioOrigen } from "@prisma/client";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { cn, formatCurrency, posAccentClass, posAccentBorderClass } from "@/lib/utils";
-import { createSale } from "@/actions/pos";
+import { createSale, closeTab } from "@/actions/pos";
 import { findDiscountCodeByCode, type FoundDiscountCode } from "@/actions/discounts";
 import { createCustomer, updateCustomer } from "@/actions/customers";
 import type { CustomerOption } from "@/lib/customers";
-import { useCartStore } from "./cart-store";
+import { useCartStore, cartLineToSaleItemInput } from "./cart-store";
 
 const paymentMethods: { value: PaymentMethod; label: string }[] = [
   { value: "EFECTIVO", label: "Efectivo" },
@@ -60,6 +60,7 @@ export function CheckoutDialog({
   shiftId,
   employeeId,
   customers,
+  activeTabBaseTotal,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -67,8 +68,21 @@ export function CheckoutDialog({
   shiftId: string;
   employeeId: string;
   customers: CustomerOption[];
+  // Total ya registrado de la cuenta abierta que se está cobrando (rondas
+  // anteriores) — el carrito actual es solo la última ronda, si hay.
+  activeTabBaseTotal?: number;
 }) {
-  const { lines, subtotal, clear, orderType, setOrderType, tableNumber, setTableNumber } = useCartStore();
+  const {
+    lines,
+    subtotal,
+    clear,
+    orderType,
+    setOrderType,
+    tableNumber,
+    setTableNumber,
+    activeTabId,
+    setActiveTabId,
+  } = useCartStore();
   const [method, setMethod] = useState<PaymentMethod>("EFECTIVO");
   const [transferNote, setTransferNote] = useState("");
   const [customerId, setCustomerId] = useState("");
@@ -91,6 +105,9 @@ export function CheckoutDialog({
   // cliente seleccionado — se guarda de vuelta al cliente al confirmar la
   // venta si cambió.
   const [domicilioAddress, setDomicilioAddress] = useState("");
+  // Origen del pedido a domicilio (teléfono del negocio vs. app de
+  // delivery) — solo aplica con orderType = DOMICILIO.
+  const [domicilioOrigen, setDomicilioOrigen] = useState<DomicilioOrigen>("TELEFONO");
 
   const [discountMode, setDiscountMode] = useState<DiscountMode>("NINGUNO");
   const [codeInput, setCodeInput] = useState("");
@@ -171,7 +188,7 @@ export function CheckoutDialog({
     });
   }
 
-  const rawSubtotal = subtotal();
+  const rawSubtotal = subtotal() + (activeTabBaseTotal ?? 0);
   const discountPreview =
     discountMode === "CODIGO" && resolvedCode
       ? previewDiscountAmount(resolvedCode.type, resolvedCode.value, rawSubtotal)
@@ -203,6 +220,14 @@ export function CheckoutDialog({
 
   function handleConfirm() {
     setError(null);
+
+    // "A domicilio" exige cliente (cambios sección POS) — sin cliente no
+    // hay a quién entregarle ni datos de contacto si algo sale mal.
+    if (orderType === "DOMICILIO" && !selectedCustomer) {
+      setError("Busca o crea un cliente arriba antes de cobrar un pedido a domicilio.");
+      return;
+    }
+
     startTransition(async () => {
       try {
         // Domicilio (punto 10): si el cliente ya existía pero cambió el
@@ -221,49 +246,64 @@ export function CheckoutDialog({
           });
         }
 
-        await createSale({
-          branchId,
-          shiftId,
-          employeeId,
-          items: lines.map((line) => ({
-            productVariantId: line.productVariantId,
-            quantity: line.quantity,
-            modifierOptionIds: line.modifiers.map((m) => m.modifierOptionId),
-            extraIngredients: line.extraIngredients.map((e) => ({
-              ingredientId: e.ingredientId,
-              quantity: e.quantity,
-            })),
-            notes: line.notes || undefined,
-          })),
-          // El checkout hoy solo soporta un método por venta. El modelo
-          // (SalePayment) ya permite pagos divididos — falta la UI.
-          payments: [
-            {
-              method,
-              amount: total,
-              note: method === "TRANSFERENCIA" ? transferNote.trim() || undefined : undefined,
-            },
-          ],
-          orderType,
-          tableNumber: orderType === "CONSUMO_LOCAL" ? tableNumber.trim() || undefined : undefined,
-          customerId: customerId || undefined,
-          discountCodeId: discountMode === "CODIGO" ? resolvedCode?.id : undefined,
-          manualDiscount:
-            discountMode === "MANUAL"
-              ? {
-                  type: manualType,
-                  value: Number(manualValue) || 0,
-                  reason: manualReason,
-                  authorizingPin,
-                }
-              : undefined,
-        });
+        const payments = [
+          {
+            method,
+            amount: total,
+            note: method === "TRANSFERENCIA" ? transferNote.trim() || undefined : undefined,
+          },
+        ];
+        const discountCodeId = discountMode === "CODIGO" ? resolvedCode?.id : undefined;
+        const manualDiscount =
+          discountMode === "MANUAL"
+            ? {
+                type: manualType,
+                value: Number(manualValue) || 0,
+                reason: manualReason,
+                authorizingPin,
+              }
+            : undefined;
+
+        if (activeTabId) {
+          // Cerrar una cuenta abierta (ver "cambios para la sección de
+          // punto de venta") — si hay productos en el carrito, se agregan
+          // como la última ronda en la misma transacción que cobra.
+          await closeTab({
+            saleId: activeTabId,
+            branchId,
+            shiftId,
+            employeeId,
+            items: lines.length > 0 ? lines.map(cartLineToSaleItemInput) : undefined,
+            payments,
+            customerId: customerId || undefined,
+            discountCodeId,
+            manualDiscount,
+          });
+        } else {
+          await createSale({
+            branchId,
+            shiftId,
+            employeeId,
+            items: lines.map(cartLineToSaleItemInput),
+            // El checkout hoy solo soporta un método por venta. El modelo
+            // (SalePayment) ya permite pagos divididos — falta la UI.
+            payments,
+            orderType,
+            tableNumber: orderType === "CONSUMO_LOCAL" ? tableNumber.trim() || undefined : undefined,
+            domicilioOrigen: orderType === "DOMICILIO" ? domicilioOrigen : undefined,
+            customerId: customerId || undefined,
+            discountCodeId,
+            manualDiscount,
+          });
+        }
         clear();
         handleClearCustomer();
         setDiscountMode("NINGUNO");
         resetDiscountState();
         setOrderType("PARA_LLEVAR");
         setTableNumber("");
+        setActiveTabId(null);
+        setDomicilioOrigen("TELEFONO");
         setTransferNote("");
         setLocalCustomers([]);
         onOpenChange(false);
@@ -276,6 +316,13 @@ export function CheckoutDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange} title="Cobrar">
       <div className="flex flex-col gap-4">
+        {activeTabId && (
+          <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+            Cerrando cuenta de Mesa {tableNumber || "—"} · ya registrado:{" "}
+            {formatCurrency(activeTabBaseTotal ?? 0)}
+            {lines.length > 0 && ` + esta ronda: ${formatCurrency(subtotal())}`}
+          </p>
+        )}
         <div className="flex flex-col gap-1">
           <Label htmlFor="customer">Cliente (opcional)</Label>
           <div className="relative">
@@ -390,7 +437,35 @@ export function CheckoutDialog({
                   placeholder="Calle, número, colonia…"
                 />
               </div>
+              <div className="flex flex-col gap-1">
+                <Label>¿Cómo llegó el pedido?</Label>
+                <div className="flex gap-2">
+                  {(
+                    [
+                      { value: "TELEFONO" as const, label: "Teléfono del negocio" },
+                      { value: "APP" as const, label: "App de delivery" },
+                    ]
+                  ).map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setDomicilioOrigen(opt.value)}
+                      className={cn(
+                        "flex-1 rounded-md border border-border px-3 py-1.5 text-sm",
+                        domicilioOrigen === opt.value ? posAccentBorderClass : "hover:bg-muted"
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
+          )}
+          {orderType === "DOMICILIO" && !selectedCustomer && (
+            <p className="text-xs text-destructive">
+              Busca o crea un cliente arriba — a domicilio necesita saber a quién entregarle.
+            </p>
           )}
         </div>
 
@@ -468,7 +543,7 @@ export function CheckoutDialog({
                   id="manualValue"
                   type="number"
                   min="0"
-                  step="0.01"
+                  step={manualType === "PORCENTAJE" ? "1" : "0.01"}
                   value={manualValue}
                   onChange={(e) => setManualValue(e.target.value)}
                 />

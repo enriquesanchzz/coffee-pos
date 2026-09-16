@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import type { ProductType, VariantTemperature } from "@prisma/client";
 import type { ProductCategoryOption, IngredientOption, ComposedRecipeOption } from "@/lib/recipes";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +13,7 @@ import { createProductWithRecipe, type RecipeLineInput } from "@/actions/recipes
 import { emptyLine, initialLine, type LineDraft } from "./recipe-lines-editor";
 import { emptyModifierOption, modifierOptionsToInput, type ModifierOptionDraft } from "./modifier-options-editor";
 import { VariantFields } from "./variant-fields";
+import { CategoryIconPicker } from "./category-icon-picker";
 
 type VariantDraft = {
   key: string;
@@ -85,17 +85,21 @@ export function NewProductForm({
   categories,
   ingredientOptions,
   employeeId,
+  targetFoodCostPercent,
+  onSaved,
 }: {
   categories: ProductCategoryOption[];
   ingredientOptions: { ingredients: IngredientOption[]; composedRecipes: ComposedRecipeOption[] };
   employeeId: string;
+  targetFoodCostPercent: number;
+  onSaved: (newProductId: string) => void;
 }) {
-  const router = useRouter();
   const [productType, setProductType] = useState<ProductType>("RECETA");
   const [productName, setProductName] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [categoryId, setCategoryId] = useState(categories[0]?.id ?? NEW_CATEGORY_VALUE);
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategoryIcon, setNewCategoryIcon] = useState<string | null>(null);
   const [variants, setVariants] = useState<VariantDraft[]>([initialVariant()]);
   const [ingredients, setIngredients] = useState(ingredientOptions.ingredients);
   const [error, setError] = useState<string | null>(null);
@@ -123,13 +127,14 @@ export function NewProductForm({
 
     startTransition(async () => {
       try {
-        await createProductWithRecipe({
+        const created = await createProductWithRecipe({
           employeeId,
           productName,
           type: productType,
           imageUrl: imageUrl || undefined,
           categoryId: categoryId === NEW_CATEGORY_VALUE ? undefined : categoryId,
           newCategoryName: categoryId === NEW_CATEGORY_VALUE ? newCategoryName : undefined,
+          newCategoryIcon: categoryId === NEW_CATEGORY_VALUE ? newCategoryIcon || undefined : undefined,
           variants: variants.map((v) => ({
             name: v.name,
             price: Number(v.price) || 0,
@@ -143,7 +148,7 @@ export function NewProductForm({
             note: v.note || undefined,
           })),
         });
-        router.push("/productos");
+        onSaved(created.id);
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo crear el producto.");
       }
@@ -234,15 +239,18 @@ export function NewProductForm({
           </div>
 
           {categoryId === NEW_CATEGORY_VALUE && (
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="new-category-name">Nombre de la categoría nueva</Label>
-              <Input
-                id="new-category-name"
-                value={newCategoryName}
-                onChange={(e) => setNewCategoryName(e.target.value)}
-                placeholder="ej. Café frío"
-              />
-            </div>
+            <>
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="new-category-name">Nombre de la categoría nueva</Label>
+                <Input
+                  id="new-category-name"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  placeholder="ej. Café frío"
+                />
+              </div>
+              <CategoryIconPicker value={newCategoryIcon} onChange={setNewCategoryIcon} />
+            </>
           )}
         </CardContent>
       </Card>
@@ -290,6 +298,7 @@ export function NewProductForm({
               composedRecipes={ingredientOptions.composedRecipes}
               onIngredientCreated={(ingredient) => setIngredients((prev) => [...prev, ingredient])}
               employeeId={employeeId}
+              targetFoodCostPercent={targetFoodCostPercent}
             />
           </CardContent>
         </Card>

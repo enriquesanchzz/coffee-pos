@@ -25,6 +25,7 @@ Claude Code) pueda retomarlo sin arqueología.
 | **Menú real de LAPSO** (68 productos reales reemplazan el catálogo de demo) | ✅ Sembrado (`prisma/seed-lapso.ts`). Ver sección dedicada abajo. |
 | **Mejoras avanzadas de POS** (subcategorías, búsqueda global, Frío/Caliente/tipo de leche reales, mesa, cliente/domicilio inline, código de lealtad, nota de transferencia) | ✅ Construido (rama `pos-mejoras-avanzadas`). Ver sección dedicada abajo. |
 | **Módulo Productos** (antes Recetas: temperatura/tamaño/vaso reales, tipo de leche y extras editables desde la UI, merch/souvenirs/tarjetas, agregar variante) | ✅ Construido (rama `modulo-productos`). Ver sección dedicada abajo. |
+| **Productos + POS 2** (navegación tipo tarjetas en ambas pantallas, costo/precio sugerido, íconos de categoría, cuentas abiertas de Mesa, defaults/medidas estándar, 2 bugs de stepper) | ✅ Construido (rama `productos-pos-mejoras-2`). Ver sección dedicada abajo. |
 | Multi-sucursal en UI (Fase 5) | ⚪ No construido. `DEFAULT_BRANCH_ID` fijo en `lib/constants.ts`. |
 
 ## Qué se verificó en esta sesión
@@ -886,11 +887,145 @@ registrando vía seed o Prisma Studio), costo real de los vasos por
 tamaño (estimado, igual que las leches alternativas), combos
 multi-producto.
 
+## Productos + POS 2 (rama `productos-pos-mejoras-2`)
+
+Segunda tanda de cambios sobre `/productos` (recién cerrado arriba) y
+`/pos`, pedidos en la misma conversación: navegación tipo tarjetas con
+categoría→subcategoría→contenido en ambas pantallas (antes acordeón en
+la barra lateral), costo de receta en vivo + precio sugerido
+configurable, íconos de categoría, y — el cambio más grande — cuentas
+abiertas de Mesa. Se acotaron con el usuario: patrón de navegación
+**unificado** entre `/pos` y `/productos` (mismo componente
+compartido), cuentas abiertas **incluidas ahora** (no pospuestas pese a
+ser lo más grande), medidas estándar de captura (pump/splash)
+**estimadas** (mismo criterio que costos de leche/vasos en fases
+anteriores), e íconos de categoría con **selector real** en vez de
+mapeo automático por palabra clave (primera UI para editar categorías
+ya existentes).
+
+**Navegación compartida** — nuevo `components/catalog/category-drilldown.tsx`:
+categorías de nivel 1 como píldoras con ícono en una barra angosta;
+clic en una con subcategorías muestra tarjetas de subcategoría en el
+área principal (clic en una sin hijas salta directo al contenido); un
+botón "← Atrás" regresa un nivel. `components/pos/catalog-browser.tsx`
+se reescribió sobre este componente (el buscador global existente no
+cambió de comportamiento). `ProductCategory.icon` (nombre de ícono
+Lucide, validado contra una lista curada en
+`components/productos/category-icon-picker.tsx`) se elige al crear una
+categoría nueva (dentro de "Nuevo producto") o al editar una ya
+existente (lápiz en la píldora, solo dentro de `/productos` — nueva
+acción `updateProductCategory`).
+
+**`/productos` como vista única** (ya lo era desde el "Módulo
+Productos" anterior): se cambió el acordeón lateral original por
+`CategoryDrilldown`; al abrir un producto, el panel izquierdo pasa a
+sus variantes (`VariantNav`, sin cambios de diseño) y el detalle de la
+variante se sigue cargando on-demand vía `fetchVariantRecipeDetail`.
+**Bug real encontrado durante el build** (no en verificación, se vio
+antes de probarlo): la primera versión anidó `CategoryDrilldown`
+completo dentro de la columna angosta de 192px reservada para
+`VariantNav`, aplastando su propio grid de tarjetas — se corrigió
+haciendo que el layout sea condicional por `mainView` (`CategoryDrilldown`
+ocupa el ancho completo mientras se navega; el split
+`VariantNav` + panel solo aparece con un producto abierto).
+
+**Costo de receta en vivo + precio sugerido**: `getIngredientPickerOptions()`
+(`lib/recipes.ts`) ahora incluye el costo cotizado actual
+(`IngredientSupplier.isSelected`) por ingrediente y el costo calculado
+de cada receta compuesta (`calculateRecipeVersionCost`, una sola
+`$transaction` para todas). `components/productos/recipe-cost.ts`
+calcula el costo de las líneas en el cliente con el mismo criterio (sin
+conversión de unidad — limitación heredada). `VariantFields` muestra
+"Costo de ingredientes" + "Precio sugerido (food cost N%)" con un botón
+"Usar precio sugerido" que llena el campo de precio sin guardar solo
+— el precio lo sigue poniendo la persona. El % objetivo
+(`Branch.targetFoodCostPercent`, default 30) es ajustable desde una
+nueva card "Configuración" en `/administracion`, gated por el permiso
+`CONFIGURACION_SISTEMA_GESTIONAR` (ya declarado en el schema desde
+hace varias fases, exclusivo de ADMINISTRADOR, sin ningún uso real
+hasta ahora).
+
+**Defaults y medidas estándar en el POS**: la opción "Entera" del grupo
+"Tipo de leche" ahora viene preseleccionada al abrir un producto con
+leche (se identifica por nombre de grupo + `isSubstitution:false`, no
+solo por la bandera — "Extras" también usa `isSubstitution:false` en
+todas sus opciones y no debía auto-seleccionarse). Nuevo
+`Ingredient.standardDoseQuantity`/`standardDoseUnit` (ej. "1 PUMP" para
+esencia de vainilla, factor de conversión `PUMP→ML` ≈ 5, estimado) —
+"Agregar otro ingrediente" en el POS y los editores de receta/modificador
+en `/productos` ahora capturan en esa unidad en vez de mililitros
+crudos. Esto exigió que `actions/pos.ts` empezara a convertir la
+cantidad de los extras libres a `baseUnit` antes de costear/descontar
+inventario (`toBaseUnit()`) — antes asumía por convención que ya venía
+en `baseUnit`, lo cual dejaba de ser cierto en cuanto se introdujo una
+unidad de captura distinta; verificado en DB que 1 PUMP capturado
+descontó 5ML reales y cobró el costo de 5ML, no de 1.
+
+**2 bugs de stepper corregidos** (`step="0.01"` fijo donde debía ser
+`"1"` para unidades discretas — nuevo helper `unitStep()` en
+`lib/utils.ts`): cantidad de "Agregar otro ingrediente" en el POS, y
+valor de descuento manual cuando el tipo es porcentaje.
+
+**"A domicilio" exige cliente**: `checkout-dialog.tsx` bloquea "Confirmar
+venta" si `orderType === "DOMICILIO"` sin cliente seleccionado (la
+creación de cliente inline ya era general para cualquier tipo de orden,
+confirmado en el código — no hizo falta tocarla). Nuevo checkbox
+"¿Cómo llegó el pedido?" (Teléfono del negocio / App de delivery) —
+`Sale.domicilioOrigen`, enum `DomicilioOrigen`.
+
+**Cuentas abiertas de Mesa** (el cambio más grande): `SaleStatus` gana
+`ABIERTA` — una cuenta puede quedar abierta con inventario ya
+descontado de lo agregado (la bebida se prepara al pedirse, no hasta
+que se cobra), mientras el cajero atiende otras cuentas. Refactor de
+`actions/pos.ts`: se extrajo de `createSale` la resolución de items
+(`resolveSaleItems`, variante/modificadores/sustitución/extras/vaso
+automático/cálculo de consumo) y la aplicación de consumo de inventario
+(`applyConsumption`) a funciones reusables — `createSale` ahora se
+compone de ellas sin cambiar de comportamiento. Nuevas acciones:
+`openTab` (crea la cuenta, `status:"ABIERTA"`, sin pago, con la primera
+ronda de productos), `addItemsToTab` (agrega una ronda más, incrementa
+`subtotal`/`total` acumulados), `closeTab` (opcionalmente agrega una
+última ronda en la misma transacción, aplica el descuento sobre el
+subtotal acumulado **completo**, valida pagos, pasa a `COMPLETADA`),
+`listOpenTabs`/`getTabDetail` para la UI. `cart-store.ts` gana
+`activeTabId` (qué cuenta se está alimentando; `null` = venta normal,
+sin cambios). `CartPanel` gana el botón "Dejar cuenta abierta"/"Agregar
+a la cuenta"; nuevo `OpenTabsDialog` ("Cuentas abiertas" en el header
+del POS) lista las cuentas y permite retomarlas. `actions/shift.ts`
+(`closeShift`) gana una guarda: no se puede cerrar un turno con cuentas
+`ABIERTA` sin cobrar.
+
+Verificado end-to-end con Playwright contra Postgres real: drilldown de
+categoría→subcategoría con tarjetas y "← Atrás" en `/pos` y en
+`/productos`; ícono elegido al crear una categoría nueva; costo/precio
+sugerido en vivo al editar una receta ($6.36 de costo → $21.20 sugerido
+a 30% food cost, verificado a mano), "Usar precio sugerido" llenando el
+campo sin guardar; "Entera" preseleccionada al abrir un producto con
+leche; extra de vainilla pidiendo "pump" en vez de mililitros, con
+stepper subiendo de 1 en 1, y en DB: 1 pump capturado → 5ML
+descontados y cobrados (no 1ML); domicilio sin cliente bloqueado, con
+mensaje claro; cuenta de Mesa abierta con un producto → cuenta aparece
+en "Cuentas abiertas" con su total → retomada → segunda ronda agregada
+→ cobrada — confirmado en DB una sola `Sale` `COMPLETADA` con el total
+acumulado de ambas rondas, 2 `SaleItem`, e inventario descontado en dos
+momentos distintos (por ronda), no todo junto al final. Datos de prueba
+limpiados; no se tocaron ventas ni cuentas reales.
+
+Fuera de alcance deliberadamente: cancelar una cuenta abierta (existe
+`VENTA_CANCELAR` para ventas completadas, no se extendió a `ABIERTA`),
+transferir items entre cuentas/mesas, dividir el pago de una cuenta
+abierta entre varios métodos (el cierre sí soporta pagos múltiples,
+igual que antes), conversión de unidad real en el costo de receta
+(limitación heredada de `calculateRecipeVersionCost`), % de food cost
+por categoría de producto (un solo valor global por sucursal), editar
+categorías de "nivel 1 agrupador" (solo categorías planas por ahora —
+ver `EditCategoryDialog`/`onEditCategory` en `category-drilldown.tsx`).
+
 ## Próximos pasos recomendados (en orden)
 
 Fases 1, 2, 3 y 4 están cerradas, más los ajustes "Cambios Punto de Venta",
 "Reskin visual del POS", el menú real de LAPSO, "Mejoras avanzadas de
-POS" y el "Módulo Productos". Lo que sigue:
+POS", el "Módulo Productos" y "Productos + POS 2". Lo que sigue:
 
 1. **Fase 5 (Multi-sucursal)** — la única fase que queda del roadmap
    original. Quitar el `DEFAULT_BRANCH_ID` fijo, UI de selección/gestión
@@ -925,8 +1060,12 @@ POS" y el "Módulo Productos". Lo que sigue:
    `lib/password.ts`/`lib/session.ts` por la integración real, el modelo de
    datos ya está listo para ese cambio sin migraciones.
 7. Mergear los PRs pendientes (`pos-reskin-purrcoffee`/menú de LAPSO,
-   `pos-mejoras-avanzadas`, `modulo-productos`) a `main` si no se han
-   mergeado ya.
+   `pos-mejoras-avanzadas`, `modulo-productos`, `productos-pos-mejoras-2`)
+   a `main` si no se han mergeado ya.
+8. Cancelar una cuenta de Mesa abierta (hoy solo se puede cobrar o dejarla
+   abierta indefinidamente — no hay forma de cancelarla si el cliente se
+   va sin pagar), y decidir si vale la pena permitir transferir items
+   entre cuentas/mesas (fuera de alcance de "Productos + POS 2").
 
 ## Convenciones a mantener
 
