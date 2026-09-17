@@ -629,7 +629,7 @@ export function CheckoutDialog({
           onClick={handleConfirm}
           disabled={
             isPending ||
-            lines.length === 0 ||
+            (lines.length === 0 && !activeTabId) ||
             (discountMode === "CODIGO" && !resolvedCode) ||
             (discountMode === "MANUAL" && !authorizingPin)
           }

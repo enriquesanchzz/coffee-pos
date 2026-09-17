@@ -4,10 +4,16 @@ import { useState, useTransition } from "react";
 import { Coffee, Minus, Plus, Trash2 } from "lucide-react";
 import type { SaleOrderType } from "@prisma/client";
 import { useCartStore, lineUnitPrice, cartLineToSaleItemInput } from "./cart-store";
-import { openTab, addItemsToTab, type OpenTabDetail } from "@/actions/pos";
+import { openTab, addItemsToTab, removeTabItem, updateTabItemQuantity, type OpenTabDetail } from "@/actions/pos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn, formatCurrency, posAccentClass } from "@/lib/utils";
+
+const temperatureLabels: Record<string, string> = {
+  CALIENTE: "Caliente",
+  FRIO: "Frío",
+  FRAPPE: "Frappé",
+};
 
 // "Mesa" = CONSUMO_LOCAL (el valor del enum no cambió, solo la etiqueta —
 // punto 8, "Mejoras avanzadas de POS").
@@ -48,6 +54,11 @@ export function CartPanel({
   } = useCartStore();
   const [tabError, setTabError] = useState<string | null>(null);
   const [isSavingTab, startSavingTab] = useTransition();
+  // Item de la cuenta ya registrada que se está quitando/ajustando ahora
+  // mismo — deshabilita sus botones para no disparar dos correcciones a
+  // la vez sobre la misma línea.
+  const [pendingItemId, setPendingItemId] = useState<string | null>(null);
+  const [registeredError, setRegisteredError] = useState<string | null>(null);
 
   function handleLeaveOpen() {
     setTabError(null);
@@ -73,6 +84,33 @@ export function CartPanel({
         setTabError(err instanceof Error ? err.message : "No se pudo dejar la cuenta abierta.");
       }
     });
+  }
+
+  async function handleRemoveRegistered(saleItemId: string) {
+    setRegisteredError(null);
+    setPendingItemId(saleItemId);
+    try {
+      await removeTabItem({ saleItemId, branchId, shiftId, employeeId });
+      onTabChanged();
+    } catch (err) {
+      setRegisteredError(err instanceof Error ? err.message : "No se pudo quitar el producto.");
+    } finally {
+      setPendingItemId(null);
+    }
+  }
+
+  async function handleAdjustRegistered(saleItemId: string, newQuantity: number) {
+    setRegisteredError(null);
+    if (newQuantity <= 0) return handleRemoveRegistered(saleItemId);
+    setPendingItemId(saleItemId);
+    try {
+      await updateTabItemQuantity({ saleItemId, branchId, shiftId, employeeId, quantity: newQuantity });
+      onTabChanged();
+    } catch (err) {
+      setRegisteredError(err instanceof Error ? err.message : "No se pudo ajustar la cantidad.");
+    } finally {
+      setPendingItemId(null);
+    }
   }
 
   return (
@@ -103,15 +141,82 @@ export function CartPanel({
             disabled={Boolean(activeTabId)}
           />
         )}
-        {activeTabSummary && (
-          <p className="rounded-md border border-border bg-muted/40 px-2 py-1.5 text-xs text-muted-foreground">
-            Retomando cuenta abierta · {activeTabSummary.items.length} productos ya
-            registrados · {formatCurrency(activeTabSummary.total)}
-          </p>
-        )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-3">
+        {activeTabSummary && (
+          <div className="mb-4 flex flex-col gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Ya registrado en la cuenta — revisa con el cliente antes de cobrar
+            </p>
+            {registeredError && <p className="text-xs text-destructive">{registeredError}</p>}
+            {activeTabSummary.items.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                Todavía no hay nada registrado (se quitó todo) — la cuenta sigue abierta.
+              </p>
+            )}
+            <ul className="flex flex-col gap-2">
+              {activeTabSummary.items.map((item) => {
+                const isPending = pendingItemId === item.id;
+                return (
+                  <li key={item.id} className="rounded-xl border border-border p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-medium">
+                          {item.productName} · {item.productVariantName}
+                          {item.temperature && ` · ${temperatureLabels[item.temperature]}`}
+                        </p>
+                        {item.modifierNames.length > 0 && (
+                          <p className="text-xs text-muted-foreground">{item.modifierNames.join(", ")}</p>
+                        )}
+                        {item.notes && <p className="text-xs italic text-muted-foreground">“{item.notes}”</p>}
+                      </div>
+                      <button
+                        onClick={() => handleRemoveRegistered(item.id)}
+                        disabled={isPending}
+                        className="text-muted-foreground hover:text-destructive disabled:opacity-50"
+                        aria-label="Quitar"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          className="h-7 w-7 rounded-full"
+                          disabled={isPending}
+                          onClick={() => handleAdjustRegistered(item.id, item.quantity - 1)}
+                        >
+                          <Minus className="h-3 w-3" />
+                        </Button>
+                        <span className="w-6 text-center text-sm">{item.quantity}</span>
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          className="h-7 w-7 rounded-full"
+                          disabled={isPending}
+                          onClick={() => handleAdjustRegistered(item.id, item.quantity + 1)}
+                        >
+                          <Plus className="h-3 w-3" />
+                        </Button>
+                      </div>
+                      <span className="text-sm font-medium">{formatCurrency(item.lineTotal)}</span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            <p className="text-right text-xs text-muted-foreground">
+              Ya registrado: {formatCurrency(activeTabSummary.total)}
+            </p>
+            <div className="border-t border-border pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Ronda actual
+            </div>
+          </div>
+        )}
+
         {lines.length === 0 && (
           <p className="p-4 text-center text-sm text-muted-foreground">
             Selecciona productos del catálogo para agregarlos aquí.
