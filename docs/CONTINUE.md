@@ -1021,6 +1021,56 @@ por categoría de producto (un solo valor global por sucursal), editar
 categorías de "nivel 1 agrupador" (solo categorías planas por ahora —
 ver `EditCategoryDialog`/`onEditCategory` en `category-drilldown.tsx`).
 
+## Cuentas abiertas — revisar/corregir al retomar (mismo alcance, ajuste posterior)
+
+El usuario notó justo después de mergear "Productos + POS 2" que al
+retomar una cuenta abierta solo se veía un resumen ("3 productos ·
+$126"), no la lista real — y que hace falta poder corregirla (quitar un
+producto o ajustar su cantidad) porque cerrar la cuenta es el momento en
+que se rectifica con el cliente que todo esté bien. Se acotó el alcance:
+quitar/ajustar cantidad sí, editar modificadores/extras/notas de un
+producto ya registrado no (para eso se quita y se vuelve a agregar bien
+en la ronda actual).
+
+`getTabDetail` (`actions/pos.ts`) ahora regresa cada item con su `id`,
+`unitPrice`, nombres de modificadores y notas (antes solo nombre/
+cantidad/total) — `CartPanel` los renderiza como una lista real con
+stepper +/- y botón "Quitar" por línea, encima de la ronda actual.
+Nuevas acciones `removeTabItem`/`updateTabItemQuantity`: ambas
+reconstruyen el consumo de inventario que ese `SaleItem` causó
+(reusando `resolveSaleItems` con un item sintético armado desde lo ya
+guardado — simplificación aceptada: usa la receta *activa* actual, no
+la versión exacta que se usó al agregarlo, válido mientras nadie edite
+esa receta en el rato que la cuenta sigue abierta) para revertirlo o
+ajustar la diferencia exacta.
+
+**Bug real encontrado en la propia verificación** (antes de dar la
+función por buena): la primera versión de `updateTabItemQuantity`
+quitaba el `SaleItem` viejo y creaba uno nuevo — al tener un
+`createdAt` más reciente, el item ajustado saltaba al final de la
+lista cada vez que se le cambiaba la cantidad, lo cual es confuso
+exactamente en el momento en que el cajero está revisando el orden con
+el cliente. Se corrigió actualizando el `SaleItem` existente en su
+lugar (mismo id), calculando el consumo de inventario como una
+diferencia real (`subtractConsumption`) entre la cantidad vieja y la
+nueva, en vez de revertir todo y volver a aplicar desde cero.
+
+**Segundo bug real encontrado**: el botón "Confirmar venta" del
+checkout tenía `disabled={... || lines.length === 0 || ...}` — al
+cerrar una cuenta abierta sin agregar una ronda final (el carrito
+actual vacío es válido ahí, `closeTab` ya lo soporta), el botón se
+quedaba deshabilitado para siempre y no dejaba cobrar. Se corrigió a
+`lines.length === 0 && !activeTabId`.
+
+Verificado con Playwright + Postgres real: cuenta con 2 productos
+distintos (Chico Frío + Chico Caliente) → retomada → lista completa
+visible con temperatura de cada uno → cantidad de uno ajustada de 1 a 2
+sin que cambiara de posición en la lista → el otro quitado por
+completo → cerrada sin ronda adicional → confirmado en DB que el
+consumo de inventario neto coincide exactamente con lo que quedó
+(delta correcto en cada paso, no un remove-and-reapply completo).
+Datos de prueba limpiados.
+
 ## Próximos pasos recomendados (en orden)
 
 Fases 1, 2, 3 y 4 están cerradas, más los ajustes "Cambios Punto de Venta",
@@ -1060,8 +1110,8 @@ POS", el "Módulo Productos" y "Productos + POS 2". Lo que sigue:
    `lib/password.ts`/`lib/session.ts` por la integración real, el modelo de
    datos ya está listo para ese cambio sin migraciones.
 7. Mergear los PRs pendientes (`pos-reskin-purrcoffee`/menú de LAPSO,
-   `pos-mejoras-avanzadas`, `modulo-productos`, `productos-pos-mejoras-2`)
-   a `main` si no se han mergeado ya.
+   `pos-mejoras-avanzadas`, `modulo-productos`, `productos-pos-mejoras-2`,
+   `cuentas-abiertas-editar-items`) a `main` si no se han mergeado ya.
 8. Cancelar una cuenta de Mesa abierta (hoy solo se puede cobrar o dejarla
    abierta indefinidamente — no hay forma de cancelarla si el cliente se
    va sin pagar), y decidir si vale la pena permitir transferir items

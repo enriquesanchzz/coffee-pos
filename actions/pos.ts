@@ -9,6 +9,7 @@ import {
   ManualDiscountReason,
   SaleOrderType,
   DomicilioOrigen,
+  type VariantTemperature,
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_STOCK_LOCATION_ID } from "@/lib/constants";
@@ -789,21 +790,38 @@ export async function listOpenTabs(branchId: string): Promise<OpenTabSummary[]> 
   }));
 }
 
+export type OpenTabItem = {
+  id: string;
+  productVariantName: string;
+  temperature: VariantTemperature | null;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+  modifierNames: string[];
+  notes: string | null;
+};
+
 export type OpenTabDetail = {
   id: string;
   tableNumber: string | null;
   total: number;
-  items: { productVariantName: string; productName: string; quantity: number; lineTotal: number }[];
+  items: OpenTabItem[];
 };
 
-// Resumen de lo ya registrado en una cuenta abierta, para mostrarlo al
-// retomarla en el POS antes de agregar la siguiente ronda.
+// Resumen de lo ya registrado en una cuenta abierta — al retomarla, el
+// cajero lo revisa (y puede corregirlo, ver removeTabItem/
+// updateTabItemQuantity abajo) antes de cobrar, para rectificar con el
+// cliente que todo esté bien.
 export async function getTabDetail(saleId: string): Promise<OpenTabDetail> {
   const sale = await prisma.sale.findUniqueOrThrow({
     where: { id: saleId },
     include: {
       items: {
-        include: { productVariant: { include: { product: true } } },
+        include: {
+          productVariant: { include: { product: true } },
+          modifiers: { include: { modifierOption: true } },
+        },
       },
     },
   });
@@ -813,10 +831,230 @@ export async function getTabDetail(saleId: string): Promise<OpenTabDetail> {
     tableNumber: sale.tableNumber,
     total: sale.total.toNumber(),
     items: sale.items.map((item) => ({
+      id: item.id,
       productVariantName: item.productVariant?.name ?? "(producto eliminado)",
+      temperature: item.productVariant?.temperature ?? null,
       productName: item.productVariant?.product.name ?? "",
       quantity: item.quantity,
+      unitPrice: item.unitPrice.toNumber(),
       lineTotal: item.lineTotal.toNumber(),
+      modifierNames: item.modifiers.map((m) => m.modifierOption.name),
+      notes: item.notes,
     })),
   };
+}
+
+// Ingredientes/modificadores/extras ya guardados de un SaleItem, en el
+// shape que resolveSaleItems espera — para poder recalcular su consumo
+// de inventario a una cantidad dada (la que tenía, o una nueva).
+type ReconstructedTabItem = {
+  productVariantId: string;
+  modifierOptionIds: string[];
+  extraIngredients: { ingredientId: string; quantity: number; unit: UnitOfMeasure }[];
+};
+
+async function reconstructTabItem(
+  tx: Prisma.TransactionClient,
+  item: { id: string; productVariantId: string | null; modifiers: { modifierOptionId: string }[] }
+): Promise<ReconstructedTabItem | null> {
+  if (!item.productVariantId) return null;
+  const adjustments = await tx.saleItemIngredientAdjustment.findMany({ where: { saleItemId: item.id } });
+  return {
+    productVariantId: item.productVariantId,
+    modifierOptionIds: item.modifiers.map((m) => m.modifierOptionId),
+    extraIngredients: adjustments.map((a) => ({
+      ingredientId: a.ingredientId,
+      quantity: a.quantity.toNumber(),
+      unit: a.unit,
+    })),
+  };
+}
+
+// Consumo de inventario que un item ya guardado causaría a una cantidad
+// dada — reusa resolveSaleItems tal cual con un solo item sintético.
+// Simplificación aceptada: usa la receta ACTIVA actual del producto, no
+// la versión exacta (`SaleItem.recipeVersionId`) que se usó al
+// agregarlo — si nadie edita esa receta entre que se agrega el item y
+// se corrige (lo normal dentro de una misma cuenta abierta), da el
+// mismo resultado.
+async function computeTabItemConsumption(
+  tx: Prisma.TransactionClient,
+  reconstructed: ReconstructedTabItem,
+  quantity: number
+): Promise<Map<string, Prisma.Decimal>> {
+  const { consumption } = await resolveSaleItems(tx, [{ ...reconstructed, quantity }]);
+  return consumption;
+}
+
+// Aplica un delta de consumo (positivo = consumir más del inventario,
+// negativo = regresar/restockear) — mismo criterio de signo que
+// applyConsumption (quantity positiva ahí siempre resta del stock), solo
+// que aquí el valor puede ser negativo para las correcciones de cuentas
+// abiertas (quitar/ajustar cantidad de un producto ya registrado).
+async function applyConsumptionDelta(
+  tx: Prisma.TransactionClient,
+  delta: Map<string, Prisma.Decimal>,
+  context: { branchId: string; employeeId: string; shiftId: string; saleId: string }
+) {
+  for (const [ingredientId, quantity] of delta.entries()) {
+    if (quantity.isZero()) continue;
+    await tx.inventoryStock.update({
+      where: { ingredientId_stockLocationId: { ingredientId, stockLocationId: DEFAULT_STOCK_LOCATION_ID } },
+      data: { quantity: { decrement: quantity } },
+    });
+    const ingredient = await tx.ingredient.findUniqueOrThrow({ where: { id: ingredientId } });
+    await tx.inventoryMovement.create({
+      data: {
+        type: "VENTA",
+        ingredientId,
+        stockLocationId: DEFAULT_STOCK_LOCATION_ID,
+        quantity: quantity.negated(),
+        unit: ingredient.baseUnit,
+        branchId: context.branchId,
+        employeeId: context.employeeId,
+        shiftId: context.shiftId,
+        notes: `Corrección cuenta ${context.saleId}`,
+      },
+    });
+  }
+}
+
+function subtractConsumption(
+  a: Map<string, Prisma.Decimal>,
+  b: Map<string, Prisma.Decimal>
+): Map<string, Prisma.Decimal> {
+  const delta = new Map<string, Prisma.Decimal>();
+  for (const ingredientId of new Set([...a.keys(), ...b.keys()])) {
+    const d = (a.get(ingredientId) ?? new Prisma.Decimal(0)).sub(b.get(ingredientId) ?? new Prisma.Decimal(0));
+    if (!d.isZero()) delta.set(ingredientId, d);
+  }
+  return delta;
+}
+
+async function deleteSaleItemChildren(tx: Prisma.TransactionClient, saleItemId: string) {
+  await tx.saleItemModifier.deleteMany({ where: { saleItemId } });
+  await tx.saleItemIngredientAdjustment.deleteMany({ where: { saleItemId } });
+}
+
+export type RemoveTabItemInput = {
+  saleItemId: string;
+  branchId: string;
+  shiftId: string;
+  employeeId: string;
+};
+
+// Quitar un producto ya registrado de una cuenta abierta (antes de
+// cobrar) — restaura el inventario que ya se había descontado. Solo
+// mientras la cuenta sigue ABIERTA; una venta ya cobrada no se corrige
+// aquí (existe VENTA_CANCELAR para eso).
+export async function removeTabItem(input: RemoveTabItemInput) {
+  if (input.employeeId !== (await getSessionEmployeeId())) {
+    throw new Error("El empleado no coincide con la sesión activa.");
+  }
+  await requirePermission(input.employeeId, input.branchId, "VENTA_REALIZAR");
+
+  const sale = await prisma.$transaction(async (tx) => {
+    const item = await tx.saleItem.findUniqueOrThrow({
+      where: { id: input.saleItemId },
+      include: { sale: true, modifiers: true },
+    });
+    if (item.sale.status !== "ABIERTA") {
+      throw new Error("Esta cuenta ya no está abierta.");
+    }
+    if (item.sale.branchId !== input.branchId || item.sale.shiftId !== input.shiftId) {
+      throw new Error("Esta cuenta no pertenece al turno/sucursal actual.");
+    }
+
+    const reconstructed = await reconstructTabItem(tx, item);
+    if (reconstructed) {
+      const consumption = await computeTabItemConsumption(tx, reconstructed, item.quantity);
+      // Restockear todo lo que este item había consumido — delta negativo.
+      const reversal = new Map([...consumption].map(([id, qty]) => [id, qty.negated()] as const));
+      await applyConsumptionDelta(tx, reversal, {
+        branchId: input.branchId,
+        employeeId: input.employeeId,
+        shiftId: input.shiftId,
+        saleId: item.saleId,
+      });
+    }
+    await deleteSaleItemChildren(tx, item.id);
+    await tx.saleItem.delete({ where: { id: item.id } });
+
+    return tx.sale.update({
+      where: { id: item.saleId },
+      data: { subtotal: { decrement: item.lineTotal }, total: { decrement: item.lineTotal } },
+    });
+  });
+
+  revalidatePath("/pos");
+  return serializeSale(sale);
+}
+
+export type UpdateTabItemQuantityInput = {
+  saleItemId: string;
+  branchId: string;
+  shiftId: string;
+  employeeId: string;
+  quantity: number;
+};
+
+// Ajustar la cantidad de un producto ya registrado en una cuenta
+// abierta — actualiza el SaleItem existente en su lugar (misma fila,
+// mismo id) en vez de quitarlo y crear uno nuevo, para que no cambie de
+// posición en la lista que el cajero está revisando con el cliente
+// (bug real encontrado en verificación: reordenaba la lista de forma
+// confusa). Solo se ajusta el inventario por la diferencia exacta entre
+// la cantidad vieja y la nueva.
+export async function updateTabItemQuantity(input: UpdateTabItemQuantityInput) {
+  if (input.employeeId !== (await getSessionEmployeeId())) {
+    throw new Error("El empleado no coincide con la sesión activa.");
+  }
+  if (input.quantity <= 0) {
+    throw new Error("La cantidad debe ser mayor a cero — para quitar el producto, usa \"Quitar\".");
+  }
+
+  await requirePermission(input.employeeId, input.branchId, "VENTA_REALIZAR");
+
+  const sale = await prisma.$transaction(async (tx) => {
+    const item = await tx.saleItem.findUniqueOrThrow({
+      where: { id: input.saleItemId },
+      include: { sale: true, modifiers: true },
+    });
+    if (item.sale.status !== "ABIERTA") {
+      throw new Error("Esta cuenta ya no está abierta.");
+    }
+    if (item.sale.branchId !== input.branchId || item.sale.shiftId !== input.shiftId) {
+      throw new Error("Esta cuenta no pertenece al turno/sucursal actual.");
+    }
+    const reconstructed = await reconstructTabItem(tx, item);
+    if (!reconstructed) {
+      throw new Error("Este producto ya no existe, no se puede ajustar — quítalo.");
+    }
+
+    const oldConsumption = await computeTabItemConsumption(tx, reconstructed, item.quantity);
+    const newConsumption = await computeTabItemConsumption(tx, reconstructed, input.quantity);
+    const delta = subtractConsumption(newConsumption, oldConsumption);
+    await applyConsumptionDelta(tx, delta, {
+      branchId: input.branchId,
+      employeeId: input.employeeId,
+      shiftId: input.shiftId,
+      saleId: item.saleId,
+    });
+
+    const newLineTotal = item.unitPrice.mul(input.quantity);
+    const lineTotalDelta = newLineTotal.sub(item.lineTotal);
+
+    await tx.saleItem.update({
+      where: { id: item.id },
+      data: { quantity: input.quantity, lineTotal: newLineTotal },
+    });
+
+    return tx.sale.update({
+      where: { id: item.saleId },
+      data: { subtotal: { increment: lineTotalDelta }, total: { increment: lineTotalDelta } },
+    });
+  });
+
+  revalidatePath("/pos");
+  return serializeSale(sale);
 }
