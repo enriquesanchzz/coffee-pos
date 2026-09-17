@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { cn, formatCurrency, posAccentClass, posAccentBorderClass } from "@/lib/utils";
+import { cn, formatCurrency, posAccentClass, posAccentBorderClass, buildWhatsAppLoyaltyLink } from "@/lib/utils";
 import { createSale, closeTab } from "@/actions/pos";
 import { findDiscountCodeByCode, type FoundDiscountCode } from "@/actions/discounts";
 import { createCustomer, updateCustomer } from "@/actions/customers";
@@ -93,6 +93,13 @@ export function CheckoutDialog({
   // se mezclan localmente para que aparezcan de inmediato en esta venta.
   const [localCustomers, setLocalCustomers] = useState<CustomerOption[]>([]);
   const allCustomers = [...customers, ...localCustomers];
+  // Tarjeta/cupón del cliente recién creado en este mismo diálogo — para
+  // ofrecer "Enviar por WhatsApp" sin interrumpir el cobro en curso.
+  const [justCreatedCustomer, setJustCreatedCustomer] = useState<{
+    id: string;
+    loyaltyCardCode: string;
+    welcomeCouponCode: string;
+  } | null>(null);
 
   const [showNewCustomerForm, setShowNewCustomerForm] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState("");
@@ -147,6 +154,7 @@ export function CheckoutDialog({
   function handleClearCustomer() {
     setCustomerId("");
     setCustomerQuery("");
+    setJustCreatedCustomer(null);
   }
 
   function handleOpenNewCustomerForm() {
@@ -178,10 +186,15 @@ export function CheckoutDialog({
           name,
           phone: newCustomerPhone.trim() || null,
           address: orderType === "DOMICILIO" ? newCustomerAddress.trim() || null : null,
-          loyaltyCode: null,
+          loyaltyCode: created.loyaltyCardCode,
         };
         setLocalCustomers((prev) => [...prev, option]);
         handleSelectCustomer(option);
+        setJustCreatedCustomer({
+          id: created.id,
+          loyaltyCardCode: created.loyaltyCardCode,
+          welcomeCouponCode: created.welcomeCouponCode,
+        });
       } catch (err) {
         setNewCustomerError(err instanceof Error ? err.message : "No se pudo crear el cliente.");
       }
@@ -210,7 +223,7 @@ export function CheckoutDialog({
     setResolvedCode(null);
     startCheckingCode(async () => {
       try {
-        const found = await findDiscountCodeByCode({ employeeId, code: codeInput });
+        const found = await findDiscountCodeByCode({ employeeId, code: codeInput, customerId: customerId || undefined });
         setResolvedCode(found);
       } catch (err) {
         setCodeError(err instanceof Error ? err.message : "No se pudo validar el código.");
@@ -378,6 +391,14 @@ export function CheckoutDialog({
                 quitar
               </button>
             </p>
+          )}
+
+          {justCreatedCustomer && justCreatedCustomer.id === customerId && (
+            <WhatsAppLoyaltyLink
+              phone={selectedCustomer?.phone ?? ""}
+              loyaltyCardCode={justCreatedCustomer.loyaltyCardCode}
+              welcomeCouponCode={justCreatedCustomer.welcomeCouponCode}
+            />
           )}
 
           {showNewCustomerForm && (
@@ -638,5 +659,38 @@ export function CheckoutDialog({
         </Button>
       </div>
     </Dialog>
+  );
+}
+
+// Link de "Enviar tarjeta por WhatsApp" para el cliente recién creado
+// inline, sin interrumpir el cobro en curso — ver buildWhatsAppLoyaltyLink.
+function WhatsAppLoyaltyLink({
+  phone,
+  loyaltyCardCode,
+  welcomeCouponCode,
+}: {
+  phone: string;
+  loyaltyCardCode: string;
+  welcomeCouponCode: string;
+}) {
+  const [href, setHref] = useState<string | null>(null);
+
+  useEffect(() => {
+    setHref(
+      buildWhatsAppLoyaltyLink({
+        phone,
+        origin: window.location.origin,
+        loyaltyCardCode,
+        welcomeCouponCode,
+      })
+    );
+  }, [phone, loyaltyCardCode, welcomeCouponCode]);
+
+  if (!href) return null;
+
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-primary underline">
+      Enviar tarjeta por WhatsApp
+    </a>
   );
 }

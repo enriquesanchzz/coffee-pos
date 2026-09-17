@@ -71,6 +71,33 @@ function computeDiscount(
   }
 }
 
+// Valida un DiscountCode (existe/activo/no expirado y, si es personal —
+// ver DiscountCode.customerId, ej. el cupón de bienvenida de
+// actions/customers.ts — que sea del cliente correcto y no se haya
+// usado ya) y regresa el monto de descuento. Si es personal, lo marca
+// usado dentro de la misma transacción de la venta — si la venta
+// termina fallando por otra razón, la transacción entera se revierte
+// junto con esta marca. Compartido por createSale y closeTab.
+async function validateAndConsumeDiscountCode(
+  tx: Prisma.TransactionClient,
+  input: { discountCodeId: string; customerId?: string; subtotal: Prisma.Decimal }
+): Promise<Prisma.Decimal> {
+  const code = await tx.discountCode.findUniqueOrThrow({ where: { id: input.discountCodeId } });
+  if (!code.isActive || (code.expiresAt && code.expiresAt < new Date())) {
+    throw new Error("Este código de descuento ya no es válido.");
+  }
+  if (code.customerId) {
+    if (code.customerId !== input.customerId) {
+      throw new Error("Este cupón es para otro cliente.");
+    }
+    if (code.usedAt) {
+      throw new Error("Este cupón ya se usó.");
+    }
+    await tx.discountCode.update({ where: { id: code.id }, data: { usedAt: new Date() } });
+  }
+  return computeDiscount(code.type, code.value, input.subtotal);
+}
+
 // -----------------------------------------------------------------------
 // Resolución de items — decisión de arquitectura ADR-001: el inventario
 // NUNCA se descuenta por producto terminado, siempre por ingrediente vía
@@ -444,12 +471,11 @@ export async function createSale(input: CreateSaleInput) {
 
     if (input.discountCodeId) {
       await requirePermission(input.employeeId, input.branchId, "DESCUENTO_APLICAR_CODIGO");
-
-      const code = await tx.discountCode.findUniqueOrThrow({ where: { id: input.discountCodeId } });
-      if (!code.isActive || (code.expiresAt && code.expiresAt < new Date())) {
-        throw new Error("Este código de descuento ya no es válido.");
-      }
-      discountTotal = computeDiscount(code.type, code.value, subtotal);
+      discountTotal = await validateAndConsumeDiscountCode(tx, {
+        discountCodeId: input.discountCodeId,
+        customerId: input.customerId,
+        subtotal,
+      });
     }
 
     if (input.manualDiscount) {
@@ -698,11 +724,11 @@ export async function closeTab(input: CloseTabInput) {
 
     if (input.discountCodeId) {
       await requirePermission(input.employeeId, input.branchId, "DESCUENTO_APLICAR_CODIGO");
-      const code = await tx.discountCode.findUniqueOrThrow({ where: { id: input.discountCodeId } });
-      if (!code.isActive || (code.expiresAt && code.expiresAt < new Date())) {
-        throw new Error("Este código de descuento ya no es válido.");
-      }
-      discountTotal = computeDiscount(code.type, code.value, subtotal);
+      discountTotal = await validateAndConsumeDiscountCode(tx, {
+        discountCodeId: input.discountCodeId,
+        customerId: input.customerId || existing.customerId || undefined,
+        subtotal,
+      });
     }
 
     if (input.manualDiscount) {
