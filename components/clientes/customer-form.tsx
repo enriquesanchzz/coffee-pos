@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createCustomer, updateCustomer } from "@/actions/customers";
+import { buildWhatsAppLoyaltyLink, cn } from "@/lib/utils";
 
 export function CustomerForm({
   employeeId,
@@ -24,6 +25,13 @@ export function CustomerForm({
   const [birthDate, setBirthDate] = useState(customer?.birthDate?.slice(0, 10) ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  // Tras crear (no editar) un cliente nuevo, se queda en esta pantalla
+  // para poder mandarle la tarjeta por WhatsApp antes de navegar.
+  const [created, setCreated] = useState<{
+    id: string;
+    loyaltyCardCode: string;
+    welcomeCouponCode: string;
+  } | null>(null);
 
   function handleSubmit() {
     setError(null);
@@ -47,12 +55,54 @@ export function CustomerForm({
             email,
             birthDate: birthDate || undefined,
           });
-          router.push(`/clientes/${result.id}`);
+          setCreated(result);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo guardar el cliente.");
       }
     });
+  }
+
+  if (created) {
+    const whatsappLink = buildWhatsAppLoyaltyLink({
+      phone,
+      origin: window.location.origin,
+      loyaltyCardCode: created.loyaltyCardCode,
+      welcomeCouponCode: created.welcomeCouponCode,
+    });
+
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Cliente creado</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <p className="text-sm text-muted-foreground">
+            {name} ya tiene su tarjeta de lealtad y un cupón de 10% para su próxima compra
+            (código <span className="font-mono">{created.welcomeCouponCode}</span>).
+          </p>
+          {whatsappLink ? (
+            <a
+              href={whatsappLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(
+                "inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              )}
+            >
+              Enviar tarjeta por WhatsApp
+            </a>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              No se capturó un teléfono válido — no se puede armar el link de WhatsApp.
+            </p>
+          )}
+          <Button variant="outline" onClick={() => router.push(`/clientes/${created.id}`)}>
+            Continuar
+          </Button>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (

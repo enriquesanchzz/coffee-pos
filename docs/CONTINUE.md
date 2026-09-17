@@ -26,6 +26,7 @@ Claude Code) pueda retomarlo sin arqueología.
 | **Mejoras avanzadas de POS** (subcategorías, búsqueda global, Frío/Caliente/tipo de leche reales, mesa, cliente/domicilio inline, código de lealtad, nota de transferencia) | ✅ Construido (rama `pos-mejoras-avanzadas`). Ver sección dedicada abajo. |
 | **Módulo Productos** (antes Recetas: temperatura/tamaño/vaso reales, tipo de leche y extras editables desde la UI, merch/souvenirs/tarjetas, agregar variante) | ✅ Construido (rama `modulo-productos`). Ver sección dedicada abajo. |
 | **Productos + POS 2** (navegación tipo tarjetas en ambas pantallas, costo/precio sugerido, íconos de categoría, cuentas abiertas de Mesa, defaults/medidas estándar, 2 bugs de stepper) | ✅ Construido (rama `productos-pos-mejoras-2`). Ver sección dedicada abajo. |
+| **Tarjeta de lealtad pública + cupón de bienvenida** (`/lealtad/[code]`, QR, cupón de 10% de un solo uso, link de WhatsApp) | ✅ Construido (rama `tarjeta-lealtad-publica`). Envío real por WhatsApp API y pases nativos de Apple/Google Wallet **no** incluidos — requieren cuentas de terceros que el negocio no tiene. Ver sección dedicada abajo. |
 | Multi-sucursal en UI (Fase 5) | ⚪ No construido. `DEFAULT_BRANCH_ID` fijo en `lib/constants.ts`. |
 
 ## Qué se verificó en esta sesión
@@ -1071,6 +1072,83 @@ consumo de inventario neto coincide exactamente con lo que quedó
 (delta correcto en cada paso, no un remove-and-reapply completo).
 Datos de prueba limpiados.
 
+## Tarjeta de lealtad pública + cupón de bienvenida (rama `tarjeta-lealtad-publica`)
+
+El usuario pidió que al registrar un cliente reciba por WhatsApp un link
+para "descargar" su tarjeta de lealtad, compatible con Apple/Google
+Wallet, y que se le genere un cupón de 10% para su próxima compra.
+Antes de construir nada se dejó claro que enviar WhatsApp de verdad y
+generar pases nativos de Wallet requieren cuentas de terceros con
+costo/verificación que el negocio no tiene todavía — **WhatsApp
+Business API**, **Apple Developer Program + certificado Pass Type ID**
+(para firmar el `.pkpass`), **Google Wallet Console**. El usuario eligió
+explícitamente construir ahora solo lo que no depende de esas cuentas.
+
+**Cupón de bienvenida, personal y de un solo uso**: `DiscountCode` (antes
+un código genérico y reusable, sin dueño ni marca de uso) ganó
+`customerId`/`usedAt` (migración aditiva — los códigos genéricos ya
+existentes, con `customerId` null, siguen siendo multi-uso igual que
+antes). `createCustomer` (`actions/customers.ts`) ahora, en una sola
+transacción: crea el `Customer`, crea su `LoyaltyCard` **de una vez**
+(antes se creaba recién hasta la primera venta, vía el `upsert` de
+`applyLoyaltyStamp` en `actions/pos.ts` — ese upsert se deja intacto,
+sigue sirviendo para clientes viejos sin tarjeta) y crea un
+`DiscountCode` personal `BIENVENIDA-XXXXXX` (10%, sin fecha de
+expiración — el pedido fue literalmente "en tu próxima compra"). Regresa
+`{id, loyaltyCardCode, welcomeCouponCode}` en vez de solo `{id}`.
+
+**Validación al redimir**: `findDiscountCodeByCode` (`actions/discounts.ts`,
+usado por el botón "Validar" en el checkout) y un nuevo helper
+compartido `validateAndConsumeDiscountCode` en `actions/pos.ts` (usado
+por `createSale` y `closeTab` — mismo patrón de piezas reusables ya
+establecido ahí) verifican, cuando el código tiene `customerId`: que
+coincida con el cliente de la venta ("Este cupón es para otro
+cliente.") y que no se haya usado ya ("Este cupón ya se usó."). Al
+completar la venta, se marca `usedAt` dentro de la misma transacción —
+si la venta falla por otra razón, la marca se revierte junto con todo
+lo demás.
+
+**Página pública `/lealtad/[code]`** — la primera ruta sin sesión de
+toda la app (no existe `middleware.ts`, cada página valida sesión a
+mano; esta simplemente no lo hace). Nuevo `lib/loyalty.ts`
+(`getPublicLoyaltyCard`) expone un DTO mínimo pensado para ser público
+— nombre, sellos, nivel, cupón de bienvenida sin usar si existe — nada
+de teléfono/email/historial de compras (eso sigue siendo exclusivo de
+`getCustomerDetail`/`/clientes/[id]`, de uso interno). La página
+renderiza un código QR (nueva dependencia `qrcode`, generado del lado
+del servidor como SVG inline, sin JS de cliente) con el mismo código
+que ya usa el lector tipo teclado en checkout, el progreso de sellos, y
+el cupón si sigue sin usar.
+
+**Botón "Enviar por WhatsApp"** en los dos lugares donde se crea un
+cliente (`/clientes/nuevo` vía `CustomerForm`, y la creación inline en
+`checkout-dialog.tsx`): arma un link `https://wa.me/<tel>?text=...` con
+`buildWhatsAppLoyaltyLink` (`lib/utils.ts`) — el cajero lo abre y lo
+manda con un clic, no hay envío automático por API. Sin normalización
+de código de país más allá de quitar caracteres no numéricos
+(limitación conocida y documentada).
+
+Verificado con Playwright + Postgres real: cliente nuevo con teléfono →
+`LoyaltyCard`/`DiscountCode` creados en DB con los campos correctos →
+link de WhatsApp armado con la URL y el cupón correctos → `/lealtad/{code}`
+abierta en un contexto de navegador **sin sesión** → carga sin pedir
+login, muestra QR/sellos/cupón; código inválido → mensaje de "no
+encontrada", sin error; venta aplicando el cupón → 10% descontado
+correctamente, `usedAt` marcado en DB; mismo código en una segunda venta
+→ rechazado ("ya se usó"); cupón de un cliente aplicado con otro cliente
+seleccionado → rechazado ("para otro cliente"). Datos de prueba
+limpiados.
+
+Fuera de alcance (documentado explícitamente, decisión del usuario):
+envío real por WhatsApp Business API, pases nativos de Apple Wallet
+(`.pkpass` firmado) y Google Wallet — las tres requieren cuentas de
+terceros que el negocio no tiene todavía; el link `/lealtad/[code]` es
+justo el tipo de URL que un pase nativo también necesitaría enlazar, así
+que el código queda listo para conectar en cuanto existan esas cuentas.
+Fecha de expiración del cupón (no se inventó una). Reenviar/regenerar un
+cupón perdido desde la UI (por ahora vía Prisma Studio). Múltiples
+cupones o cupones recurrentes más allá del de bienvenida.
+
 ## Próximos pasos recomendados (en orden)
 
 Fases 1, 2, 3 y 4 están cerradas, más los ajustes "Cambios Punto de Venta",
@@ -1111,7 +1189,15 @@ POS", el "Módulo Productos" y "Productos + POS 2". Lo que sigue:
    datos ya está listo para ese cambio sin migraciones.
 7. Mergear los PRs pendientes (`pos-reskin-purrcoffee`/menú de LAPSO,
    `pos-mejoras-avanzadas`, `modulo-productos`, `productos-pos-mejoras-2`,
-   `cuentas-abiertas-editar-items`) a `main` si no se han mergeado ya.
+   `cuentas-abiertas-editar-items`, `tarjeta-lealtad-publica`) a `main`
+   si no se han mergeado ya.
+7.1. **Cuando el negocio tenga las cuentas**, conectar lo que quedó
+   listo para eso: WhatsApp Business API (reemplazar el link `wa.me`
+   manual por envío automático al crear el cliente), Apple Developer
+   Program + certificado Pass Type ID (generar un `.pkpass` real que
+   enlace a la misma info de `/lealtad/[code]`), Google Wallet Console
+   (mismo caso). Ver sección "Tarjeta de lealtad pública" para el
+   detalle de qué falta de cada uno.
 8. Cancelar una cuenta de Mesa abierta (hoy solo se puede cobrar o dejarla
    abierta indefinidamente — no hay forma de cancelarla si el cliente se
    va sin pagar), y decidir si vale la pena permitir transferir items

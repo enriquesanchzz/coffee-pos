@@ -1046,8 +1046,9 @@ model Customer {
   address   String? // para pedidos "A domicilio"
   createdAt DateTime  @default(now())
 
-  loyaltyCard LoyaltyCard?
-  sales       Sale[]
+  loyaltyCard   LoyaltyCard?
+  sales         Sale[]
+  discountCodes DiscountCode[]
 
   @@map("customers")
 }
@@ -1183,6 +1184,14 @@ model DiscountCode {
   value     Decimal      @db.Decimal(10, 2)
   isActive  Boolean      @default(true)
   expiresAt DateTime?
+  // Si no es null, este código es personal (ej. el cupón de bienvenida
+  // que se genera al registrar al cliente, ver actions/customers.ts) —
+  // solo se puede aplicar a una venta de ESE cliente, y solo una vez
+  // (usedAt). Un código sin customerId sigue siendo genérico/reusable
+  // como hasta ahora.
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  usedAt     DateTime?
 
   sales Sale[]
 

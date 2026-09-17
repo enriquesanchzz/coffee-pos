@@ -65,6 +65,10 @@ export async function toggleDiscountCodeActive(input: ToggleDiscountCodeInput) {
 export type FindDiscountCodeByCodeInput = {
   employeeId: string;
   code: string;
+  // Cliente seleccionado en la venta actual — obligatorio para validar
+  // un código personal (ver DiscountCode.customerId). Un código
+  // genérico (customerId null) no lo necesita.
+  customerId?: string;
 };
 
 export type FoundDiscountCode = {
@@ -97,6 +101,17 @@ export async function findDiscountCodeByCode(
   }
   if (discountCode.expiresAt && discountCode.expiresAt < new Date()) {
     throw new Error("Ese código de descuento ya expiró.");
+  }
+  // Cupón personal (ej. el de bienvenida al registrar cliente, ver
+  // actions/customers.ts) — solo lo puede usar ese cliente, y solo una
+  // vez.
+  if (discountCode.customerId) {
+    if (discountCode.customerId !== input.customerId) {
+      throw new Error("Este cupón es para otro cliente.");
+    }
+    if (discountCode.usedAt) {
+      throw new Error("Este cupón ya se usó.");
+    }
   }
 
   return {

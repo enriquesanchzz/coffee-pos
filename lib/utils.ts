@@ -30,3 +30,35 @@ const DISCRETE_UNITS = new Set(["PIEZA", "ESPRESSO_SHOT", "PUMP", "CUCHARADA"]);
 export function unitStep(unit: string | null | undefined): string {
   return unit && DISCRETE_UNITS.has(unit) ? "1" : "0.01";
 }
+
+// Link de WhatsApp con el mensaje de la tarjeta de lealtad precargado
+// (ver app/lealtad/[code]/page.tsx) — el cajero lo abre y lo manda con
+// un clic, no hay envío automático por API (fuera de alcance hasta que
+// el negocio tenga una cuenta de WhatsApp Business API, ver
+// docs/CONTINUE.md). `origin` viene de `window.location.origin` — esta
+// función no toca `window` para poder importarse en cualquier lado.
+// Regresa null si el teléfono no tiene dígitos utilizables — sin
+// normalización de código de país más allá de quitar lo que no sea
+// dígito (limitación conocida).
+export function buildWhatsAppLoyaltyLink({
+  phone,
+  origin,
+  loyaltyCardCode,
+  welcomeCouponCode,
+}: {
+  phone: string;
+  origin: string;
+  loyaltyCardCode: string;
+  welcomeCouponCode?: string | null;
+}): string | null {
+  const digits = phone.replace(/\D/g, "");
+  if (!digits) return null;
+
+  const cardUrl = `${origin}/lealtad/${loyaltyCardCode}`;
+  const lines = [`¡Hola! Aquí está tu tarjeta de lealtad de Nomada Café: ${cardUrl}`];
+  if (welcomeCouponCode) {
+    lines.push(`Tienes un cupón de 10% para tu próxima compra — código ${welcomeCouponCode}.`);
+  }
+
+  return `https://wa.me/${digits}?text=${encodeURIComponent(lines.join(" "))}`;
+}
