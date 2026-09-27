@@ -1149,6 +1149,107 @@ Fecha de expiración del cupón (no se inventó una). Reenviar/regenerar un
 cupón perdido desde la UI (por ahora vía Prisma Studio). Múltiples
 cupones o cupones recurrentes más allá del de bienvenida.
 
+## Sistema de diseño unificado + Apariencia en Administración (rama `diseno-sistema-unificado`)
+
+El usuario pidió estandarizar visualmente toda la interfaz (referencia:
+un dashboard tipo POS/delivery con tarjetas redondeadas, acento sólido y
+nav lateral tipo píldora) y agregar una sección en Administración para
+configurar tamaño de letra, tipo de letra, colores y "base del sistema"
+(claro/oscuro).
+
+Antes de construir se auditó el código existente (`grep` de hex/colores
+Tailwind sueltos en `app/`+`components/`): **ya estaba limpio** — cero
+hex hardcodeado, un solo uso de un color Tailwind literal
+(`text-emerald-600` en un mensaje de "Guardado"), y los primitivos de
+`components/ui/` (`Button`/`Card`/`Input`/`Select`/`Badge`/`Dialog`) ya
+usan las variables CSS de `app/globals.css` de forma consistente en toda
+la app (patrón shadcn-like). Eso cambió el alcance real: no hizo falta
+reescribir páginas una por una, bastó con (1) subir la apariencia base a
+nivel de esas variables/primitivos, que ya cascadea a todo, y (2) exponer
+esa base como configuración real.
+
+**`lib/theme.ts`** — única fuente de verdad de las 4 opciones
+configurables, con claves cerradas (nunca un string libre desde el
+cliente):
+- `mode`: `claro`/`oscuro` (sin "automático" — se resuelve 100% en el
+  server component raíz, así que depende de un valor guardado, no de
+  `prefers-color-scheme`, para no arriesgar un mismatch de hidratación).
+- `color`: 5 paletas (`cafe` default/`azul`/`verde`/`morado`/`rosa`), cada
+  una con HSL de `--primary`/`--primary-foreground` para claro y oscuro.
+  Solo se sobreescribe el acento — `--secondary`/`--muted` se quedan
+  neutros en ambos modos a propósito, para que un acento fuerte no rompa
+  contraste en el resto de la UI. El anillo de foco no tiene variable
+  propia, hereda el acento vía `ring-primary`.
+- `fontFamily`: `sans`(default)/`rounded`/`serif`. Se probó primero con
+  pilas de fuentes de sistema (`ui-rounded`, etc.) — **no sirvió**:
+  `ui-rounded` solo renderiza distinto en WebKit/Apple, en todo lo demás
+  cae al mismo sans-serif de siempre y la opción "Redondeada" quedaba
+  invisible. Se reemplazó por `next/font/google` autohospedado
+  (`lib/fonts.ts`: Inter/Poppins/Lora, cada una expone una variable CSS
+  `--font-sans`/`--font-rounded`/`--font-serif`) — se descarga una sola
+  vez en build/dev, no en cada request, así que sigue sin depender de
+  internet en runtime (importante para un POS que puede correr en un
+  kiosco). Verificado visualmente que Poppins/Lora sí se ven distintas
+  entre sí y del default.
+- `fontSize`: `sm`(14px)/`md`(16px, default)/`lg`(18px), aplicado como
+  `font-size` en `<html>` — a propósito escala también el spacing
+  basado en rem (igual que el zoom del navegador), no solo el texto.
+
+Todo se resuelve server-side en `app/layout.tsx` (ahora async): lee
+`getThemeSettings()` y aplica `className`/`style` inline en `<html>`
+(`themeCssVars()`) — cero JS de cliente para aplicar el tema, cero flash
+de tema incorrecto en el primer paint.
+
+**Persistencia**: 4 columnas nuevas en `Branch` (`themeMode`/`themeColor`/
+`themeFontFamily`/`themeFontSize`, todas `String?`, migración
+`20260925002920_add_theme_settings`) — mismo patrón que
+`targetFoodCostPercent`: viven en `Branch` porque la sucursal sigue fija
+(`DEFAULT_BRANCH_ID`) hasta Fase 5, null se resuelve a `THEME_DEFAULTS`.
+Nueva `updateAppearanceSettings` en `actions/settings.ts`, mismo permiso
+exclusivo de ADMINISTRADOR que ya usaba la configuración de food cost
+(`CONFIGURACION_SISTEMA_GESTIONAR` vía `requirePasswordSession` +
+`requirePermission`), `revalidatePath("/", "layout")` porque afecta el
+layout raíz completo, no una sola página.
+
+**UI**: nueva tarjeta "Apariencia" en `/administracion` (bajo el mismo
+gate `canManageSettings` que ya ocultaba "Configuración" a roles que no
+son ADMINISTRADOR — GERENTE, incluida Ana, la cuenta demo, no la ve;
+verificado creando un empleado ADMINISTRADOR de prueba vía el flujo real
+de "+ Nuevo empleado", probando, y desactivándolo de nuevo al terminar).
+`components/administracion/appearance-form.tsx`: selects para
+modo/tipografía/tamaño, swatches de color como botones circulares, mismo
+patrón de guardado (`useTransition` + `router.refresh()`) que
+`SettingsForm`.
+
+**Otros ajustes de "línea de diseño"**:
+- `--radius` subió de `0.5rem` a `0.75rem` en `globals.css` — como
+  `tailwind.config.ts` ya ataba `rounded-md`/`rounded-lg`/`rounded-sm` a
+  `var(--radius)`, esto redondeó botones/inputs/cards/diálogos en **toda**
+  la app con un solo cambio, sin tocar componentes uno por uno.
+- `components/layout/sidebar.tsx` pasó a `"use client"` con
+  `usePathname()` para resaltar el módulo activo como píldora
+  (`rounded-full bg-primary`) — antes no había ningún estado activo, los
+  8 módulos se veían siempre igual.
+- Modo oscuro real: `tailwind.config.ts` con `darkMode: "class"`,
+  variables `.dark` nuevas en `globals.css` (solo neutros — el acento lo
+  sigue resolviendo `themeCssVars` según la paleta elegida).
+
+Verificado con Playwright + Chromium headless contra el dev server real
+(sin `chromium-cli` disponible en este entorno, se instaló `playwright`
+temporalmente con `--no-save` y se desinstaló al terminar — no quedó
+como dependencia): login real, cambiar cada opción de apariencia y
+guardar, confirmar que se aplica de inmediato en `/administracion`,
+`/pos` y `/caja` sin recargar manualmente el navegador, capturas en
+claro/oscuro/cada acento/cada tipografía/cada tamaño, sin errores de
+consola. Datos de prueba revertidos a los defaults y empleado de QA
+desactivado al final.
+
+Fuera de alcance (no pedido, no se construyó): un color picker libre
+(hex/RGB) — se prefirieron paletas curadas para que cualquier
+combinación se vea bien con los tokens neutros existentes; tipografías
+adicionales más allá de las 3 curadas; personalización por empleado (la
+apariencia es global de la sucursal, igual que el food cost objetivo).
+
 ## Próximos pasos recomendados (en orden)
 
 Fases 1, 2, 3 y 4 están cerradas, más los ajustes "Cambios Punto de Venta",
@@ -1232,3 +1333,13 @@ POS", el "Módulo Productos" y "Productos + POS 2". Lo que sigue:
   arriba). Usar un valor fijo o derivado de datos reales para el estado
   inicial; los valores aleatorios son seguros solo en código que corre
   exclusivamente en el cliente (ej. un handler de "agregar fila").
+- **Apariencia global (color/tipografía/tamaño/modo) vive en `lib/theme.ts`
+  + `Branch.theme*`, nunca hardcodeada en un componente**: cualquier UI
+  nueva debe usar las clases de token existentes (`bg-primary`,
+  `text-foreground`, `border-border`, `rounded-md`/`rounded-lg` atados a
+  `var(--radius)`, etc.) en vez de colores/radios sueltos, para que
+  quede bajo el control de Administración → Apariencia. Si hace falta
+  una opción nueva (una paleta, una fuente), agregarla a los registros
+  de `lib/theme.ts` (`COLOR_PALETTES`/`FONT_FAMILIES`/`FONT_SIZES`) y a
+  `lib/fonts.ts` si es tipografía — nunca aceptar un string libre desde
+  el cliente para estas claves.

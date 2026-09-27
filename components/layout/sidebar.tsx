@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   ShoppingCart,
   Wallet,
@@ -26,9 +29,11 @@ const modules = [
 ];
 
 export function Sidebar() {
+  const pathname = usePathname();
+
   return (
     <aside className="flex h-full w-56 flex-col border-r border-border bg-muted/40 p-3">
-      <div className="mb-4 px-2 py-1">
+      <div className="mb-4 px-3 py-1">
         <p className="text-sm font-semibold">Nomada Café</p>
         <p className="text-xs text-muted-foreground">POS</p>
       </div>
@@ -36,16 +41,18 @@ export function Sidebar() {
       <nav className="flex flex-1 flex-col gap-1">
         {modules.map((mod) => {
           const Icon = mod.icon;
+          const isActive = pathname === mod.href || pathname?.startsWith(`${mod.href}/`);
           return (
             <Link
               key={mod.label}
               href={mod.href}
               aria-disabled={!mod.enabled}
+              aria-current={isActive ? "page" : undefined}
               className={cn(
-                "flex items-center justify-between rounded-md px-2 py-2 text-sm transition-colors",
-                mod.enabled
-                  ? "hover:bg-muted text-foreground"
-                  : "pointer-events-none text-muted-foreground"
+                "flex items-center justify-between rounded-full px-3 py-2 text-sm font-medium transition-colors",
+                !mod.enabled && "pointer-events-none text-muted-foreground",
+                mod.enabled && isActive && "bg-primary text-primary-foreground",
+                mod.enabled && !isActive && "text-foreground hover:bg-muted"
               )}
             >
               <span className="flex items-center gap-2">
