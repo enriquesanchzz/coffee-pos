@@ -5,11 +5,13 @@ import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getEmployees } from "@/lib/employees";
 import { getTargetFoodCostPercent } from "@/lib/recipes";
+import { getThemeSettings } from "@/lib/theme";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { logoutAction } from "@/actions/session";
 import { SettingsForm } from "@/components/administracion/settings-form";
+import { AppearanceForm } from "@/components/administracion/appearance-form";
 
 export default async function AdministracionPage() {
   const actor = await requirePasswordSession();
@@ -26,9 +28,10 @@ export default async function AdministracionPage() {
     "CONFIGURACION_SISTEMA_GESTIONAR"
   );
 
-  const [employees, targetFoodCostPercent] = await Promise.all([
+  const [employees, targetFoodCostPercent, themeSettings] = await Promise.all([
     getEmployees(),
     canManageSettings ? getTargetFoodCostPercent() : Promise.resolve(null),
+    canManageSettings ? getThemeSettings() : Promise.resolve(null),
   ]);
 
   return (
@@ -96,6 +99,17 @@ export default async function AdministracionPage() {
               </CardHeader>
               <CardContent>
                 <SettingsForm targetFoodCostPercent={targetFoodCostPercent} />
+              </CardContent>
+            </Card>
+          )}
+
+          {canManageSettings && themeSettings && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Apariencia</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <AppearanceForm initial={themeSettings} />
               </CardContent>
             </Card>
           )}

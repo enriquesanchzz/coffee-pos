@@ -15,7 +15,25 @@
     --destructive: 0 72% 45%;
     --destructive-foreground: 30 20% 98%;
     --border: 24 10% 85%;
-    --radius: 0.5rem;
+    /* Radio base para rounded-sm/md/lg (tailwind.config.ts) — un solo
+       número controla botones, inputs, cards y diálogos en toda la app. */
+    --radius: 0.75rem;
+  }
+
+  /* Neutros oscuros; --primary/--primary-foreground los sobreescribe la
+     paleta elegida vía estilo inline en app/layout.tsx (lib/theme.ts). */
+  .dark {
+    --background: 24 15% 10%;
+    --foreground: 30 15% 94%;
+    --muted: 24 12% 16%;
+    --muted-foreground: 30 10% 65%;
+    --primary: 28 55% 62%;
+    --primary-foreground: 24 30% 12%;
+    --secondary: 24 12% 20%;
+    --secondary-foreground: 30 15% 94%;
+    --destructive: 0 62% 55%;
+    --destructive-foreground: 30 15% 94%;
+    --border: 24 12% 22%;
   }
 
   * {
