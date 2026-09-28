@@ -226,10 +226,11 @@ model Branch {
   // Apariencia global del sistema, ajustable desde Administración
   // (ver lib/theme.ts y actions/settings.ts). Claves validadas en código,
   // no a nivel de columna — null se resuelve a los defaults de THEME_DEFAULTS.
-  themeMode       String? // "claro" | "oscuro"
-  themeColor      String? // clave de paleta en lib/theme.ts (COLOR_PALETTES)
-  themeFontFamily String? // "sans" | "rounded" | "serif"
-  themeFontSize   String? // "sm" | "md" | "lg"
+  themeMode            String? // "claro" | "oscuro"
+  themeColor           String? // hex "#RRGGBB" — acento (antes clave de paleta cerrada)
+  themeBackgroundColor String? // hex "#RRGGBB", null = fondo por defecto de themeMode
+  themeFontFamily      String? // "sans" | "rounded" | "serif"
+  themeFontSize        String? // "sm" | "md" | "lg"
 
   employeeBranches EmployeeBranch[]
   branchProducts   BranchProduct[]

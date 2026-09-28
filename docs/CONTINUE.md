@@ -1725,8 +1725,80 @@ temperatura "Caliente" acotó la lista de 138 a 16 recetas. Sin errores de
 consola tras el fix del key duplicado.
 
 Con esto quedan cerrados los 6 frentes del plan de "cambios de
-administración" en esta rama (`cambios-administracion`), ninguno
-commiteado todavía.
+administración" (mergeado a `main` en el PR #16).
+
+## Tema en el POS + cobro inline (rama `pos-tema-y-cobro-inline`)
+
+El usuario probó el POS ya con Apariencia funcionando y encontró que
+cambiar el color en Administración no se reflejaba ahí — más un color
+libre (hex/color picker) en vez de las 5 paletas curadas, más poder
+personalizar el color de fondo — y pidió dos cambios de flujo: que
+"Cobrar" abra un panel inline debajo del botón, no un popup, y que el
+cliente se escoja desde la comanda (debajo de Mesa/Para llevar/A
+domicilio), no hasta entrar a cobrar.
+
+**El acento no llegaba al POS — bug real, no solo falta de alcance**:
+`components/pos/*` usaba `posAccentClass`/`posAccentBorderClass`
+(`lib/utils.ts`), definidas como naranja fijo (`bg-orange-500`) **a
+propósito** desde el reskin "Purr'Coffee" — el comentario original decía
+explícitamente que no debían tocar `--primary` porque en ese momento no
+existía ningún sistema de tema real que hubiera que respetar. Con
+Apariencia ya construida, esa decisión quedó obsoleta: se redefinieron
+esas dos constantes a `bg-primary`/`border-primary` — un cambio de una
+línea que hace que todo `components/pos/*` (pastillas de tipo de venta,
+botón Cobrar, tipo de leche, método de pago, etc.) seguido el acento
+elegido en Apariencia, sin tocar los ~8 lugares que las usan.
+
+**Acento y fondo como hex libre, no paleta cerrada** (`lib/theme.ts`):
+`COLOR_PALETTES` (5 paletas curadas con variantes claro/oscuro a mano) se
+reemplazó por hex libre + contraste calculado en código — `hexToHslString`
+(conversión estándar RGB→HSL) y `contrastForegroundHsl` (luminancia
+relativa WCAG: decide si el texto encima debe ser casi blanco o casi
+negro, en vez de curar un "foreground" por cada color posible). Nuevo
+`Branch.themeBackgroundColor` (columna aditiva, migración
+`20260928020244_add_theme_background_color`) — cuando tiene valor,
+sobreescribe `--background`/`--foreground`; cuando es `null`, el fondo
+sigue siendo el que ya definía `mode` (claro/oscuro) en `app/globals.css`.
+A propósito **no** se re-derivan `--muted`/`--border`/`--secondary` desde
+el fondo custom — quedan atados a `mode`, para no requerir todo un
+sistema de derivación de paleta neutra a partir de un solo hex.
+`AppearanceForm` (`components/administracion/appearance-form.tsx`) ganó
+un `<input type="color">` + campo de hex para el acento (con 5 sugerencias
+rápidas, ya no una lista cerrada) y un checkbox "Personalizar color de
+fondo" que revela el mismo patrón para el fondo.
+
+**Cobro inline, sin `<Dialog>`** — refactor de `components/pos/`:
+`checkout-dialog.tsx` (un `<Dialog>` centrado que hacía de todo: elegir
+cliente, domicilio, descuento, método de pago, confirmar) se partió en
+tres piezas:
+- `customer-picker.tsx` (nuevo): búsqueda/selección/creación de cliente +
+  domicilio (dirección/origen) — vive ahora en el header de `CartPanel`,
+  debajo del selector Mesa/Para llevar/A domicilio, siempre visible sin
+  necesidad de llegar a "Cobrar".
+- `checkout-form.tsx` (nuevo): descuento/método de pago/total/confirmar —
+  lo que antes era el cuerpo de `CheckoutDialog`. Recibe
+  cliente/domicilio como props de solo lectura (`CartPanel` es quien los
+  posee de verdad, porque `CustomerPicker` y `CheckoutForm` son hermanos
+  que ambos los necesitan).
+- `cart-panel.tsx` (reescrito): gana un estado `view: "cart" | "checkout"`
+  — "Cobrar" ya no abre un diálogo, cambia `view` a `"checkout"`, lo que
+  reemplaza la lista del carrito + su pie por `<CheckoutForm>` **en el
+  mismo panel, en el mismo lugar de la pantalla** (con un botón "← Atrás"
+  para volver). `pos-workspace.tsx` dejó de montar `<CheckoutDialog>`
+  como hermano flotante — `CartPanel` ahora es autosuficiente para todo
+  el flujo de cobro, solo necesita `customers` como prop (antes solo se
+  la pasaban al diálogo).
+
+Verificado con Playwright + Postgres real: cambiar el acento a azul
+(`#1d4ed8`) + fondo a lavanda (`#eef2ff`) en Apariencia y confirmar que
+`/pos` los refleja de inmediato (pastilla activa, botón Cobrar, fondo de
+toda la pantalla — antes hubiera seguido naranja/blanco pase lo que
+pase); confirmar que el campo de cliente ya aparece en la comanda sin
+haber tocado "Cobrar"; completar una venta real de punta a punta
+(agregar Malteada con sabor Chocolate, cobrar, confirmar) y verificar en
+Postgres que la venta y sus modificadores quedaron correctos, sin ningún
+`[role="dialog"]` abierto durante el cobro. Tema de prueba revertido a
+los defaults (`#5a3a24`, sin fondo custom, claro) al terminar.
 
 ## Próximos pasos recomendados (en orden)
 
