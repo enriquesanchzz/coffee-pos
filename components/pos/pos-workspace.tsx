@@ -6,7 +6,6 @@ import type { CustomerOption } from "@/lib/customers";
 import { CatalogBrowser } from "./catalog-browser";
 import { CartPanel } from "./cart-panel";
 import { ProductDialog } from "./product-dialog";
-import { CheckoutDialog } from "./checkout-dialog";
 import { OpenTabsDialog } from "./open-tabs-dialog";
 import { useCartStore } from "./cart-store";
 import { getTabDetail, type OpenTabDetail } from "@/actions/pos";
@@ -29,7 +28,6 @@ export function PosWorkspace({
 }) {
   const [selectedProduct, setSelectedProduct] = useState<CatalogProduct | null>(null);
   const [productDialogOpen, setProductDialogOpen] = useState(false);
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [movementOpen, setMovementOpen] = useState(false);
   const [openTabsDialogOpen, setOpenTabsDialogOpen] = useState(false);
   const [activeTabSummary, setActiveTabSummary] = useState<OpenTabDetail | null>(null);
@@ -80,10 +78,10 @@ export function PosWorkspace({
       </div>
 
       <CartPanel
-        onCheckout={() => setCheckoutOpen(true)}
         branchId={branchId}
         shiftId={shiftId}
         employeeId={employee.id}
+        customers={customers}
         activeTabSummary={activeTabSummary}
         onTabChanged={() => {
           if (activeTabId) {
@@ -98,16 +96,6 @@ export function PosWorkspace({
         onOpenChange={setProductDialogOpen}
         extraIngredientOptions={extraIngredientOptions}
         onAdd={addLine}
-      />
-
-      <CheckoutDialog
-        open={checkoutOpen}
-        onOpenChange={setCheckoutOpen}
-        branchId={branchId}
-        shiftId={shiftId}
-        employeeId={employee.id}
-        customers={customers}
-        activeTabBaseTotal={activeTabSummary?.total}
       />
 
       <OpenTabsDialog open={openTabsDialogOpen} onOpenChange={setOpenTabsDialogOpen} branchId={branchId} />

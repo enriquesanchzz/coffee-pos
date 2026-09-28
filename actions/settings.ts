@@ -37,6 +37,7 @@ export async function updateTargetFoodCostPercent(percent: number) {
 export async function updateAppearanceSettings(input: {
   mode: string;
   color: string;
+  backgroundColor?: string | null;
   fontFamily: string;
   fontSize: string;
 }): Promise<ThemeSettings> {
@@ -53,6 +54,7 @@ export async function updateAppearanceSettings(input: {
     data: {
       themeMode: settings.mode,
       themeColor: settings.color,
+      themeBackgroundColor: settings.backgroundColor,
       themeFontFamily: settings.fontFamily,
       themeFontSize: settings.fontSize,
     },

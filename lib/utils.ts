@@ -13,12 +13,15 @@ export function formatCurrency(amount: number | string) {
   }).format(value);
 }
 
-// Acento visual usado solo en components/pos/* (reskin al estilo del
-// mockup de referencia) — deliberadamente no se toca la variable global
-// --primary en app/globals.css para no afectar el resto de la app
-// (Compras, Reportes, Administración, etc.).
-export const posAccentClass = "bg-orange-500 text-white hover:bg-orange-500/90";
-export const posAccentBorderClass = "border-orange-500 bg-orange-500 text-white";
+// Acento visual usado en components/pos/* — antes un naranja fijo
+// (bg-orange-500), independiente de --primary a propósito porque no
+// existía todavía un sistema de tema real. Ahora que Administración →
+// Apariencia sí controla --primary/--primary-foreground para toda la app
+// (ver lib/theme.ts), el POS debe seguir ese mismo acento — de lo
+// contrario cambiar el color en Apariencia no se refleja en la pantalla
+// que más usa el cajero.
+export const posAccentClass = "bg-primary text-primary-foreground hover:bg-primary/90";
+export const posAccentBorderClass = "border-primary bg-primary text-primary-foreground";
 
 // Unidades que se cuentan de una en una (piezas, shots, pumps, cucharadas)
 // — un <input type="number"> para estas debe subir/bajar de 1 en 1, no de

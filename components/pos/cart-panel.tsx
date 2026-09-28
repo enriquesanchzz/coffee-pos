@@ -2,12 +2,15 @@
 
 import { useState, useTransition } from "react";
 import { Coffee, Minus, Plus, Trash2 } from "lucide-react";
-import type { SaleOrderType } from "@prisma/client";
+import type { SaleOrderType, DomicilioOrigen } from "@prisma/client";
 import { useCartStore, lineUnitPrice, cartLineToSaleItemInput } from "./cart-store";
 import { openTab, addItemsToTab, removeTabItem, updateTabItemQuantity, type OpenTabDetail } from "@/actions/pos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn, formatCurrency, posAccentClass } from "@/lib/utils";
+import { CustomerPicker } from "./customer-picker";
+import { CheckoutForm } from "./checkout-form";
+import type { CustomerOption } from "@/lib/customers";
 
 const temperatureLabels: Record<string, string> = {
   CALIENTE: "Caliente",
@@ -24,17 +27,17 @@ const orderTypes: { value: SaleOrderType; label: string }[] = [
 ];
 
 export function CartPanel({
-  onCheckout,
   branchId,
   shiftId,
   employeeId,
+  customers,
   activeTabSummary,
   onTabChanged,
 }: {
-  onCheckout: () => void;
   branchId: string;
   shiftId: string;
   employeeId: string;
+  customers: CustomerOption[];
   // Resumen de la cuenta que se está retomando (null = carrito normal).
   activeTabSummary: OpenTabDetail | null;
   onTabChanged: () => void;
@@ -59,6 +62,32 @@ export function CartPanel({
   // la vez sobre la misma línea.
   const [pendingItemId, setPendingItemId] = useState<string | null>(null);
   const [registeredError, setRegisteredError] = useState<string | null>(null);
+
+  // "Cobrar" ya no abre un <Dialog> flotante — el panel de cobro (antes
+  // CheckoutDialog) ahora es un segundo "modo" de este mismo panel, que
+  // reemplaza la lista del carrito en el mismo lugar de la pantalla.
+  const [view, setView] = useState<"cart" | "checkout">("cart");
+
+  // Cliente/domicilio viven aquí (no en CustomerPicker ni en CheckoutForm)
+  // porque ambos son hermanos que los necesitan: CustomerPicker los
+  // captura, CheckoutForm los lee al confirmar la venta.
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerOption | null>(null);
+  const [domicilioAddress, setDomicilioAddress] = useState("");
+  const [domicilioOrigen, setDomicilioOrigen] = useState<DomicilioOrigen>("TELEFONO");
+
+  function handleSelectCustomer(customer: CustomerOption | null) {
+    setSelectedCustomer(customer);
+  }
+
+  function handleConfirmed() {
+    setView("cart");
+    setSelectedCustomer(null);
+    setDomicilioAddress("");
+    setDomicilioOrigen("TELEFONO");
+    setOrderType("PARA_LLEVAR");
+    setTableNumber("");
+    setActiveTabId(null);
+  }
 
   function handleLeaveOpen() {
     setTabError(null);
@@ -113,6 +142,24 @@ export function CartPanel({
     }
   }
 
+  if (view === "checkout") {
+    return (
+      <div className="flex h-full flex-col overflow-y-auto border-l border-border">
+        <CheckoutForm
+          branchId={branchId}
+          shiftId={shiftId}
+          employeeId={employeeId}
+          activeTabBaseTotal={activeTabSummary?.total}
+          selectedCustomer={selectedCustomer}
+          domicilioAddress={domicilioAddress}
+          domicilioOrigen={domicilioOrigen}
+          onConfirmed={handleConfirmed}
+          onCancel={() => setView("cart")}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full flex-col border-l border-border">
       <div className="flex flex-col gap-3 border-b border-border p-4">
@@ -141,6 +188,17 @@ export function CartPanel({
             disabled={Boolean(activeTabId)}
           />
         )}
+        <CustomerPicker
+          customers={customers}
+          employeeId={employeeId}
+          orderType={orderType}
+          selectedCustomer={selectedCustomer}
+          onSelectCustomer={handleSelectCustomer}
+          domicilioAddress={domicilioAddress}
+          onDomicilioAddressChange={setDomicilioAddress}
+          domicilioOrigen={domicilioOrigen}
+          onDomicilioOrigenChange={setDomicilioOrigen}
+        />
       </div>
 
       <div className="flex-1 overflow-y-auto p-3">
@@ -312,7 +370,7 @@ export function CartPanel({
           <Button
             className={cn("flex-1", posAccentClass)}
             disabled={lines.length === 0 && !activeTabId}
-            onClick={onCheckout}
+            onClick={() => setView("checkout")}
           >
             Cobrar
           </Button>
