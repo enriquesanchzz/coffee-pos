@@ -1,16 +1,17 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getCurrentEmployee } from "@/lib/session";
+import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getTransferManifests } from "@/lib/transfers";
-import { Sidebar } from "@/components/layout/sidebar";
+import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { transferStatusLabels } from "@/components/compras/enum-labels";
 
 export default async function TransferenciasPage() {
   const employee = await getCurrentEmployee();
   if (!employee) redirect("/");
+  if (resolveRoleName(employee, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
 
   const canManage =
     (await hasPermission(employee.id, DEFAULT_BRANCH_ID, "INVENTARIO_AJUSTAR")) ||
@@ -20,9 +21,7 @@ export default async function TransferenciasPage() {
   const manifests = await getTransferManifests();
 
   return (
-    <div className="flex h-screen">
-      <Sidebar />
-      <div className="flex-1 overflow-y-auto">
+    <AuthenticatedShell isAdmin employeeName={employee.name}>
         <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
           <div className="flex items-center justify-between">
             <div>
@@ -69,7 +68,6 @@ export default async function TransferenciasPage() {
             </CardContent>
           </Card>
         </div>
-      </div>
-    </div>
+    </AuthenticatedShell>
   );
 }

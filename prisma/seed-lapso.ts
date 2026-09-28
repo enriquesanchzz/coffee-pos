@@ -142,7 +142,7 @@ async function main() {
     create: {
       id: "ing-cafe",
       name: "Café en grano",
-      category: "CAFE",
+      categoryId: "CAFE",
       kind: "ATOMICO",
       baseUnit: "ESPRESSO_SHOT",
       purchaseUnit: "KG",
@@ -155,7 +155,7 @@ async function main() {
     create: {
       id: "ing-leche",
       name: "Leche entera",
-      category: "LECHE",
+      categoryId: "LECHE",
       kind: "ATOMICO",
       baseUnit: "ML",
       purchaseUnit: "L",
@@ -174,7 +174,7 @@ async function main() {
     create: {
       id: "ing-vaso",
       name: "Vaso 12oz",
-      category: "INSUMOS",
+      categoryId: "INSUMOS",
       kind: "ATOMICO",
       baseUnit: "PIEZA",
       purchaseUnit: "PIEZA",
@@ -189,7 +189,7 @@ async function main() {
     create: {
       id: "ing-vaso-3oz",
       name: "Vaso Espresso 3oz",
-      category: "INSUMOS",
+      categoryId: "INSUMOS",
       kind: "ATOMICO",
       baseUnit: "PIEZA",
       purchaseUnit: "PIEZA",
@@ -204,7 +204,7 @@ async function main() {
     create: {
       id: "ing-vaso-8oz",
       name: "Vaso 8oz",
-      category: "INSUMOS",
+      categoryId: "INSUMOS",
       kind: "ATOMICO",
       baseUnit: "PIEZA",
       purchaseUnit: "PIEZA",
@@ -219,7 +219,7 @@ async function main() {
     create: {
       id: "ing-vaso-16oz",
       name: "Vaso 16oz",
-      category: "INSUMOS",
+      categoryId: "INSUMOS",
       kind: "ATOMICO",
       baseUnit: "PIEZA",
       purchaseUnit: "PIEZA",
@@ -234,7 +234,7 @@ async function main() {
     create: {
       id: "ing-agua",
       name: "Agua",
-      category: "JARABES",
+      categoryId: "JARABES",
       kind: "ATOMICO",
       baseUnit: "ML",
       purchaseUnit: "L",
@@ -248,7 +248,7 @@ async function main() {
     create: {
       id: "ing-hielo",
       name: "Hielo",
-      category: "INSUMOS",
+      categoryId: "INSUMOS",
       kind: "ATOMICO",
       baseUnit: "G",
       purchaseUnit: "KG",
@@ -270,7 +270,7 @@ async function main() {
     create: {
       id: "ing-esencia-sabor",
       name: "Esencia de sabor",
-      category: "JARABES",
+      categoryId: "JARABES",
       kind: "ATOMICO",
       baseUnit: "ML",
       purchaseUnit: "L",
@@ -283,7 +283,7 @@ async function main() {
     create: {
       id: "ing-crema-batida",
       name: "Crema batida",
-      category: "TOPPINGS",
+      categoryId: "TOPPINGS",
       kind: "ATOMICO",
       baseUnit: "PIEZA",
       purchaseUnit: "PIEZA",
@@ -317,7 +317,7 @@ async function main() {
       create: {
         id: milk.id,
         name: `Leche ${milk.name}`,
-        category: "LECHE",
+        categoryId: "LECHE",
         kind: "ATOMICO",
         baseUnit: "ML",
         purchaseUnit: "L",
@@ -335,7 +335,7 @@ async function main() {
   // seed-demo.ts, no este script, y no debe tronar si esa fila no
   // existe todavía.
   await prisma.ingredient.updateMany({
-    where: { category: "LECHE", baseUnit: "ML" },
+    where: { categoryId: "LECHE", baseUnit: "ML" },
     data: { standardDoseQuantity: 30, standardDoseUnit: "ML" },
   });
 
@@ -364,16 +364,16 @@ async function main() {
   // un costo real de insumo — simplificación explícita, documentada en
   // docs/CONTINUE.md, porque el sistema no modela un margen aparte para
   // extras libres.
-  const extrasMenu: { id: string; name: string; category: "INSUMOS" | "LECHE" | "TOPPINGS"; cost: number }[] = [
-    { id: "ing-extra-aderezo", name: "Aderezo", category: "TOPPINGS", cost: 5 },
-    { id: "ing-crema-batida", name: "Crema batida", category: "TOPPINGS", cost: 10 },
-    { id: "ing-extra-salsa", name: "Salsa", category: "TOPPINGS", cost: 12 },
-    { id: "ing-extra-extraccion", name: "Extracción", category: "INSUMOS", cost: 8 },
-    { id: "ing-extra-extraccion-doble", name: "Extracción doble", category: "INSUMOS", cost: 12 },
-    { id: "ing-extra-esencia", name: "Esencia (extra)", category: "TOPPINGS", cost: 9 },
-    { id: "ing-extra-vaso-leche", name: "Vaso de leche (fría o caliente)", category: "LECHE", cost: 15 },
-    { id: "ing-extra-leche-almendras", name: "Leche de almendras", category: "LECHE", cost: 10 },
-    { id: "ing-extra-leche-coco", name: "Leche de coco", category: "LECHE", cost: 10 },
+  const extrasMenu: { id: string; name: string; categoryId: "INSUMOS" | "LECHE" | "TOPPINGS"; cost: number }[] = [
+    { id: "ing-extra-aderezo", name: "Aderezo", categoryId: "TOPPINGS", cost: 5 },
+    { id: "ing-crema-batida", name: "Crema batida", categoryId: "TOPPINGS", cost: 10 },
+    { id: "ing-extra-salsa", name: "Salsa", categoryId: "TOPPINGS", cost: 12 },
+    { id: "ing-extra-extraccion", name: "Extracción", categoryId: "INSUMOS", cost: 8 },
+    { id: "ing-extra-extraccion-doble", name: "Extracción doble", categoryId: "INSUMOS", cost: 12 },
+    { id: "ing-extra-esencia", name: "Esencia (extra)", categoryId: "TOPPINGS", cost: 9 },
+    { id: "ing-extra-vaso-leche", name: "Vaso de leche (fría o caliente)", categoryId: "LECHE", cost: 15 },
+    { id: "ing-extra-leche-almendras", name: "Leche de almendras", categoryId: "LECHE", cost: 10 },
+    { id: "ing-extra-leche-coco", name: "Leche de coco", categoryId: "LECHE", cost: 10 },
   ];
 
   const extraIngredients = new Map<string, { id: string; cost: number }>();
@@ -384,7 +384,7 @@ async function main() {
       create: {
         id: extra.id,
         name: extra.name,
-        category: extra.category,
+        categoryId: extra.categoryId,
         kind: "ATOMICO",
         baseUnit: "PIEZA",
         purchaseUnit: "PIEZA",

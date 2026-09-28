@@ -93,7 +93,7 @@ export async function getActiveSuppliers(): Promise<ActiveSupplierOption[]> {
 export type IngredientOption = {
   id: string;
   name: string;
-  category: string;
+  categoryId: string;
   baseUnit: string;
   tracksExpiration: boolean;
 };
@@ -106,7 +106,7 @@ export async function getIngredientOptions(): Promise<IngredientOption[]> {
   return ingredients.map((ingredient) => ({
     id: ingredient.id,
     name: ingredient.name,
-    category: ingredient.category,
+    categoryId: ingredient.categoryId,
     baseUnit: ingredient.baseUnit,
     tracksExpiration: ingredient.tracksExpiration,
   }));
@@ -160,6 +160,7 @@ export type PurchaseOrderItemDetail = {
   tracksExpiration: boolean;
   orderedQuantity: number;
   receivedQuantity: number | null;
+  pendingQuantity: number;
   unit: string;
   estimatedUnitCost: number;
   actualUnitCost: number | null;
@@ -188,16 +189,21 @@ export async function getPurchaseOrderDetail(id: string): Promise<PurchaseOrderD
     supplierName: order.supplier.name,
     createdAt: order.createdAt.toISOString(),
     receivedAt: order.receivedAt?.toISOString() ?? null,
-    items: order.items.map((item) => ({
-      id: item.id,
-      ingredientId: item.ingredientId,
-      ingredientName: item.ingredient.name,
-      tracksExpiration: item.ingredient.tracksExpiration,
-      orderedQuantity: item.orderedQuantity.toNumber(),
-      receivedQuantity: item.receivedQuantity?.toNumber() ?? null,
-      unit: item.unit,
-      estimatedUnitCost: item.estimatedUnitCost.toNumber(),
-      actualUnitCost: item.actualUnitCost?.toNumber() ?? null,
-    })),
+    items: order.items.map((item) => {
+      const orderedQuantity = item.orderedQuantity.toNumber();
+      const receivedQuantity = item.receivedQuantity?.toNumber() ?? null;
+      return {
+        id: item.id,
+        ingredientId: item.ingredientId,
+        ingredientName: item.ingredient.name,
+        tracksExpiration: item.ingredient.tracksExpiration,
+        orderedQuantity,
+        receivedQuantity,
+        pendingQuantity: Math.max(0, orderedQuantity - (receivedQuantity ?? 0)),
+        unit: item.unit,
+        estimatedUnitCost: item.estimatedUnitCost.toNumber(),
+        actualUnitCost: item.actualUnitCost?.toNumber() ?? null,
+      };
+    }),
   };
 }

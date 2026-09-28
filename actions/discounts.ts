@@ -5,7 +5,7 @@ import type { DiscountType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getSessionEmployeeId } from "@/lib/session";
-import { requirePermission } from "@/lib/permissions";
+import { requirePermission, requireAdminRole } from "@/lib/permissions";
 
 export type CreateDiscountCodeInput = {
   employeeId: string;
@@ -28,6 +28,7 @@ export async function createDiscountCode(input: CreateDiscountCodeInput) {
   }
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "DESCUENTO_CODIGO_CREAR");
+  await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
 
   await prisma.discountCode.create({
     data: {
@@ -53,6 +54,7 @@ export async function toggleDiscountCodeActive(input: ToggleDiscountCodeInput) {
   }
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "DESCUENTO_CODIGO_CREAR");
+  await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
 
   await prisma.discountCode.update({
     where: { id: input.discountCodeId },

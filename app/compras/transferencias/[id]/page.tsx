@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
-import { getCurrentEmployee } from "@/lib/session";
+import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getTransferManifestDetail } from "@/lib/transfers";
-import { Sidebar } from "@/components/layout/sidebar";
+import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TransferStatusActions } from "@/components/compras/transfer-status-actions";
 import { ReceiveTransferForm } from "@/components/compras/receive-transfer-form";
@@ -16,6 +16,7 @@ export default async function DetalleTransferenciaPage({
 }) {
   const employee = await getCurrentEmployee();
   if (!employee) redirect("/");
+  if (resolveRoleName(employee, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
 
   const canManage =
     (await hasPermission(employee.id, DEFAULT_BRANCH_ID, "INVENTARIO_AJUSTAR")) ||
@@ -28,9 +29,7 @@ export default async function DetalleTransferenciaPage({
     transferStatusLabels[manifest.status as keyof typeof transferStatusLabels] ?? manifest.status;
 
   return (
-    <div className="flex h-screen">
-      <Sidebar />
-      <div className="flex-1 overflow-y-auto">
+    <AuthenticatedShell isAdmin employeeName={employee.name}>
         <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
           <div>
             <h1 className="text-lg font-semibold">
@@ -76,7 +75,6 @@ export default async function DetalleTransferenciaPage({
             <ReceiveTransferForm employeeId={employee.id} manifest={manifest} />
           )}
         </div>
-      </div>
-    </div>
+    </AuthenticatedShell>
   );
 }

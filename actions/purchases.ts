@@ -5,7 +5,7 @@ import type { UnitOfMeasure } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID, DEFAULT_STOCK_LOCATION_ID } from "@/lib/constants";
 import { getSessionEmployeeId } from "@/lib/session";
-import { requirePermission } from "@/lib/permissions";
+import { requirePermission, requireAdminRole } from "@/lib/permissions";
 
 // No existe un permiso específico de "proveedores" en el catálogo — se usa
 // ORDEN_COMPRA_CREAR (el más cercano) para crear/editar proveedor y crear
@@ -30,6 +30,7 @@ export async function createSupplier(input: CreateSupplierInput) {
   }
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "ORDEN_COMPRA_CREAR");
+  await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
 
   const supplier = await prisma.supplier.create({
     data: {
@@ -68,6 +69,7 @@ export async function updateSupplier(input: UpdateSupplierInput) {
   }
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "ORDEN_COMPRA_CREAR");
+  await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
 
   await prisma.supplier.update({
     where: { id: input.supplierId },
@@ -108,6 +110,7 @@ export async function upsertIngredientSupplier(input: UpsertIngredientSupplierIn
   }
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "ORDEN_COMPRA_CREAR");
+  await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
 
   await prisma.$transaction(async (tx) => {
     if (input.isSelected) {
@@ -185,6 +188,7 @@ export async function createPurchaseOrder(input: CreatePurchaseOrderInput) {
   }
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "ORDEN_COMPRA_CREAR");
+  await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
 
   const order = await prisma.purchaseOrder.create({
     data: {
@@ -221,18 +225,26 @@ export type ReceivePurchaseOrderInput = {
   lines: ReceivePurchaseOrderLineInput[];
 };
 
-// Recepción de una sola vez, no incremental — PROVEIDA_PARCIALMENTE es
-// terminal (ver comentario en PurchaseOrderStatus del schema). Por cada
-// línea con receivedQuantity > 0: crea IngredientBatch, incrementa
-// InventoryStock, registra InventoryMovement tipo COMPRA, y si el costo
-// real difiere del costo cotizado del proveedor, actualiza
-// IngredientSupplier.cost dejando rastro en IngredientCostHistory.
+// Recepción reabrible: una orden PROVEIDA_PARCIALMENTE se puede volver a
+// recibir (una o más veces) hasta completarse o cancelarse explícitamente
+// (`cancelPurchaseOrder`) — ya no es terminal (decisión confirmada con el
+// usuario, ver docs/CONTINUE.md "Cambios de Administración — Frente 4").
+// `PurchaseOrderItem.receivedQuantity` es ahora un acumulado entre pasadas,
+// no "lo recibido en esta pasada" — cada pasada solo puede recibir hasta
+// lo que falte (orderedQuantity - receivedQuantity ya acumulado). Por cada
+// línea con receivedQuantity > 0 en esta pasada: crea IngredientBatch,
+// incrementa InventoryStock, registra InventoryMovement tipo COMPRA (todo
+// esto SÍ es por-pasada, no acumulado — cada pasada mueve solo lo que
+// llegó en ella), y si el costo real difiere del costo cotizado del
+// proveedor, actualiza IngredientSupplier.cost dejando rastro en
+// IngredientCostHistory.
 export async function receivePurchaseOrder(input: ReceivePurchaseOrderInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "COMPRA_REGISTRAR");
+  await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
 
   const receivedLines = input.lines.filter((line) => line.receivedQuantity > 0);
   if (receivedLines.length === 0) {
@@ -247,13 +259,13 @@ export async function receivePurchaseOrder(input: ReceivePurchaseOrderInput) {
   await prisma.$transaction(async (tx) => {
     const order = await tx.purchaseOrder.findUnique({
       where: { id: input.purchaseOrderId },
-      include: { items: true },
+      include: { items: { include: { ingredient: true } } },
     });
     if (!order) {
       throw new Error("La orden no existe.");
     }
-    if (order.status !== "CREADA") {
-      throw new Error("Esta orden ya fue recibida o cancelada.");
+    if (order.status !== "CREADA" && order.status !== "PROVEIDA_PARCIALMENTE") {
+      throw new Error("Esta orden ya fue recibida por completo o fue cancelada.");
     }
 
     const itemsById = new Map(order.items.map((item) => [item.id, item]));
@@ -262,6 +274,12 @@ export async function receivePurchaseOrder(input: ReceivePurchaseOrderInput) {
       const item = itemsById.get(line.purchaseOrderItemId);
       if (!item) {
         throw new Error("Línea de orden inválida.");
+      }
+
+      const alreadyReceived = item.receivedQuantity?.toNumber() ?? 0;
+      const pending = item.orderedQuantity.toNumber() - alreadyReceived;
+      if (line.receivedQuantity > pending) {
+        throw new Error(`${item.ingredient.name}: no puedes recibir más de lo pendiente (quedan ${pending}).`);
       }
 
       await tx.inventoryStock.upsert({
@@ -306,7 +324,7 @@ export async function receivePurchaseOrder(input: ReceivePurchaseOrderInput) {
       await tx.purchaseOrderItem.update({
         where: { id: item.id },
         data: {
-          receivedQuantity: line.receivedQuantity,
+          receivedQuantity: alreadyReceived + line.receivedQuantity,
           actualUnitCost: line.actualUnitCost,
         },
       });
@@ -338,10 +356,14 @@ export async function receivePurchaseOrder(input: ReceivePurchaseOrderInput) {
       }
     }
 
-    const receivedByItemId = new Map(receivedLines.map((line) => [line.purchaseOrderItemId, line]));
+    // Recalcular contra el estado acumulado real (no solo lo tocado en esta
+    // pasada) — un ítem ya completado en una pasada anterior debe seguir
+    // contando como completo aunque esta pasada no lo haya tocado.
+    const receivedThisPassByItemId = new Map(receivedLines.map((line) => [line.purchaseOrderItemId, line]));
     const allFullyReceived = order.items.every((item) => {
-      const receivedLine = receivedByItemId.get(item.id);
-      return Boolean(receivedLine) && receivedLine!.receivedQuantity >= item.orderedQuantity.toNumber();
+      const receivedThisPass = receivedThisPassByItemId.get(item.id)?.receivedQuantity ?? 0;
+      const totalReceived = (item.receivedQuantity?.toNumber() ?? 0) + receivedThisPass;
+      return totalReceived >= item.orderedQuantity.toNumber();
     });
 
     await tx.purchaseOrder.update({
@@ -356,4 +378,104 @@ export async function receivePurchaseOrder(input: ReceivePurchaseOrderInput) {
   revalidatePath("/compras");
   revalidatePath(`/compras/${input.purchaseOrderId}`);
   revalidatePath("/inventario");
+}
+
+export type UpdatePurchaseOrderInput = {
+  employeeId: string;
+  purchaseOrderId: string;
+  supplierId: string;
+  lines: CreatePurchaseOrderLineInput[];
+};
+
+// Solo antes de cualquier recepción (status CREADA) — una vez recibida (ni
+// que sea parcial) las líneas ya tienen inventario/costos aplicados y
+// borrarlas/recrearlas perdería ese rastro. Editar después de recibir no
+// está contemplado; para corregir algo ya recibido, la vía es una nueva
+// orden.
+export async function updatePurchaseOrder(input: UpdatePurchaseOrderInput) {
+  if (input.employeeId !== (await getSessionEmployeeId())) {
+    throw new Error("El empleado no coincide con la sesión activa.");
+  }
+  if (!input.supplierId) {
+    throw new Error("Elige un proveedor.");
+  }
+  if (input.lines.length === 0) {
+    throw new Error("Agrega al menos un ingrediente.");
+  }
+
+  const seen = new Set<string>();
+  for (const line of input.lines) {
+    if (line.quantity <= 0) {
+      throw new Error("La cantidad de cada línea debe ser mayor a cero.");
+    }
+    if (line.estimatedUnitCost <= 0) {
+      throw new Error("El costo estimado de cada línea debe ser mayor a cero.");
+    }
+    if (seen.has(line.ingredientId)) {
+      throw new Error("No repitas el mismo ingrediente en dos líneas.");
+    }
+    seen.add(line.ingredientId);
+  }
+
+  await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "ORDEN_COMPRA_CREAR");
+  await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
+
+  await prisma.$transaction(async (tx) => {
+    const order = await tx.purchaseOrder.findUnique({ where: { id: input.purchaseOrderId } });
+    if (!order) {
+      throw new Error("La orden no existe.");
+    }
+    if (order.status !== "CREADA") {
+      throw new Error("Esta orden ya no se puede editar (ya tiene una recepción o está cancelada).");
+    }
+
+    await tx.purchaseOrderItem.deleteMany({ where: { purchaseOrderId: order.id } });
+    await tx.purchaseOrder.update({
+      where: { id: order.id },
+      data: {
+        supplierId: input.supplierId,
+        items: {
+          create: input.lines.map((line) => ({
+            ingredientId: line.ingredientId,
+            orderedQuantity: line.quantity,
+            unit: line.unit,
+            estimatedUnitCost: line.estimatedUnitCost,
+          })),
+        },
+      },
+    });
+  });
+
+  revalidatePath("/compras");
+  revalidatePath(`/compras/${input.purchaseOrderId}`);
+}
+
+export type CancelPurchaseOrderInput = {
+  employeeId: string;
+  purchaseOrderId: string;
+};
+
+// Solo antes de cualquier recepción (status CREADA) — cancelar algo ya
+// recibido (ni que sea parcial) dejaría el inventario ya aplicado
+// inconsistente con el estado de la orden.
+export async function cancelPurchaseOrder(input: CancelPurchaseOrderInput) {
+  if (input.employeeId !== (await getSessionEmployeeId())) {
+    throw new Error("El empleado no coincide con la sesión activa.");
+  }
+
+  await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "ORDEN_COMPRA_CREAR");
+  await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
+
+  const order = await prisma.purchaseOrder.findUniqueOrThrow({ where: { id: input.purchaseOrderId } });
+  if (order.status !== "CREADA") {
+    throw new Error("Solo se puede cancelar una orden que todavía no ha sido recibida.");
+  }
+
+  await prisma.purchaseOrder.update({
+    where: { id: input.purchaseOrderId },
+    data: { status: "CANCELADA" },
+  });
+
+  revalidatePath("/compras");
+  revalidatePath(`/compras/${input.purchaseOrderId}`);
 }

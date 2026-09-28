@@ -1,15 +1,16 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getCurrentEmployee } from "@/lib/session";
+import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getActiveSuppliers, getIngredientOptions, getSupplierCostMap } from "@/lib/purchases";
-import { Sidebar } from "@/components/layout/sidebar";
+import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { NewOrderForm } from "@/components/compras/new-order-form";
 
 export default async function NuevaOrdenPage() {
   const employee = await getCurrentEmployee();
   if (!employee) redirect("/");
+  if (resolveRoleName(employee, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
   if (!(await hasPermission(employee.id, DEFAULT_BRANCH_ID, "ORDEN_COMPRA_CREAR"))) {
     redirect("/compras");
   }
@@ -21,9 +22,7 @@ export default async function NuevaOrdenPage() {
   ]);
 
   return (
-    <div className="flex h-screen">
-      <Sidebar />
-      <div className="flex-1 overflow-y-auto">
+    <AuthenticatedShell isAdmin employeeName={employee.name}>
         {suppliers.length === 0 ? (
           <div className="mx-auto flex max-w-xl flex-col gap-2 p-6">
             <p className="text-sm text-muted-foreground">
@@ -41,7 +40,6 @@ export default async function NuevaOrdenPage() {
             supplierCostsBySupplier={supplierCostsBySupplier}
           />
         )}
-      </div>
-    </div>
+    </AuthenticatedShell>
   );
 }

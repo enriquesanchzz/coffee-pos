@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import type { UnitOfMeasure, VariantTemperature } from "@prisma/client";
-import type { VariantRecipeDetail, IngredientOption, ComposedRecipeOption, ModifierOptionDetail } from "@/lib/recipes";
+import type { VariantRecipeDetail, IngredientOption, ComposedRecipeOption, ModifierOptionDetail, IngredientCategoryOption } from "@/lib/recipes";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,7 +42,11 @@ export function EditRecipeForm({
   onSaved,
 }: {
   detail: VariantRecipeDetail;
-  ingredientOptions: { ingredients: IngredientOption[]; composedRecipes: ComposedRecipeOption[] };
+  ingredientOptions: {
+    ingredients: IngredientOption[];
+    composedRecipes: ComposedRecipeOption[];
+    categories: IngredientCategoryOption[];
+  };
   employeeId: string;
   targetFoodCostPercent: number;
   onSaved: () => void;
@@ -155,6 +159,7 @@ export function EditRecipeForm({
             onExtraOptionsChange={setExtraOptions}
             ingredients={ingredients}
             composedRecipes={ingredientOptions.composedRecipes}
+            categories={ingredientOptions.categories}
             onIngredientCreated={(ingredient) => setIngredients((prev) => [...prev, ingredient])}
             employeeId={employeeId}
             targetFoodCostPercent={targetFoodCostPercent}

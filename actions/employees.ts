@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { hashSecret } from "@/lib/password";
-import { requirePasswordSession } from "@/lib/session";
+import { requirePasswordSession, resolveRoleName } from "@/lib/session";
 import { requirePermission } from "@/lib/permissions";
 
 const PIN_PATTERN = /^\d{4,6}$/;
@@ -12,10 +12,16 @@ const PIN_PATTERN = /^\d{4,6}$/;
 // Alta/edición de empleados solo desde una sesión de Administración
 // (password, no PIN) — no reciben employeeId del cliente porque el actor se
 // deriva siempre de la sesión del servidor, no hay forma de spoofearlo.
+// Exclusivo de rol ADMINISTRADOR (no solo el permiso): ver "cambios de
+// administración" en docs/CONTINUE.md — ocultar la página no basta si la
+// Server Action detrás sigue aceptando el permiso granular de otro rol.
 async function requireEmployeeManager(permission: "EMPLEADO_CREAR" | "EMPLEADO_MODIFICAR") {
   const actor = await requirePasswordSession();
   if (!actor) {
     throw new Error("Necesitas iniciar sesión de Administración para hacer esto.");
+  }
+  if (resolveRoleName(actor, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") {
+    throw new Error("Esta acción es exclusiva del rol ADMINISTRADOR.");
   }
   await requirePermission(actor.id, DEFAULT_BRANCH_ID, permission);
   return actor;

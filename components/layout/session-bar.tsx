@@ -1,0 +1,66 @@
+"use client";
+
+import { useRouter, usePathname } from "next/navigation";
+import { logoutAction } from "@/actions/session";
+
+// Mismos módulos que components/layout/sidebar.tsx (sin el ícono, aquí solo
+// hace falta el label para el selector de "zona" — navegar entre secciones
+// de la UI, no un concepto de sucursal/estación física, ver docs/CONTINUE.md
+// "cambios de administración").
+const ZONES = [
+  { href: "/pos", label: "Punto de Venta", adminOnly: false },
+  { href: "/caja", label: "Caja", adminOnly: false },
+  { href: "/clientes", label: "Clientes", adminOnly: true },
+  { href: "/reportes", label: "Reportes", adminOnly: true },
+  { href: "/compras", label: "Compras", adminOnly: true },
+  { href: "/productos", label: "Productos", adminOnly: true },
+  { href: "/inventario", label: "Inventario", adminOnly: true },
+  { href: "/administracion", label: "Administración", adminOnly: true },
+];
+
+export function SessionBar({
+  employeeName,
+  isAdmin,
+}: {
+  employeeName: string;
+  isAdmin: boolean;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const zones = ZONES.filter((zone) => !zone.adminOnly || isAdmin);
+  const currentZone = zones.find(
+    (zone) => pathname === zone.href || pathname?.startsWith(`${zone.href}/`)
+  );
+
+  return (
+    // Franja fija oscura a propósito, independiente del acento/modo elegido
+    // en Administración → Apariencia: es un ancla visual constante para
+    // identificar quién opera el sistema, no debe cambiar con el tema.
+    <div className="flex h-12 shrink-0 items-center justify-between bg-neutral-900 px-4 text-neutral-50">
+      <p className="text-sm">
+        Atendiendo: <span className="font-semibold">{employeeName}</span>
+      </p>
+      <div className="flex items-center gap-4">
+        <select
+          aria-label="Cambiar de zona"
+          value={currentZone?.href ?? ""}
+          onChange={(e) => {
+            if (e.target.value) router.push(e.target.value);
+          }}
+          className="h-8 rounded-md border border-neutral-700 bg-neutral-900 px-2 text-sm text-neutral-50"
+        >
+          {zones.map((zone) => (
+            <option key={zone.href} value={zone.href}>
+              {zone.label}
+            </option>
+          ))}
+        </select>
+        <form action={logoutAction}>
+          <button type="submit" className="text-sm text-neutral-300 hover:text-neutral-50 hover:underline">
+            Cambiar de empleado
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}

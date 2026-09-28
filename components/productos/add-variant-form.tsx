@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import type { VariantTemperature } from "@prisma/client";
-import type { ProductBasicInfo, IngredientOption, ComposedRecipeOption } from "@/lib/recipes";
+import type { ProductBasicInfo, IngredientOption, ComposedRecipeOption, IngredientCategoryOption } from "@/lib/recipes";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { addVariantToProduct, type RecipeLineInput } from "@/actions/recipes";
@@ -21,7 +21,11 @@ export function AddVariantForm({
   onSaved,
 }: {
   product: ProductBasicInfo;
-  ingredientOptions: { ingredients: IngredientOption[]; composedRecipes: ComposedRecipeOption[] };
+  ingredientOptions: {
+    ingredients: IngredientOption[];
+    composedRecipes: ComposedRecipeOption[];
+    categories: IngredientCategoryOption[];
+  };
   employeeId: string;
   targetFoodCostPercent: number;
   onSaved: () => void;
@@ -117,6 +121,7 @@ export function AddVariantForm({
             onExtraOptionsChange={setExtraOptions}
             ingredients={ingredients}
             composedRecipes={ingredientOptions.composedRecipes}
+            categories={ingredientOptions.categories}
             onIngredientCreated={(ingredient) => setIngredients((prev) => [...prev, ingredient])}
             employeeId={employeeId}
             targetFoodCostPercent={targetFoodCostPercent}

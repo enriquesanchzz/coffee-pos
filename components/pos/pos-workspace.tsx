@@ -10,7 +10,6 @@ import { CheckoutDialog } from "./checkout-dialog";
 import { OpenTabsDialog } from "./open-tabs-dialog";
 import { useCartStore } from "./cart-store";
 import { getTabDetail, type OpenTabDetail } from "@/actions/pos";
-import { logoutAction } from "@/actions/session";
 import { CashMovementDialog } from "@/components/caja/cash-movement-dialog";
 
 export function PosWorkspace({
@@ -53,31 +52,21 @@ export function PosWorkspace({
   return (
     <div className="grid h-full grid-cols-[1fr_360px]">
       <div className="flex h-full flex-col">
-        <div className="flex items-center justify-between border-b border-border px-5 py-3">
-          <p className="text-sm text-muted-foreground">
-            Atendiendo: <span className="font-semibold text-foreground">{employee.name}</span>
-          </p>
-          <div className="flex items-center gap-4">
-            <button
-              type="button"
-              className="text-sm text-muted-foreground hover:underline"
-              onClick={() => setOpenTabsDialogOpen(true)}
-            >
-              Cuentas abiertas
-            </button>
-            <button
-              type="button"
-              className="text-sm text-muted-foreground hover:underline"
-              onClick={() => setMovementOpen(true)}
-            >
-              Movimiento de caja
-            </button>
-            <form action={logoutAction}>
-              <button type="submit" className="text-sm text-muted-foreground hover:underline">
-                Cambiar de empleado
-              </button>
-            </form>
-          </div>
+        <div className="flex items-center justify-end gap-4 border-b border-border px-5 py-3">
+          <button
+            type="button"
+            className="text-sm text-muted-foreground hover:underline"
+            onClick={() => setOpenTabsDialogOpen(true)}
+          >
+            Cuentas abiertas
+          </button>
+          <button
+            type="button"
+            className="text-sm text-muted-foreground hover:underline"
+            onClick={() => setMovementOpen(true)}
+          >
+            Movimiento de caja
+          </button>
         </div>
         <div className="flex-1 overflow-hidden">
           <CatalogBrowser

@@ -1,18 +1,18 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { IngredientCategory, Prisma, ProductType, UnitOfMeasure, VariantTemperature } from "@prisma/client";
+import { Prisma, ProductType, UnitOfMeasure, VariantTemperature } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getSessionEmployeeId } from "@/lib/session";
-import { requirePermission } from "@/lib/permissions";
+import { requirePermission, requireAdminRole } from "@/lib/permissions";
 import { recordRecipeCostSnapshot } from "@/lib/recipe-cost";
 import { getVariantRecipeDetail } from "@/lib/recipes";
 
 export type CreateIngredientInput = {
   employeeId: string;
   name: string;
-  category: IngredientCategory;
+  categoryId: string;
   baseUnit: UnitOfMeasure;
   purchaseUnit: UnitOfMeasure;
 };
@@ -27,22 +27,24 @@ export async function createIngredient(input: CreateIngredientInput) {
   }
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "INVENTARIO_CREAR_ITEM");
+  await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
 
   const ingredient = await prisma.ingredient.create({
     data: {
       name,
-      category: input.category,
+      categoryId: input.categoryId,
       baseUnit: input.baseUnit,
       purchaseUnit: input.purchaseUnit,
     },
   });
 
   revalidatePath("/productos");
+  revalidatePath("/inventario");
 
   return {
     id: ingredient.id,
     name: ingredient.name,
-    category: ingredient.category,
+    categoryId: ingredient.categoryId,
     baseUnit: ingredient.baseUnit,
     // Un ingrediente recién creado no tiene proveedor cotizado ni dosis
     // estándar todavía.
@@ -120,7 +122,7 @@ async function findBaseMilkLine(
   for (const line of lines) {
     if (!line.ingredientId) continue;
     const ingredient = await tx.ingredient.findUnique({ where: { id: line.ingredientId } });
-    if (ingredient?.category === "LECHE") {
+    if (ingredient?.categoryId === "LECHE") {
       return { ingredientId: ingredient.id, ingredientName: ingredient.name, quantity: line.quantity };
     }
   }
@@ -277,6 +279,7 @@ export async function createProductWithRecipe(input: CreateProductWithRecipeInpu
   }
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "PRODUCTO_CREAR");
+  await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
 
   const productId = await prisma.$transaction(async (tx) => {
     const category = newCategoryName
@@ -363,6 +366,7 @@ export async function addVariantToProduct(input: AddVariantToProductInput) {
   }
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "PRODUCTO_CREAR");
+  await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
 
   const variantId = await prisma.$transaction(async (tx) => {
     const product = await tx.product.findUniqueOrThrow({ where: { id: input.productId } });
@@ -452,6 +456,7 @@ export async function updateVariantRecipe(input: UpdateVariantRecipeInput) {
   }
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "RECETA_MODIFICAR");
+  await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
 
   await prisma.$transaction(async (tx) => {
     const updatedVariant = await tx.productVariant.update({
@@ -558,6 +563,7 @@ export async function updateProductCategory(input: UpdateProductCategoryInput) {
   }
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "PRODUCTO_CREAR");
+  await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
 
   await prisma.productCategory.update({
     where: { id: input.categoryId },

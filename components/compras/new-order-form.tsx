@@ -3,27 +3,45 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { UnitOfMeasure } from "@prisma/client";
-import type { ActiveSupplierOption, IngredientOption } from "@/lib/purchases";
+import type { ActiveSupplierOption, IngredientOption, PurchaseOrderDetail } from "@/lib/purchases";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
-import { createPurchaseOrder } from "@/actions/purchases";
+import { createPurchaseOrder, updatePurchaseOrder } from "@/actions/purchases";
 import { OrderLinesEditor, initialOrderLine, type OrderLineDraft } from "./order-lines-editor";
 
+// `existingOrder` la vuelve un formulario de edición (solo tiene sentido
+// para una orden en CREADA, ver updatePurchaseOrder) en vez de creación —
+// mismo formulario para ambos casos, como el resto de los diálogos
+// crear/editar del proyecto.
 export function NewOrderForm({
   employeeId,
   suppliers,
   ingredients,
   supplierCostsBySupplier,
+  existingOrder,
+  onSaved,
 }: {
   employeeId: string;
   suppliers: ActiveSupplierOption[];
   ingredients: IngredientOption[];
   supplierCostsBySupplier: Record<string, Record<string, number>>;
+  existingOrder?: PurchaseOrderDetail;
+  onSaved?: () => void;
 }) {
   const router = useRouter();
-  const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? "");
-  const [lines, setLines] = useState<OrderLineDraft[]>([initialOrderLine()]);
+  const isEdit = Boolean(existingOrder);
+  const [supplierId, setSupplierId] = useState(existingOrder?.supplierId ?? suppliers[0]?.id ?? "");
+  const [lines, setLines] = useState<OrderLineDraft[]>(
+    existingOrder
+      ? existingOrder.items.map((item) => ({
+          key: item.id,
+          ingredientId: item.ingredientId,
+          quantity: String(item.orderedQuantity),
+          estimatedUnitCost: String(item.estimatedUnitCost),
+        }))
+      : [initialOrderLine()]
+  );
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -35,26 +53,34 @@ export function NewOrderForm({
     startTransition(async () => {
       try {
         const validLines = lines.filter((l) => l.ingredientId);
-        const result = await createPurchaseOrder({
-          employeeId,
-          supplierId,
-          lines: validLines.map((l) => ({
-            ingredientId: l.ingredientId,
-            quantity: Number(l.quantity) || 0,
-            unit: ingredientById.get(l.ingredientId)!.baseUnit as UnitOfMeasure,
-            estimatedUnitCost: Number(l.estimatedUnitCost) || 0,
-          })),
-        });
-        router.push(`/compras/${result.id}`);
+        const linesInput = validLines.map((l) => ({
+          ingredientId: l.ingredientId,
+          quantity: Number(l.quantity) || 0,
+          unit: ingredientById.get(l.ingredientId)!.baseUnit as UnitOfMeasure,
+          estimatedUnitCost: Number(l.estimatedUnitCost) || 0,
+        }));
+
+        if (existingOrder) {
+          await updatePurchaseOrder({
+            employeeId,
+            purchaseOrderId: existingOrder.id,
+            supplierId,
+            lines: linesInput,
+          });
+          onSaved?.();
+        } else {
+          const result = await createPurchaseOrder({ employeeId, supplierId, lines: linesInput });
+          router.push(`/compras/${result.id}`);
+        }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "No se pudo crear la orden.");
+        setError(err instanceof Error ? err.message : "No se pudo guardar la orden.");
       }
     });
   }
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
-      <h1 className="text-lg font-semibold">Nueva orden de compra</h1>
+      {!isEdit && <h1 className="text-lg font-semibold">Nueva orden de compra</h1>}
 
       <Card>
         <CardHeader>
@@ -88,7 +114,7 @@ export function NewOrderForm({
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <Button onClick={handleSubmit} disabled={isPending || !supplierId}>
-        {isPending ? "Creando..." : "Crear orden"}
+        {isPending ? "Guardando..." : isEdit ? "Guardar cambios" : "Crear orden"}
       </Button>
     </div>
   );

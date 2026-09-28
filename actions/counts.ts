@@ -5,7 +5,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID, DEFAULT_STOCK_LOCATION_ID } from "@/lib/constants";
 import { findEmployeeByPin, getSessionEmployeeId } from "@/lib/session";
-import { requirePermission } from "@/lib/permissions";
+import { requirePermission, requireAdminRole } from "@/lib/permissions";
 
 // No existe un permiso específico de "conteos" en el catálogo — se usa
 // INVENTARIO_AJUSTAR, igual que Transferencias (nivel GERENTE en la matriz).
@@ -38,6 +38,7 @@ export async function createPhysicalCount(input: CreatePhysicalCountInput) {
   }
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "INVENTARIO_AJUSTAR");
+  await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
 
   const count = await prisma.$transaction(async (tx) => {
     const stocks = await tx.inventoryStock.findMany({
@@ -108,6 +109,7 @@ export async function approvePhysicalCount(input: ApprovePhysicalCountInput) {
       throw new Error("La aprobación debe ser de un empleado distinto de quien hizo el conteo.");
     }
     await requirePermission(approver.id, DEFAULT_BRANCH_ID, "INVENTARIO_AJUSTAR");
+    await requireAdminRole(approver.id, DEFAULT_BRANCH_ID);
 
     if (input.decision === "APROBADO") {
       for (const line of count.lines) {

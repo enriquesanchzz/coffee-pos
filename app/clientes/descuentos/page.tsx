@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getCurrentEmployee } from "@/lib/session";
+import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getDiscountCodes } from "@/lib/discounts";
-import { Sidebar } from "@/components/layout/sidebar";
+import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DiscountCodeToggle } from "@/components/clientes/discount-code-toggle";
@@ -18,6 +18,7 @@ const discountTypeLabels: Record<string, string> = {
 export default async function DescuentosPage() {
   const employee = await getCurrentEmployee();
   if (!employee) redirect("/");
+  if (resolveRoleName(employee, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
   if (!(await hasPermission(employee.id, DEFAULT_BRANCH_ID, "DESCUENTO_CODIGO_CREAR"))) {
     redirect("/clientes");
   }
@@ -25,9 +26,7 @@ export default async function DescuentosPage() {
   const codes = await getDiscountCodes();
 
   return (
-    <div className="flex h-screen">
-      <Sidebar />
-      <div className="flex-1 overflow-y-auto">
+    <AuthenticatedShell isAdmin employeeName={employee.name}>
         <div className="mx-auto flex max-w-2xl flex-col gap-4 p-6">
           <div className="flex items-center justify-between">
             <div>
@@ -79,7 +78,6 @@ export default async function DescuentosPage() {
             </CardContent>
           </Card>
         </div>
-      </div>
-    </div>
+    </AuthenticatedShell>
   );
 }

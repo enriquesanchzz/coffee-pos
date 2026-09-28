@@ -2,6 +2,9 @@ import { Prisma, type ProductType, type VariantTemperature } from "@prisma/clien
 import { prisma } from "./prisma";
 import { DEFAULT_BRANCH_ID } from "./constants";
 import { calculateRecipeVersionCost } from "./recipe-cost";
+import { getIngredientCategories, type IngredientCategoryOption } from "./inventory";
+
+export type { IngredientCategoryOption };
 
 export type ProductCategoryOption = {
   id: string;
@@ -49,7 +52,7 @@ export async function getTargetFoodCostPercent(): Promise<number> {
 export type IngredientOption = {
   id: string;
   name: string;
-  category: string;
+  categoryId: string;
   baseUnit: string;
   // Costo actual por baseUnit (IngredientSupplier.isSelected), null si
   // nadie lo ha cotizado todavía — mismo criterio que
@@ -68,6 +71,7 @@ export type ComposedRecipeOption = { id: string; name: string; currentCost: numb
 export type IngredientPickerOptions = {
   ingredients: IngredientOption[];
   composedRecipes: ComposedRecipeOption[];
+  categories: IngredientCategoryOption[];
 };
 
 // Opciones para armar líneas de receta: ingredientes atómicos que se pueden
@@ -82,9 +86,9 @@ export type IngredientPickerOptions = {
 // actions/pos.ts). Si hace falta registrar un vaso/insumo nuevo, sigue
 // siendo posible vía "+ Nuevo ingrediente" (create-ingredient-dialog.tsx).
 export async function getIngredientPickerOptions(): Promise<IngredientPickerOptions> {
-  const [ingredients, composedRecipes] = await Promise.all([
+  const [ingredients, composedRecipes, categories] = await Promise.all([
     prisma.ingredient.findMany({
-      where: { isActive: true, category: { not: "INSUMOS" } },
+      where: { isActive: true, categoryId: { not: "INSUMOS" } },
       orderBy: { name: "asc" },
       include: { suppliers: { where: { isSelected: true }, take: 1 } },
     }),
@@ -93,6 +97,7 @@ export async function getIngredientPickerOptions(): Promise<IngredientPickerOpti
       orderBy: { name: "asc" },
       include: { versions: { where: { isActive: true }, take: 1 } },
     }),
+    getIngredientCategories(),
   ]);
 
   // Costo de cada receta compuesta (jarabe casero, etc.) en un solo
@@ -112,7 +117,7 @@ export async function getIngredientPickerOptions(): Promise<IngredientPickerOpti
     ingredients: ingredients.map((i) => ({
       id: i.id,
       name: i.name,
-      category: i.category,
+      categoryId: i.categoryId,
       baseUnit: i.baseUnit,
       costPerUnit: i.suppliers[0]?.cost.toNumber() ?? null,
       standardDoseQuantity: i.standardDoseQuantity?.toNumber() ?? null,
@@ -123,6 +128,7 @@ export async function getIngredientPickerOptions(): Promise<IngredientPickerOpti
       name: r.name ?? "(sin nombre)",
       currentCost: composedCosts[idx].toNumber(),
     })),
+    categories,
   };
 }
 

@@ -1,11 +1,24 @@
 import { prisma } from "./prisma";
 import { DEFAULT_STOCK_LOCATION_ID } from "./constants";
 
+export type IngredientCategoryOption = {
+  id: string;
+  name: string;
+  icon: string | null;
+};
+
+export async function getIngredientCategories(): Promise<IngredientCategoryOption[]> {
+  return prisma.ingredientCategory.findMany({ orderBy: { name: "asc" } });
+}
+
 export type InventoryOverviewItem = {
   id: string;
   name: string;
-  category: string;
+  categoryId: string;
+  categoryName: string;
   baseUnit: string;
+  purchaseUnit: string;
+  tracksExpiration: boolean;
   quantity: number;
   reorderThreshold: number | null;
   isLow: boolean;
@@ -20,8 +33,9 @@ export async function getInventoryOverview(
 ): Promise<InventoryOverviewItem[]> {
   const ingredients = await prisma.ingredient.findMany({
     where: { isActive: true },
-    orderBy: [{ category: "asc" }, { name: "asc" }],
+    orderBy: [{ category: { name: "asc" } }, { name: "asc" }],
     include: {
+      category: true,
       stocks: { where: { stockLocationId } },
       reorderPoints: { where: { stockLocationId } },
     },
@@ -34,8 +48,11 @@ export async function getInventoryOverview(
     return {
       id: ingredient.id,
       name: ingredient.name,
-      category: ingredient.category,
+      categoryId: ingredient.categoryId,
+      categoryName: ingredient.category.name,
       baseUnit: ingredient.baseUnit,
+      purchaseUnit: ingredient.purchaseUnit,
+      tracksExpiration: ingredient.tracksExpiration,
       quantity,
       reorderThreshold,
       isLow: reorderThreshold !== null && quantity <= reorderThreshold,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { PaymentMethod, DiscountType, ManualDiscountReason, DomicilioOrigen } from "@prisma/client";
+import { PaymentMethod, DiscountType, ManualDiscountReason, DomicilioOrigen, type CustomerGender } from "@prisma/client";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -187,6 +187,8 @@ export function CheckoutDialog({
           phone: newCustomerPhone.trim() || null,
           address: orderType === "DOMICILIO" ? newCustomerAddress.trim() || null : null,
           loyaltyCode: created.loyaltyCardCode,
+          birthDate: null,
+          gender: null,
         };
         setLocalCustomers((prev) => [...prev, option]);
         handleSelectCustomer(option);
@@ -256,6 +258,11 @@ export function CheckoutDialog({
             name: selectedCustomer.name,
             phone: selectedCustomer.phone ?? undefined,
             address: domicilioAddress.trim() || undefined,
+            // updateCustomer reemplaza el registro completo — sin
+            // reenviar estos dos, actualizar solo la dirección los
+            // borraría (ver nota en lib/customers.ts CustomerOption).
+            birthDate: selectedCustomer.birthDate ?? undefined,
+            gender: (selectedCustomer.gender as CustomerGender | null) ?? undefined,
           });
         }
 

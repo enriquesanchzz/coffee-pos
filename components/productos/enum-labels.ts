@@ -1,12 +1,4 @@
-import type { IngredientCategory, UnitOfMeasure, VariantTemperature } from "@prisma/client";
-
-export const categoryLabels: Record<IngredientCategory, string> = {
-  CAFE: "Café",
-  JARABES: "Jarabes",
-  LECHE: "Leche",
-  TOPPINGS: "Toppings",
-  INSUMOS: "Insumos",
-};
+import type { UnitOfMeasure, VariantTemperature } from "@prisma/client";
 
 export const temperatureLabels: Record<VariantTemperature, string> = {
   CALIENTE: "Caliente",

@@ -1,17 +1,16 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { IngredientCategory, UnitOfMeasure } from "@prisma/client";
-import type { IngredientOption } from "@/lib/recipes";
+import type { UnitOfMeasure } from "@prisma/client";
+import type { IngredientOption, IngredientCategoryOption } from "@/lib/recipes";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { createIngredient } from "@/actions/recipes";
-import { categoryLabels, unitLabels } from "./enum-labels";
+import { unitLabels } from "./enum-labels";
 
-const categories = Object.keys(categoryLabels) as IngredientCategory[];
 const units = Object.keys(unitLabels) as UnitOfMeasure[];
 
 export function CreateIngredientDialog({
@@ -19,14 +18,16 @@ export function CreateIngredientDialog({
   onOpenChange,
   onCreated,
   employeeId,
+  categories,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: (ingredient: IngredientOption) => void;
   employeeId: string;
+  categories: IngredientCategoryOption[];
 }) {
   const [name, setName] = useState("");
-  const [category, setCategory] = useState<IngredientCategory>(categories[0]);
+  const [categoryId, setCategoryId] = useState(categories[0]?.id ?? "");
   const [baseUnit, setBaseUnit] = useState<UnitOfMeasure>(units[0]);
   const [purchaseUnit, setPurchaseUnit] = useState<UnitOfMeasure>(units[0]);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +40,7 @@ export function CreateIngredientDialog({
         const ingredient = await createIngredient({
           employeeId,
           name,
-          category,
+          categoryId,
           baseUnit,
           purchaseUnit,
         });
@@ -69,12 +70,12 @@ export function CreateIngredientDialog({
           <Label htmlFor="ingredient-category">Categoría</Label>
           <Select
             id="ingredient-category"
-            value={category}
-            onChange={(e) => setCategory(e.target.value as IngredientCategory)}
+            value={categoryId}
+            onChange={(e) => setCategoryId(e.target.value)}
           >
             {categories.map((c) => (
-              <option key={c} value={c}>
-                {categoryLabels[c]}
+              <option key={c.id} value={c.id}>
+                {c.name}
               </option>
             ))}
           </Select>
