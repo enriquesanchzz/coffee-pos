@@ -1,26 +1,20 @@
 import { redirect } from "next/navigation";
-import { getCurrentEmployee } from "@/lib/session";
-import { hasPermission } from "@/lib/permissions";
+import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
-import { getInventoryOverview } from "@/lib/inventory";
-import { Sidebar } from "@/components/layout/sidebar";
-import { InventoryOverview } from "@/components/inventario/inventory-overview";
+import { getInventoryOverview, getIngredientCategories } from "@/lib/inventory";
+import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
+import { InventoryWorkspace } from "@/components/inventario/inventory-workspace";
 
 export default async function InventarioPage() {
   const employee = await getCurrentEmployee();
   if (!employee) redirect("/");
-  if (!(await hasPermission(employee.id, DEFAULT_BRANCH_ID, "INVENTARIO_CONSULTAR"))) {
-    redirect("/pos");
-  }
+  if (resolveRoleName(employee, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
 
-  const items = await getInventoryOverview();
+  const [items, categories] = await Promise.all([getInventoryOverview(), getIngredientCategories()]);
 
   return (
-    <div className="flex h-screen">
-      <Sidebar />
-      <div className="flex-1 overflow-hidden">
-        <InventoryOverview items={items} employeeId={employee.id} />
-      </div>
-    </div>
+    <AuthenticatedShell isAdmin employeeName={employee.name} contentClassName="overflow-hidden">
+      <InventoryWorkspace items={items} categories={categories} employeeId={employee.id} />
+    </AuthenticatedShell>
   );
 }

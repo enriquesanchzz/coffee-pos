@@ -9,10 +9,12 @@ import type {
   ComposedRecipeOption,
   VariantRecipeDetail,
   ProductBasicInfo,
+  IngredientCategoryOption,
 } from "@/lib/recipes";
+import { ChevronLeft } from "lucide-react";
 import { CategoryDrilldown, type DrilldownCategory } from "@/components/catalog/category-drilldown";
 import { ProductCard } from "./product-card";
-import { VariantNav } from "./variant-nav";
+import { VariantCard, AddVariantCard } from "./variant-card";
 import { NewProductForm } from "./new-product-form";
 import { AddVariantForm } from "./add-variant-form";
 import { EditRecipeForm } from "./edit-recipe-form";
@@ -24,7 +26,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 
-type MainView = "browse" | "product-summary" | "new-product" | "add-variant" | "edit-variant";
+type MainView = "browse" | "product-variants" | "new-product" | "add-variant" | "edit-variant";
 
 // Vista única de /productos (mismo espíritu que PosWorkspace): categorías
 // a la izquierda; al abrir un producto, la izquierda cambia a sus
@@ -40,7 +42,11 @@ export function ProductosWorkspace({
 }: {
   products: RecipeOverviewProduct[];
   categories: ProductCategoryOption[];
-  ingredientOptions: { ingredients: IngredientOption[]; composedRecipes: ComposedRecipeOption[] };
+  ingredientOptions: {
+    ingredients: IngredientOption[];
+    composedRecipes: ComposedRecipeOption[];
+    categories: IngredientCategoryOption[];
+  };
   targetFoodCostPercent: number;
   employeeId: string;
 }) {
@@ -71,7 +77,13 @@ export function ProductosWorkspace({
 
   function openProduct(product: RecipeOverviewProduct) {
     setSelectedProductId(product.id);
-    setMainView("product-summary");
+    setMainView("product-variants");
+    setEditingDetail(null);
+    setEditingVariantId(null);
+  }
+
+  function backToVariants() {
+    setMainView("product-variants");
     setEditingDetail(null);
     setEditingVariantId(null);
   }
@@ -96,7 +108,7 @@ export function ProductosWorkspace({
   function handleSaved(afterProductId?: string) {
     router.refresh();
     if (afterProductId) setSelectedProductId(afterProductId);
-    setMainView("product-summary");
+    setMainView("product-variants");
     setEditingDetail(null);
     setEditingVariantId(null);
   }
@@ -158,7 +170,11 @@ export function ProductosWorkspace({
           <div className="h-full overflow-y-auto">
             <NewProductForm
               categories={categories}
-              ingredientOptions={{ ingredients, composedRecipes: ingredientOptions.composedRecipes }}
+              ingredientOptions={{
+                ingredients,
+                composedRecipes: ingredientOptions.composedRecipes,
+                categories: ingredientOptions.categories,
+              }}
               employeeId={employeeId}
               targetFoodCostPercent={targetFoodCostPercent}
               onSaved={handleSaved}
@@ -166,30 +182,49 @@ export function ProductosWorkspace({
           </div>
         )}
 
-        {selectedProduct && mainView !== "browse" && mainView !== "new-product" && (
-          <div className="grid h-full grid-cols-[192px_1fr] overflow-hidden">
-            <VariantNav
-              product={selectedProduct}
-              activeVariantId={editingVariantId}
-              onBack={backToBrowse}
-              onSelectVariant={openVariant}
-              onAddVariant={() => {
-                setMainView("add-variant");
-                setEditingDetail(null);
-                setEditingVariantId(null);
-              }}
-            />
+        {selectedProduct && mainView === "product-variants" && (
+          <div className="h-full overflow-y-auto p-6">
+            <div className="mx-auto flex max-w-3xl flex-col gap-4">
+              <div>
+                <button
+                  type="button"
+                  onClick={backToBrowse}
+                  className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Categorías
+                </button>
+                <h2 className="mt-2 text-lg font-semibold">{selectedProduct.name}</h2>
+                <p className="text-sm text-muted-foreground">{selectedProduct.categoryName}</p>
+              </div>
 
-            <div className="overflow-y-auto p-6">
-              {mainView === "product-summary" && (
-                <div className="mx-auto flex max-w-xl flex-col gap-2">
-                  <h2 className="text-lg font-semibold">{selectedProduct.name}</h2>
-                  <p className="text-sm text-muted-foreground">{selectedProduct.categoryName}</p>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Elige una variante a la izquierda para editarla, o agrega una nueva.
-                  </p>
-                </div>
-              )}
+              <div className="grid auto-rows-min grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+                {selectedProduct.variants.map((variant) => (
+                  <VariantCard key={variant.id} variant={variant} onSelect={openVariant} />
+                ))}
+                <AddVariantCard
+                  onClick={() => {
+                    setMainView("add-variant");
+                    setEditingDetail(null);
+                    setEditingVariantId(null);
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {selectedProduct && (mainView === "add-variant" || mainView === "edit-variant") && (
+          <div className="h-full overflow-y-auto p-6">
+            <div className="mx-auto flex max-w-xl flex-col gap-4">
+              <button
+                type="button"
+                onClick={backToVariants}
+                className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                {selectedProduct.name}
+              </button>
 
               {mainView === "add-variant" && (
                 <AddVariantForm
@@ -201,7 +236,11 @@ export function ProductosWorkspace({
                       categoryName: selectedProduct.categoryName,
                     } satisfies ProductBasicInfo
                   }
-                  ingredientOptions={{ ingredients, composedRecipes: ingredientOptions.composedRecipes }}
+                  ingredientOptions={{
+                    ingredients,
+                    composedRecipes: ingredientOptions.composedRecipes,
+                    categories: ingredientOptions.categories,
+                  }}
                   employeeId={employeeId}
                   targetFoodCostPercent={targetFoodCostPercent}
                   onSaved={() => handleSaved()}
@@ -215,7 +254,11 @@ export function ProductosWorkspace({
                   {editingDetail && !isLoadingDetail && (
                     <EditRecipeForm
                       detail={editingDetail}
-                      ingredientOptions={{ ingredients, composedRecipes: ingredientOptions.composedRecipes }}
+                      ingredientOptions={{
+                        ingredients,
+                        composedRecipes: ingredientOptions.composedRecipes,
+                        categories: ingredientOptions.categories,
+                      }}
                       employeeId={employeeId}
                       targetFoodCostPercent={targetFoodCostPercent}
                       onSaved={() => handleSaved()}

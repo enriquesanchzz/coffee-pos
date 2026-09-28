@@ -5,7 +5,6 @@ import type { ShiftDetail } from "@/lib/shift";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils";
-import { logoutAction } from "@/actions/session";
 import { CashMovementDialog } from "./cash-movement-dialog";
 import { CloseShiftDialog } from "./close-shift-dialog";
 
@@ -21,21 +20,14 @@ export function ShiftSummary({
 
   return (
     <div className="mx-auto flex h-full max-w-2xl flex-col gap-4 overflow-y-auto p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-muted-foreground">
-            Cajero: <span className="font-medium text-foreground">{shift.cashierName}</span>
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Turno {shift.type.toLowerCase()} — abierto{" "}
-            {new Date(shift.openedAt).toLocaleString("es-MX")}
-          </p>
-        </div>
-        <form action={logoutAction}>
-          <button type="submit" className="text-sm text-muted-foreground hover:underline">
-            Cambiar de empleado
-          </button>
-        </form>
+      <div>
+        <p className="text-sm text-muted-foreground">
+          Cajero: <span className="font-medium text-foreground">{shift.cashierName}</span>
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Turno {shift.type.toLowerCase()} — abierto{" "}
+          {new Date(shift.openedAt).toLocaleString("es-MX")}
+        </p>
       </div>
 
       <Card>

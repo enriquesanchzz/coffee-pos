@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { UnitOfMeasure } from "@prisma/client";
-import type { IngredientOption, ComposedRecipeOption } from "@/lib/recipes";
+import type { IngredientOption, ComposedRecipeOption, IngredientCategoryOption } from "@/lib/recipes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -36,6 +36,7 @@ export function RecipeLinesEditor({
   onChange,
   ingredients,
   composedRecipes,
+  categories,
   onIngredientCreated,
   employeeId,
 }: {
@@ -43,6 +44,7 @@ export function RecipeLinesEditor({
   onChange: (lines: LineDraft[]) => void;
   ingredients: IngredientOption[];
   composedRecipes: ComposedRecipeOption[];
+  categories: IngredientCategoryOption[];
   onIngredientCreated: (ingredient: IngredientOption) => void;
   employeeId: string;
 }) {
@@ -160,6 +162,7 @@ export function RecipeLinesEditor({
         onOpenChange={setCreatingIngredient}
         onCreated={onIngredientCreated}
         employeeId={employeeId}
+        categories={categories}
       />
     </div>
   );

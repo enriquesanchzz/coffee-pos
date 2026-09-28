@@ -92,6 +92,19 @@ export async function getCurrentEmployee() {
   });
 }
 
+// Gate por identidad de rol (no por permiso): Administración y los módulos
+// que ahora viven bajo ella (Clientes/Reportes/Compras/Productos/
+// Inventario) solo deben ser visibles/accesibles para el rol ADMINISTRADOR
+// exacto, sin importar qué permisos granulares tenga alguien más vía
+// EmployeePermissionOverride — por eso se resuelve directo del `role.name`
+// de EmployeeBranch, no de getEffectivePermissions (lib/permissions.ts).
+export function resolveRoleName(
+  employee: NonNullable<Awaited<ReturnType<typeof getCurrentEmployee>>>,
+  branchId: string
+) {
+  return employee.branches.find((b) => b.branchId === branchId)?.role.name ?? null;
+}
+
 // Para rutas/acciones de Administración: exige que la sesión actual se haya
 // iniciado con password (no basta con un PIN). Devuelve el empleado o null.
 export async function requirePasswordSession() {

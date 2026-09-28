@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
-import { getCurrentEmployee } from "@/lib/session";
+import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getSupplierDetail, getIngredientOptions } from "@/lib/purchases";
-import { Sidebar } from "@/components/layout/sidebar";
+import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { SupplierForm } from "@/components/compras/supplier-form";
 
 export default async function EditarProveedorPage({
@@ -13,6 +13,7 @@ export default async function EditarProveedorPage({
 }) {
   const employee = await getCurrentEmployee();
   if (!employee) redirect("/");
+  if (resolveRoleName(employee, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
   if (!(await hasPermission(employee.id, DEFAULT_BRANCH_ID, "ORDEN_COMPRA_CREAR"))) {
     redirect("/compras/proveedores");
   }
@@ -24,11 +25,8 @@ export default async function EditarProveedorPage({
   ]);
 
   return (
-    <div className="flex h-screen">
-      <Sidebar />
-      <div className="flex-1 overflow-y-auto">
+    <AuthenticatedShell isAdmin employeeName={employee.name}>
         <SupplierForm employeeId={employee.id} supplier={supplier} ingredientOptions={ingredientOptions} />
-      </div>
-    </div>
+    </AuthenticatedShell>
   );
 }

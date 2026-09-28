@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import type { CustomerGender } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getSessionEmployeeId } from "@/lib/session";
@@ -13,6 +14,7 @@ export type CreateCustomerInput = {
   email?: string;
   address?: string; // para pedidos "A domicilio"
   birthDate?: string; // ISO date, opcional
+  gender?: CustomerGender; // opcional — solo para estadísticas, ver lib/customers.ts
 };
 
 // Código legible del cupón de bienvenida — suficiente entropía (36^6 ≈
@@ -43,6 +45,7 @@ export async function createCustomer(input: CreateCustomerInput) {
         email: input.email?.trim() || null,
         address: input.address?.trim() || null,
         birthDate: input.birthDate ? new Date(input.birthDate) : null,
+        gender: input.gender ?? null,
       },
     });
 
@@ -88,6 +91,7 @@ export type UpdateCustomerInput = {
   email?: string;
   address?: string;
   birthDate?: string;
+  gender?: CustomerGender;
 };
 
 export async function updateCustomer(input: UpdateCustomerInput) {
@@ -109,6 +113,7 @@ export async function updateCustomer(input: UpdateCustomerInput) {
       email: input.email?.trim() || null,
       address: input.address?.trim() || null,
       birthDate: input.birthDate ? new Date(input.birthDate) : null,
+      gender: input.gender ?? null,
     },
   });
 

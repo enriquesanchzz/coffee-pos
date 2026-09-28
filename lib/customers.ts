@@ -32,15 +32,24 @@ export type CustomerSaleHistoryItem = {
   status: string;
 };
 
+export type CustomerTopProduct = {
+  productVariantId: string;
+  productName: string;
+  variantName: string;
+  quantityPurchased: number;
+};
+
 export type CustomerDetail = {
   id: string;
   name: string;
   phone: string | null;
   email: string | null;
   birthDate: string | null;
+  gender: string | null;
   stamps: number;
   tierName: string | null;
   sales: CustomerSaleHistoryItem[];
+  topProducts: CustomerTopProduct[];
 };
 
 export async function getCustomerDetail(id: string): Promise<CustomerDetail> {
@@ -52,12 +61,40 @@ export async function getCustomerDetail(id: string): Promise<CustomerDetail> {
     },
   });
 
+  // Top productos sobre TODO el historial de compras completadas (no solo
+  // las últimas 20 que se muestran arriba) — mismo patrón de agregación en
+  // memoria (Map por productVariantId) que getStatsReport (lib/reports.ts),
+  // no un groupBy de Prisma, para mantener el mismo estilo del archivo.
+  const completedSales = await prisma.sale.findMany({
+    where: { customerId: id, status: "COMPLETADA" },
+    include: { items: { include: { productVariant: { include: { product: true } } } } },
+  });
+
+  const byVariant = new Map<string, CustomerTopProduct>();
+  for (const sale of completedSales) {
+    for (const item of sale.items) {
+      if (!item.productVariantId || !item.productVariant) continue;
+      const entry = byVariant.get(item.productVariantId) ?? {
+        productVariantId: item.productVariantId,
+        productName: item.productVariant.product.name,
+        variantName: item.productVariant.name,
+        quantityPurchased: 0,
+      };
+      entry.quantityPurchased += item.quantity;
+      byVariant.set(item.productVariantId, entry);
+    }
+  }
+  const topProducts = Array.from(byVariant.values())
+    .sort((a, b) => b.quantityPurchased - a.quantityPurchased)
+    .slice(0, 10);
+
   return {
     id: customer.id,
     name: customer.name,
     phone: customer.phone,
     email: customer.email,
     birthDate: customer.birthDate?.toISOString() ?? null,
+    gender: customer.gender,
     stamps: customer.loyaltyCard?.stamps ?? 0,
     tierName: customer.loyaltyCard?.tier?.name ?? null,
     sales: customer.sales.map((sale) => ({
@@ -66,6 +103,7 @@ export async function getCustomerDetail(id: string): Promise<CustomerDetail> {
       total: sale.total.toNumber(),
       status: sale.status,
     })),
+    topProducts,
   };
 }
 
@@ -75,6 +113,13 @@ export type CustomerOption = {
   phone: string | null;
   address: string | null;
   loyaltyCode: string | null;
+  // Se cargan aunque el picker de checkout no los muestre: updateCustomer()
+  // hace reemplazo completo (el formulario de Administración depende de eso
+  // para poder limpiar un campo), así que cualquier caller que solo quiera
+  // tocar un campo (ver checkout-dialog.tsx, actualiza domicilioAddress)
+  // tiene que reenviar estos dos de vuelta o los borra sin querer.
+  birthDate: string | null;
+  gender: string | null;
 };
 
 export async function getCustomerOptions(): Promise<CustomerOption[]> {
@@ -88,5 +133,65 @@ export async function getCustomerOptions(): Promise<CustomerOption[]> {
     phone: customer.phone,
     address: customer.address,
     loyaltyCode: customer.loyaltyCard?.code ?? null,
+    birthDate: customer.birthDate?.toISOString() ?? null,
+    gender: customer.gender,
   }));
+}
+
+const AGE_BUCKETS = ["Menor de 18", "18-25", "26-35", "36-45", "46-55", "56+"] as const;
+const NO_DATA_BUCKET = "Sin dato";
+
+function ageBucket(birthDate: Date | null): string {
+  if (!birthDate) return NO_DATA_BUCKET;
+  const ageMs = Date.now() - birthDate.getTime();
+  const age = Math.floor(ageMs / (1000 * 60 * 60 * 24 * 365.25));
+  if (age < 18) return AGE_BUCKETS[0];
+  if (age <= 25) return AGE_BUCKETS[1];
+  if (age <= 35) return AGE_BUCKETS[2];
+  if (age <= 45) return AGE_BUCKETS[3];
+  if (age <= 55) return AGE_BUCKETS[4];
+  return AGE_BUCKETS[5];
+}
+
+const GENDER_LABELS: Record<string, string> = {
+  FEMENINO: "Femenino",
+  MASCULINO: "Masculino",
+  OTRO: "Otro",
+};
+
+export type CustomerDemographics = {
+  totalCustomers: number;
+  byAgeBucket: { bucket: string; count: number }[];
+  byGender: { label: string; count: number }[];
+};
+
+// Agregación en memoria (mismo estilo que lib/reports.ts) sobre
+// Customer.birthDate/gender — ambos opcionales, los clientes sin dato caen
+// en su propio bucket ("Sin dato") en vez de excluirse, para que el total
+// siempre cuadre con totalCustomers.
+export async function getCustomerDemographics(): Promise<CustomerDemographics> {
+  const customers = await prisma.customer.findMany({
+    select: { birthDate: true, gender: true },
+  });
+
+  const byAgeBucket = new Map<string, number>();
+  const byGender = new Map<string, number>();
+
+  for (const customer of customers) {
+    const ageKey = ageBucket(customer.birthDate);
+    byAgeBucket.set(ageKey, (byAgeBucket.get(ageKey) ?? 0) + 1);
+
+    const genderKey = customer.gender ? (GENDER_LABELS[customer.gender] ?? customer.gender) : "Sin dato";
+    byGender.set(genderKey, (byGender.get(genderKey) ?? 0) + 1);
+  }
+
+  const bucketOrder = [...AGE_BUCKETS, NO_DATA_BUCKET];
+
+  return {
+    totalCustomers: customers.length,
+    byAgeBucket: bucketOrder
+      .filter((bucket) => byAgeBucket.has(bucket))
+      .map((bucket) => ({ bucket, count: byAgeBucket.get(bucket)! })),
+    byGender: Array.from(byGender.entries()).map(([label, count]) => ({ label, count })),
+  };
 }

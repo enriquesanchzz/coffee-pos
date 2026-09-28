@@ -1,13 +1,15 @@
 import { redirect } from "next/navigation";
-import { getCurrentEmployee } from "@/lib/session";
+import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
-import { getPurchaseOrderDetail } from "@/lib/purchases";
-import { Sidebar } from "@/components/layout/sidebar";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatCurrency } from "@/lib/utils";
-import { ReceiveOrderForm } from "@/components/compras/receive-order-form";
-import { purchaseOrderStatusLabels, unitLabels } from "@/components/compras/enum-labels";
+import {
+  getPurchaseOrderDetail,
+  getActiveSuppliers,
+  getIngredientOptions,
+  getSupplierCostMap,
+} from "@/lib/purchases";
+import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
+import { PurchaseOrderDetailView } from "@/components/compras/purchase-order-detail-view";
 
 export default async function DetalleOrdenPage({
   params,
@@ -16,6 +18,7 @@ export default async function DetalleOrdenPage({
 }) {
   const employee = await getCurrentEmployee();
   if (!employee) redirect("/");
+  if (resolveRoleName(employee, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
 
   const canManage =
     (await hasPermission(employee.id, DEFAULT_BRANCH_ID, "ORDEN_COMPRA_CREAR")) ||
@@ -23,55 +26,22 @@ export default async function DetalleOrdenPage({
   if (!canManage) redirect("/pos");
 
   const { purchaseOrderId } = await params;
-  const order = await getPurchaseOrderDetail(purchaseOrderId);
-  const statusLabel =
-    purchaseOrderStatusLabels[order.status as keyof typeof purchaseOrderStatusLabels] ?? order.status;
+  const [order, suppliers, ingredients, supplierCostsBySupplier] = await Promise.all([
+    getPurchaseOrderDetail(purchaseOrderId),
+    getActiveSuppliers(),
+    getIngredientOptions(),
+    getSupplierCostMap(),
+  ]);
 
   return (
-    <div className="flex h-screen">
-      <Sidebar />
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
-          <div>
-            <h1 className="text-lg font-semibold">Orden — {order.supplierName}</h1>
-            <p className="text-sm text-muted-foreground">
-              {statusLabel} · creada {new Date(order.createdAt).toLocaleString("es-MX")}
-            </p>
-          </div>
-
-          {order.status === "CREADA" ? (
-            <ReceiveOrderForm employeeId={employee.id} order={order} />
-          ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle>Líneas</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-2">
-                {order.items.map((item) => {
-                  const unitLabel = unitLabels[item.unit as keyof typeof unitLabels] ?? item.unit;
-                  return (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between border-b border-border pb-2 text-sm last:border-0"
-                    >
-                      <div>
-                        <p>{item.ingredientName}</p>
-                        <p className="text-xs text-muted-foreground">
-                          pedido {item.orderedQuantity} {unitLabel} · recibido {item.receivedQuantity ?? 0}{" "}
-                          {unitLabel}
-                        </p>
-                      </div>
-                      <span>
-                        {formatCurrency(item.actualUnitCost ?? item.estimatedUnitCost)}
-                      </span>
-                    </div>
-                  );
-                })}
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
-    </div>
+    <AuthenticatedShell isAdmin employeeName={employee.name}>
+      <PurchaseOrderDetailView
+        employeeId={employee.id}
+        order={order}
+        suppliers={suppliers}
+        ingredients={ingredients}
+        supplierCostsBySupplier={supplierCostsBySupplier}
+      />
+    </AuthenticatedShell>
   );
 }

@@ -147,14 +147,14 @@ async function resolveSaleItems(
   tx: Prisma.TransactionClient,
   items: CreateSaleItemInput[]
 ): Promise<{ saleItemsData: ResolvedSaleItem[]; consumption: Map<string, Prisma.Decimal>; subtotal: Prisma.Decimal }> {
-  const ingredientInfoCache = new Map<string, { baseUnit: UnitOfMeasure; category: string }>();
+  const ingredientInfoCache = new Map<string, { baseUnit: UnitOfMeasure; categoryId: string }>();
   const consumption = new Map<string, Prisma.Decimal>();
 
   async function getIngredientInfo(ingredientId: string) {
     let info = ingredientInfoCache.get(ingredientId);
     if (!info) {
       const ingredient = await tx.ingredient.findUniqueOrThrow({ where: { id: ingredientId } });
-      info = { baseUnit: ingredient.baseUnit, category: ingredient.category };
+      info = { baseUnit: ingredient.baseUnit, categoryId: ingredient.categoryId };
       ingredientInfoCache.set(ingredientId, info);
     }
     return info;
@@ -195,8 +195,8 @@ async function resolveSaleItems(
       const lineQuantity = line.quantity.mul(multiplier);
 
       if (line.ingredientId) {
-        const { category } = await getIngredientInfo(line.ingredientId);
-        if (excludedCategories.has(category)) continue; // sustituido, no se descuenta el ingrediente base
+        const { categoryId } = await getIngredientInfo(line.ingredientId);
+        if (excludedCategories.has(categoryId)) continue; // sustituido, no se descuenta el ingrediente base
         const baseQty = await toBaseUnit(line.ingredientId, lineQuantity, line.unit);
         addConsumption(line.ingredientId, baseQty);
       } else if (line.composedRecipeId) {
@@ -292,8 +292,8 @@ async function resolveSaleItems(
     const substitutionCategories = new Set<string>();
     for (const opt of modifierOptions) {
       if (opt.isSubstitution && opt.ingredientId) {
-        const { category } = await getIngredientInfo(opt.ingredientId);
-        substitutionCategories.add(category);
+        const { categoryId } = await getIngredientInfo(opt.ingredientId);
+        substitutionCategories.add(categoryId);
       }
     }
 

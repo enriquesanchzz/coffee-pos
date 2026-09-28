@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
-import { getCurrentEmployee } from "@/lib/session";
+import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getInventoryReport, resolveDateRange } from "@/lib/reports";
-import { Sidebar } from "@/components/layout/sidebar";
+import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateRangePicker } from "@/components/reportes/date-range-picker";
 import { formatCurrency } from "@/lib/utils";
@@ -26,6 +26,7 @@ export default async function ReporteInventarioPage({
 }) {
   const employee = await getCurrentEmployee();
   if (!employee) redirect("/");
+  if (resolveRoleName(employee, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
   if (!(await hasPermission(employee.id, DEFAULT_BRANCH_ID, "REPORTE_INVENTARIO_VER"))) {
     redirect("/pos");
   }
@@ -35,9 +36,7 @@ export default async function ReporteInventarioPage({
   const report = await getInventoryReport(from, to);
 
   return (
-    <div className="flex h-screen">
-      <Sidebar />
-      <div className="flex-1 overflow-y-auto">
+    <AuthenticatedShell isAdmin employeeName={employee.name}>
         <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
           <div className="flex items-center justify-between">
             <h1 className="text-lg font-semibold">Inventario</h1>
@@ -81,7 +80,6 @@ export default async function ReporteInventarioPage({
             </CardContent>
           </Card>
         </div>
-      </div>
-    </div>
+    </AuthenticatedShell>
   );
 }

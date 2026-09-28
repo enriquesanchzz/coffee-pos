@@ -1,5 +1,5 @@
 import "server-only";
-import { Prisma } from "@prisma/client";
+import { Prisma, type VariantTemperature } from "@prisma/client";
 import { prisma } from "./prisma";
 import { DEFAULT_BRANCH_ID, DEFAULT_STOCK_LOCATION_ID } from "./constants";
 import { calculateRecipeVersionCost } from "./recipe-cost";
@@ -154,7 +154,7 @@ export async function getProfitReport(from: Date, to: Date): Promise<ProfitRepor
 export type InventoryValueItem = {
   ingredientId: string;
   name: string;
-  category: string;
+  categoryId: string;
   baseUnit: string;
   quantity: number;
   unitCost: number;
@@ -189,7 +189,7 @@ export async function getInventoryReport(from: Date, to: Date): Promise<Inventor
     return {
       ingredientId: ingredient.id,
       name: ingredient.name,
-      category: ingredient.category,
+      categoryId: ingredient.categoryId,
       baseUnit: ingredient.baseUnit,
       quantity,
       unitCost,
@@ -232,6 +232,9 @@ export type RecipeCostReportItem = {
   variantId: string;
   productName: string;
   variantName: string;
+  categoryId: string;
+  categoryName: string;
+  temperature: VariantTemperature | null;
   price: number;
   currentCost: number;
   margin: number;
@@ -239,12 +242,26 @@ export type RecipeCostReportItem = {
   history: RecipeCostHistoryEntry[];
 };
 
-export async function getRecipeCostReport(): Promise<RecipeCostReportItem[]> {
+export type RecipeCostReportFilters = {
+  categoryId?: string;
+  temperature?: VariantTemperature;
+};
+
+export async function getRecipeCostReport(
+  filters: RecipeCostReportFilters = {}
+): Promise<RecipeCostReportItem[]> {
   const variants = await prisma.productVariant.findMany({
-    where: { isActive: true, product: { type: "RECETA" } },
+    where: {
+      isActive: true,
+      product: {
+        type: "RECETA",
+        categoryId: filters.categoryId || undefined,
+      },
+      temperature: filters.temperature || undefined,
+    },
     orderBy: [{ product: { name: "asc" } }, { name: "asc" }],
     include: {
-      product: true,
+      product: { include: { category: true } },
       recipes: {
         where: { kind: "PRODUCTO_VENDIBLE" },
         include: {
@@ -271,6 +288,9 @@ export async function getRecipeCostReport(): Promise<RecipeCostReportItem[]> {
       variantId: variant.id,
       productName: variant.product.name,
       variantName: variant.name,
+      categoryId: variant.product.categoryId,
+      categoryName: variant.product.category.name,
+      temperature: variant.temperature,
       price: variant.price.toNumber(),
       currentCost: currentCost.toNumber(),
       margin: margin.toNumber(),
@@ -292,6 +312,7 @@ export async function getRecipeCostReport(): Promise<RecipeCostReportItem[]> {
 // -----------------------------------------------------------------------
 
 export type TopProductStat = {
+  productVariantId: string;
   productName: string;
   variantName: string;
   quantitySold: number;
@@ -304,12 +325,38 @@ export type DailySalesStat = {
   revenue: number;
 };
 
+// Hora del día en UTC (0-23), no hora local de la sucursal — mismo criterio
+// que dailySales ya usa para el día (`toISOString().slice(0,10)`, también
+// UTC): se mantiene consistente con esa simplificación ya aceptada en el
+// archivo en vez de introducir una segunda convención de huso horario.
+export type HourlySalesStat = {
+  hour: number;
+  salesCount: number;
+  revenue: number;
+};
+
+export type ChannelSalesStat = {
+  orderType: string;
+  salesCount: number;
+  revenue: number;
+};
+
+export type SaleDetailStat = {
+  id: string;
+  createdAt: string;
+  orderType: string;
+  total: number;
+};
+
 export type StatsReport = {
   totalSales: number;
   totalRevenue: number;
   averageTicket: number;
   topProducts: TopProductStat[];
   dailySales: DailySalesStat[];
+  hourlySales: HourlySalesStat[];
+  channelSales: ChannelSalesStat[];
+  sales: SaleDetailStat[];
 };
 
 export async function getStatsReport(from: Date, to: Date): Promise<StatsReport> {
@@ -325,6 +372,8 @@ export async function getStatsReport(from: Date, to: Date): Promise<StatsReport>
 
   const byVariant = new Map<string, TopProductStat>();
   const byDay = new Map<string, { salesCount: number; revenue: number }>();
+  const byHour = new Map<number, { salesCount: number; revenue: number }>();
+  const byChannel = new Map<string, { salesCount: number; revenue: number }>();
 
   for (const sale of sales) {
     const day = sale.createdAt.toISOString().slice(0, 10);
@@ -333,9 +382,21 @@ export async function getStatsReport(from: Date, to: Date): Promise<StatsReport>
     dayEntry.revenue += sale.total.toNumber();
     byDay.set(day, dayEntry);
 
+    const hour = sale.createdAt.getUTCHours();
+    const hourEntry = byHour.get(hour) ?? { salesCount: 0, revenue: 0 };
+    hourEntry.salesCount += 1;
+    hourEntry.revenue += sale.total.toNumber();
+    byHour.set(hour, hourEntry);
+
+    const channelEntry = byChannel.get(sale.orderType) ?? { salesCount: 0, revenue: 0 };
+    channelEntry.salesCount += 1;
+    channelEntry.revenue += sale.total.toNumber();
+    byChannel.set(sale.orderType, channelEntry);
+
     for (const item of sale.items) {
       if (!item.productVariantId || !item.productVariant) continue;
       const entry = byVariant.get(item.productVariantId) ?? {
+        productVariantId: item.productVariantId,
         productName: item.productVariant.product.name,
         variantName: item.productVariant.name,
         quantitySold: 0,
@@ -353,6 +414,32 @@ export async function getStatsReport(from: Date, to: Date): Promise<StatsReport>
   const dailySales = Array.from(byDay.entries())
     .map(([date, v]) => ({ date, ...v }))
     .sort((a, b) => a.date.localeCompare(b.date));
+  const hourlySales = Array.from(byHour.entries())
+    .map(([hour, v]) => ({ hour, ...v }))
+    .sort((a, b) => a.hour - b.hour);
+  const channelSales = Array.from(byChannel.entries())
+    .map(([orderType, v]) => ({ orderType, ...v }))
+    .sort((a, b) => b.revenue - a.revenue);
+  // Detalle venta por venta — permite ver exactamente qué se cobró un día
+  // específico acotando from/to al mismo día (DateRangePicker ya lo
+  // soporta), no solo el agregado diario de arriba.
+  const saleDetails = sales
+    .map((sale) => ({
+      id: sale.id,
+      createdAt: sale.createdAt.toISOString(),
+      orderType: sale.orderType,
+      total: sale.total.toNumber(),
+    }))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
-  return { totalSales, totalRevenue, averageTicket, topProducts, dailySales };
+  return {
+    totalSales,
+    totalRevenue,
+    averageTicket,
+    topProducts,
+    dailySales,
+    hourlySales,
+    channelSales,
+    sales: saleDetails,
+  };
 }

@@ -29,7 +29,7 @@ export function ReceiveOrderForm({
   const [lines, setLines] = useState<LineState[]>(
     order.items.map((item) => ({
       purchaseOrderItemId: item.id,
-      receivedQuantity: String(item.orderedQuantity),
+      receivedQuantity: String(item.pendingQuantity),
       actualUnitCost: String(item.estimatedUnitCost),
       expirationDate: "",
     }))
@@ -71,50 +71,58 @@ export function ReceiveOrderForm({
         {order.items.map((item) => {
           const line = lines.find((l) => l.purchaseOrderItemId === item.id)!;
           const unitLabel = unitLabels[item.unit as keyof typeof unitLabels] ?? item.unit;
+          const isFullyReceived = item.pendingQuantity <= 0;
           return (
             <div key={item.id} className="flex flex-col gap-2 border-b border-border pb-3 last:border-0">
               <p className="text-sm font-medium">
-                {item.ingredientName} — pedido: {item.orderedQuantity} {unitLabel} · estimado{" "}
+                {item.ingredientName} — pedido: {item.orderedQuantity} {unitLabel}
+                {(item.receivedQuantity ?? 0) > 0 && ` · recibido hasta ahora: ${item.receivedQuantity}`}
+                {" · "}pendiente: {item.pendingQuantity} {unitLabel} · estimado{" "}
                 {formatCurrency(item.estimatedUnitCost)}
               </p>
-              <div className="flex items-end gap-2">
-                <div className="flex flex-col gap-1">
-                  <Label htmlFor={`qty-${item.id}`}>Cantidad recibida</Label>
-                  <Input
-                    id={`qty-${item.id}`}
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    className="w-28"
-                    value={line.receivedQuantity}
-                    onChange={(e) => updateLine(item.id, { receivedQuantity: e.target.value })}
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <Label htmlFor={`cost-${item.id}`}>Costo real</Label>
-                  <Input
-                    id={`cost-${item.id}`}
-                    type="number"
-                    min="0"
-                    step="0.0001"
-                    className="w-28"
-                    value={line.actualUnitCost}
-                    onChange={(e) => updateLine(item.id, { actualUnitCost: e.target.value })}
-                  />
-                </div>
-                {item.tracksExpiration && (
+              {isFullyReceived ? (
+                <p className="text-xs text-muted-foreground">Ya se recibió por completo.</p>
+              ) : (
+                <div className="flex items-end gap-2">
                   <div className="flex flex-col gap-1">
-                    <Label htmlFor={`exp-${item.id}`}>Caducidad (opcional)</Label>
+                    <Label htmlFor={`qty-${item.id}`}>Cantidad recibida (esta pasada)</Label>
                     <Input
-                      id={`exp-${item.id}`}
-                      type="date"
-                      className="w-40"
-                      value={line.expirationDate}
-                      onChange={(e) => updateLine(item.id, { expirationDate: e.target.value })}
+                      id={`qty-${item.id}`}
+                      type="number"
+                      min="0"
+                      max={item.pendingQuantity}
+                      step="0.01"
+                      className="w-28"
+                      value={line.receivedQuantity}
+                      onChange={(e) => updateLine(item.id, { receivedQuantity: e.target.value })}
                     />
                   </div>
-                )}
-              </div>
+                  <div className="flex flex-col gap-1">
+                    <Label htmlFor={`cost-${item.id}`}>Costo real</Label>
+                    <Input
+                      id={`cost-${item.id}`}
+                      type="number"
+                      min="0"
+                      step="0.0001"
+                      className="w-28"
+                      value={line.actualUnitCost}
+                      onChange={(e) => updateLine(item.id, { actualUnitCost: e.target.value })}
+                    />
+                  </div>
+                  {item.tracksExpiration && (
+                    <div className="flex flex-col gap-1">
+                      <Label htmlFor={`exp-${item.id}`}>Caducidad (opcional)</Label>
+                      <Input
+                        id={`exp-${item.id}`}
+                        type="date"
+                        className="w-40"
+                        value={line.expirationDate}
+                        onChange={(e) => updateLine(item.id, { expirationDate: e.target.value })}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}

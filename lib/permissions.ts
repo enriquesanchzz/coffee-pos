@@ -49,3 +49,21 @@ export async function requirePermission(
     throw new Error(`No tienes permiso para hacer esto (falta ${permission}).`);
   }
 }
+
+// Gate por identidad de rol, no por permiso efectivo — igual que
+// lib/session.ts resolveRoleName() (usado en las páginas), pero para
+// Server Actions que solo tienen employeeId, no el empleado completo con
+// `branches` ya cargado. Las acciones detrás de Clientes/Reportes/Compras/
+// Productos/Inventario/Administración deben quedar exclusivas de
+// ADMINISTRADOR incluso si alguien más tiene el permiso granular
+// correspondiente vía EmployeePermissionOverride — un permiso puntual no
+// debe alcanzar para operar un módulo entero reservado al rol.
+export async function requireAdminRole(employeeId: string, branchId: string): Promise<void> {
+  const employeeBranch = await prisma.employeeBranch.findUnique({
+    where: { employeeId_branchId: { employeeId, branchId } },
+    include: { role: true },
+  });
+  if (employeeBranch?.role.name !== "ADMINISTRADOR") {
+    throw new Error("Esta acción es exclusiva del rol ADMINISTRADOR.");
+  }
+}

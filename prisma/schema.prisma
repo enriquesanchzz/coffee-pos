@@ -27,14 +27,6 @@ enum UnitOfMeasure {
   ESPRESSO_SHOT // unidad de espresso (18g)
 }
 
-enum IngredientCategory {
-  CAFE
-  JARABES
-  LECHE
-  TOPPINGS
-  INSUMOS // vasos, tapas, popotes, servilletas, etc.
-}
-
 enum IngredientKind {
   ATOMICO // se compra directo a proveedor
   COMPUESTO // se arma con otros ingredientes vía Recipe, pero no se
@@ -277,10 +269,24 @@ model StockLocation {
 // INGREDIENTES / INSUMOS
 // =========================================================================
 
+// Antes un enum fijo (CAFE/JARABES/LECHE/TOPPINGS/INSUMOS) — se migró a
+// tabla real (mismo patrón que ProductCategory) para poder crear/editar/
+// borrar categorías de insumo desde /inventario, ver
+// prisma/migrations/*_ingredient_category_to_table.
+model IngredientCategory {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  icon        String?
+  ingredients Ingredient[]
+
+  @@map("ingredient_categories")
+}
+
 model Ingredient {
   id                String             @id @default(cuid())
   name              String
-  category          IngredientCategory
+  categoryId        String
+  category          IngredientCategory @relation(fields: [categoryId], references: [id])
   kind              IngredientKind     @default(ATOMICO)
   baseUnit          UnitOfMeasure // unidad en la que se descuenta del inventario
   purchaseUnit      UnitOfMeasure // unidad en la que normalmente se compra
@@ -1045,10 +1051,20 @@ model CashMovement {
 // CLIENTES / LEALTAD
 // =========================================================================
 
+enum CustomerGender {
+  FEMENINO
+  MASCULINO
+  OTRO
+}
+
 model Customer {
   id        String    @id @default(cuid())
   name      String
   birthDate DateTime?
+  // Opcional a propósito — los clientes ya registrados no lo tienen, y no
+  // se pide de vuelta a fuerza. Solo para las estadísticas de
+  // Administración → Clientes (ver lib/customers.ts getCustomerStats).
+  gender    CustomerGender?
   email     String?   @unique
   phone     String?   @unique
   address   String? // para pedidos "A domicilio"

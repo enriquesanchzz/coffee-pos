@@ -2,13 +2,22 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import type { CustomerGender } from "@prisma/client";
 import type { CustomerDetail } from "@/lib/customers";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { createCustomer, updateCustomer } from "@/actions/customers";
 import { buildWhatsAppLoyaltyLink, cn } from "@/lib/utils";
+
+const GENDER_OPTIONS: { value: CustomerGender | ""; label: string }[] = [
+  { value: "", label: "Prefiere no decir" },
+  { value: "FEMENINO", label: "Femenino" },
+  { value: "MASCULINO", label: "Masculino" },
+  { value: "OTRO", label: "Otro" },
+];
 
 export function CustomerForm({
   employeeId,
@@ -23,6 +32,7 @@ export function CustomerForm({
   const [phone, setPhone] = useState(customer?.phone ?? "");
   const [email, setEmail] = useState(customer?.email ?? "");
   const [birthDate, setBirthDate] = useState(customer?.birthDate?.slice(0, 10) ?? "");
+  const [gender, setGender] = useState<CustomerGender | "">((customer?.gender as CustomerGender) ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   // Tras crear (no editar) un cliente nuevo, se queda en esta pantalla
@@ -45,6 +55,7 @@ export function CustomerForm({
             phone,
             email,
             birthDate: birthDate || undefined,
+            gender: gender || undefined,
           });
           router.refresh();
         } else {
@@ -54,6 +65,7 @@ export function CustomerForm({
             phone,
             email,
             birthDate: birthDate || undefined,
+            gender: gender || undefined,
           });
           setCreated(result);
         }
@@ -126,6 +138,20 @@ export function CustomerForm({
         <div className="flex flex-col gap-1">
           <Label htmlFor="birthDate">Fecha de nacimiento (opcional)</Label>
           <Input id="birthDate" type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="gender">Género (opcional, solo para estadísticas)</Label>
+          <Select
+            id="gender"
+            value={gender}
+            onChange={(e) => setGender(e.target.value as CustomerGender | "")}
+          >
+            {GENDER_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </Select>
         </div>
 
         {error && <p className="text-sm text-destructive">{error}</p>}

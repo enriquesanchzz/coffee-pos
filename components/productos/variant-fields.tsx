@@ -1,7 +1,7 @@
 "use client";
 
 import type { ProductType, VariantTemperature } from "@prisma/client";
-import type { IngredientOption, ComposedRecipeOption } from "@/lib/recipes";
+import type { IngredientOption, ComposedRecipeOption, IngredientCategoryOption } from "@/lib/recipes";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,7 @@ export function VariantFields({
   onExtraOptionsChange,
   ingredients,
   composedRecipes,
+  categories,
   onIngredientCreated,
   employeeId,
   targetFoodCostPercent,
@@ -72,6 +73,7 @@ export function VariantFields({
   onExtraOptionsChange: (v: ModifierOptionDraft[]) => void;
   ingredients: IngredientOption[];
   composedRecipes: ComposedRecipeOption[];
+  categories: IngredientCategoryOption[];
   onIngredientCreated: (i: IngredientOption) => void;
   employeeId: string;
   // % de food cost objetivo (Branch.targetFoodCostPercent), para el
@@ -152,6 +154,7 @@ export function VariantFields({
               onChange={onLinesChange}
               ingredients={ingredients}
               composedRecipes={composedRecipes}
+              categories={categories}
               onIngredientCreated={onIngredientCreated}
               employeeId={employeeId}
             />
@@ -186,7 +189,7 @@ export function VariantFields({
             helpText="Alternativas a la leche que ya usa la receta — la opción base se agrega sola, sin costo."
             rows={milkOptions}
             onChange={onMilkOptionsChange}
-            ingredientOptions={ingredients.filter((i) => i.category === "LECHE")}
+            ingredientOptions={ingredients.filter((i) => i.categoryId === "LECHE")}
           />
 
           <ModifierOptionsEditor

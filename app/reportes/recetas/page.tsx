@@ -1,35 +1,57 @@
 import { redirect } from "next/navigation";
-import { getCurrentEmployee } from "@/lib/session";
+import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getRecipeCostReport } from "@/lib/reports";
-import { Sidebar } from "@/components/layout/sidebar";
+import { getProductCategories } from "@/lib/recipes";
+import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { RecipeReportFilters } from "@/components/reportes/recipe-report-filters";
+import { temperatureLabels } from "@/components/productos/enum-labels";
 import { formatCurrency } from "@/lib/utils";
+import type { VariantTemperature } from "@prisma/client";
 
-export default async function ReporteRecetasPage() {
+const VALID_TEMPERATURES = new Set(["CALIENTE", "FRIO", "FRAPPE"]);
+
+export default async function ReporteRecetasPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ category?: string; temperature?: string }>;
+}) {
   const employee = await getCurrentEmployee();
   if (!employee) redirect("/");
+  if (resolveRoleName(employee, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
   if (!(await hasPermission(employee.id, DEFAULT_BRANCH_ID, "REPORTE_UTILIDAD_VER"))) {
     redirect("/pos");
   }
 
-  const items = await getRecipeCostReport();
+  const params = await searchParams;
+  const categoryId = params.category ?? "";
+  const temperatureParam = params.temperature ?? "";
+  const temperature = VALID_TEMPERATURES.has(temperatureParam)
+    ? (temperatureParam as VariantTemperature)
+    : undefined;
+
+  const [items, categories] = await Promise.all([
+    getRecipeCostReport({ categoryId: categoryId || undefined, temperature }),
+    getProductCategories(),
+  ]);
 
   return (
-    <div className="flex h-screen">
-      <Sidebar />
-      <div className="flex-1 overflow-y-auto">
+    <AuthenticatedShell isAdmin employeeName={employee.name}>
         <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
-          <div>
-            <h1 className="text-lg font-semibold">Costo de recetas</h1>
-            <p className="text-sm text-muted-foreground">
-              Costo actual calculado con el costo cotizado de cada ingrediente en Compras.
-            </p>
+          <div className="flex items-start justify-between">
+            <div>
+              <h1 className="text-lg font-semibold">Costo de recetas</h1>
+              <p className="text-sm text-muted-foreground">
+                Costo actual calculado con el costo cotizado de cada ingrediente en Compras.
+              </p>
+            </div>
+            <RecipeReportFilters categories={categories} categoryId={categoryId} temperature={temperatureParam} />
           </div>
 
           {items.length === 0 && (
-            <p className="text-sm text-muted-foreground">No hay recetas activas todavía.</p>
+            <p className="text-sm text-muted-foreground">No hay recetas activas con estos filtros.</p>
           )}
 
           {items.map((item) => (
@@ -38,6 +60,10 @@ export default async function ReporteRecetasPage() {
                 <CardTitle>
                   {item.productName} {item.variantName}
                 </CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  {item.categoryName}
+                  {item.temperature && ` · ${temperatureLabels[item.temperature]}`}
+                </p>
               </CardHeader>
               <CardContent className="flex flex-col gap-3">
                 <div className="grid grid-cols-4 gap-4 text-sm">
@@ -75,7 +101,6 @@ export default async function ReporteRecetasPage() {
             </Card>
           ))}
         </div>
-      </div>
-    </div>
+    </AuthenticatedShell>
   );
 }

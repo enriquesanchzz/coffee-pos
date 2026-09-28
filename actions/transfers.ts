@@ -5,7 +5,7 @@ import type { UnitOfMeasure } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getSessionEmployeeId } from "@/lib/session";
-import { requirePermission } from "@/lib/permissions";
+import { requirePermission, requireAdminRole } from "@/lib/permissions";
 
 // No existe un permiso específico de "transferencias" en el catálogo — se
 // usa INVENTARIO_AJUSTAR de forma uniforme (nivel GERENTE en la matriz de
@@ -49,6 +49,7 @@ export async function createTransferManifest(input: CreateTransferManifestInput)
   }
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "INVENTARIO_AJUSTAR");
+  await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
 
   const manifest = await prisma.transferManifest.create({
     data: {
@@ -85,6 +86,7 @@ export async function markTransferInTransit(input: MarkTransferInTransitInput) {
   }
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "INVENTARIO_AJUSTAR");
+  await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
 
   await prisma.$transaction(async (tx) => {
     const manifest = await tx.transferManifest.findUnique({
@@ -173,6 +175,7 @@ export async function receiveTransfer(input: ReceiveTransferInput) {
   }
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "INVENTARIO_AJUSTAR");
+  await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
 
   for (const line of input.lines) {
     if (line.receivedQuantity < 0) {
@@ -284,6 +287,7 @@ export async function cancelTransferManifest(input: CancelTransferManifestInput)
   }
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "INVENTARIO_AJUSTAR");
+  await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
 
   const manifest = await prisma.transferManifest.findUnique({
     where: { id: input.transferManifestId },

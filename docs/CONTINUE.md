@@ -1250,6 +1250,484 @@ combinación se vea bien con los tokens neutros existentes; tipografías
 adicionales más allá de las 3 curadas; personalización por empleado (la
 apariencia es global de la sucursal, igual que el food cost objetivo).
 
+## Cambios de Administración — Frente 1: control de acceso + barra global (rama `cambios-administracion`)
+
+Primer frente de un plan más grande ("cambios de administración", ver plan
+guardado en la sesión) que restringe Clientes/Reportes/Compras/Productos/
+Inventario a solo el rol ADMINISTRADOR y convierte la barra "Atendiendo: X"
+del POS en una barra global al fondo de toda la app. Los siguientes frentes
+(mejoras puntuales dentro de cada uno de esos 5 módulos) van en ramas
+separadas, no en esta.
+
+**Gate por rol, no por permiso**: nuevo `resolveRoleName(employee, branchId)`
+en `lib/session.ts` — lee `employee.branches` (ya incluido por
+`getCurrentEmployee()`) y devuelve el `RoleName` exacto para esa sucursal.
+A propósito NO se usa `hasPermission`/`getEffectivePermissions`
+(`lib/permissions.ts`) para este gate: un `EmployeePermissionOverride` (ver
+schema) podría darle a un GERENTE un permiso puntual de administrador sin
+hacerlo ADMINISTRADOR, y este gate debe ser duro por identidad de rol, no
+por permiso efectivo. Se aplicó en las 24 páginas de estos 5 módulos
+(incluidas todas sus subpáginas: `nuevo`, `[id]`, `proveedores`,
+`transferencias`, `conteos`, etc.) y en las 3 páginas de Administración
+(`/administracion`, `/administracion/nuevo`, `/administracion/[employeeId]`)
+— antes estas últimas solo pedían permisos (`EMPLEADO_CREAR`/
+`EMPLEADO_MODIFICAR`), que GERENTE sí tenía.
+
+**Cambio de comportamiento real, ya confirmado con el usuario**: GERENTE
+(la cuenta demo de Ana) perdía por completo el acceso a Administración con
+este cambio, y como no había ningún empleado activo con rol ADMINISTRADOR
+en la base de dev, **nadie hubiera podido entrar a promover a nadie**
+(lockout total). Se resolvió promoviendo a Ana de GERENTE a ADMINISTRADOR
+usando el flujo real de edición de empleado (no un script directo a la
+base de datos) — confirmado con el usuario antes de hacerlo. **Ana ahora
+es ADMINISTRADOR, ya no GERENTE.** BARISTA también pierde el acceso que
+tenía vía permisos granulares a partes de Compras/Clientes
+(`COMPRA_REGISTRAR`/`ORDEN_COMPRA_CREAR`/`CLIENTE_CONFIGURAR` siguen
+existiendo en el rol pero ya no alcanzan para entrar a esas pantallas).
+
+**Sidebar** (`components/layout/sidebar.tsx`): ahora recibe `isAdmin: boolean`
+(prop obligatoria — cualquier código nuevo que renderice `<Sidebar />`
+directo, en vez de vía `AuthenticatedShell`, dejará de compilar hasta que
+se le pase). Los 5 módulos + "Administración" solo se renderizan si
+`isAdmin`, agrupados bajo un label "ADMINISTRACIÓN".
+
+**`components/layout/authenticated-shell.tsx`** (nuevo) reemplaza el
+`<div className="flex h-screen"><Sidebar />...` que estaba duplicado
+literal en las ~24 páginas raíz — un solo lugar que arma Sidebar + contenido
++ la barra global de abajo. **`components/layout/session-bar.tsx`** (nuevo,
+`"use client"`): franja fija `bg-neutral-900`/`text-neutral-50` **a
+propósito fuera del sistema de tokens de Apariencia** (no usa
+`--primary`/`.dark`) — es un ancla visual constante para saber quién opera
+el sistema, no debe cambiar con el tema elegido. Contiene "Atendiendo: X",
+un `<select>` de "zona" (navegar entre secciones vía `router.push` — se
+confirmó con el usuario que "zona" es esto, navegación entre secciones de
+la UI, no un concepto nuevo de sucursal/estación física) y "Cambiar de
+empleado" (antes duplicado en `pos-workspace.tsx`, `shift-summary.tsx` y
+`administracion/page.tsx`, ahora vive solo aquí). `PosWorkspace` conservó
+solo sus botones propios de turno ("Cuentas abiertas"/"Movimiento de caja"),
+ya no la identidad/logout.
+
+**`/administracion` como hub**: ahora siempre muestra Configuración y
+Apariencia (antes condicionadas a `CONFIGURACION_SISTEMA_GESTIONAR`, que ya
+no hace falta comprobar aparte — solo ADMINISTRADOR llega a esta página, y
+ADMINISTRADOR ya tiene ese permiso por definición en `prisma/seed.ts`), más
+5 tarjetas de acceso rápido a Clientes/Reportes/Compras/Productos/
+Inventario. Las rutas de esos 5 módulos no se movieron (siguen en
+`/clientes`, `/reportes`, etc.) — solo cambió quién puede verlas/entrar.
+
+Verificado con Playwright (Chromium headless, `playwright` instalado y
+desinstalado con `--no-save`, no quedó como dependencia) contra Postgres
+real: Ana (ya ADMINISTRADOR) ve los 8 módulos con el label "ADMINISTRACIÓN",
+la barra global se ve en `/pos`/`/administracion`, el selector de zona
+navega correctamente, "Cambiar de empleado" cierra sesión; un empleado
+BARISTA de prueba (creado y luego desactivado vía el flujo real
+"+ Nuevo empleado", PIN de prueba) queda con sidebar de solo Punto de
+Venta/Caja y es redirigido a `/pos` (o a `/administracion/login` en el caso
+de `/administracion`, por `requirePasswordSession`) al intentar entrar a
+cualquiera de los 5 módulos por URL directa. Sin errores de consola.
+
+**Adenda — el gate de página no bastaba**: el usuario notó, con razón, que
+ocultar la página no impide que la Server Action detrás siga aceptando el
+permiso granular de siempre (ej. un BARISTA con `CLIENTE_CONFIGURAR` o
+`ORDEN_COMPRA_CREAR` en la matriz de `prisma/seed.ts` podía en teoría seguir
+llamando `createDiscountCode`/`createPurchaseOrder`/etc. aunque ya no viera
+el botón). Se agregó `requireAdminRole(employeeId, branchId)`
+(`lib/permissions.ts`) — mismo principio que `resolveRoleName` pero
+resuelto con una query propia para Server Actions que no tienen ya cargado
+el empleado completo — y se aplicó, tras auditar caso por caso quién llama
+a cada función (`grep` de cada nombre de acción contra todo `components/` y
+`app/`), a las 19 Server Actions que son exclusivas de estos módulos:
+`createSupplier`/`updateSupplier`/`upsertIngredientSupplier`/
+`createPurchaseOrder`/`receivePurchaseOrder` (`actions/purchases.ts`),
+`createIngredient`/`createProductWithRecipe`/`addVariantToProduct`/
+`updateVariantRecipe`/`updateProductCategory` (`actions/recipes.ts`),
+`adjustInventoryStock` (`actions/inventory.ts`),
+`createTransferManifest`/`markTransferInTransit`/`receiveTransfer`/
+`cancelTransferManifest` (`actions/transfers.ts`),
+`createPhysicalCount`/`approvePhysicalCount` (`actions/counts.ts` — esta
+última gatea sobre `approver.id`, no `input.employeeId`, porque quien
+aprueba un conteo se identifica con un PIN aparte, un empleado distinto de
+quien lo capturó), `createDiscountCode`/`toggleDiscountCodeActive`
+(`actions/discounts.ts`), y `createEmployee`/`updateEmployee`
+(`actions/employees.ts`, vía el helper ya existente `requireEmployeeManager`,
+que ahora también exige `resolveRoleName(actor, branchId) ===
+"ADMINISTRADOR"` antes del permiso).
+
+**A propósito NO se tocaron** `createCustomer`/`updateCustomer`
+(`actions/customers.ts`) ni `findDiscountCodeByCode` (`actions/discounts.ts`,
+aplicar un cupón en checkout): las tres se usan también desde
+`components/pos/checkout-dialog.tsx` — un cajero cualquiera sigue pudiendo
+dar de alta un cliente o aplicar un cupón al cobrar, eso es una función real
+del POS, no una "opción de administrador" que se coló. Gatearlas habría
+roto ese flujo. Tampoco se tocó `fetchVariantRecipeDetail`
+(`actions/recipes.ts`, lectura pura sin `employeeId` en su firma) — es de
+solo lectura y de bajo riesgo; agregarle el gate hubiera requerido cambiar
+su firma para recibir un `employeeId` que hoy no tiene, sin necesidad real.
+
+Verificado por revisión de código + `npm run typecheck` (no hay una manera
+directa de simular un cajero real invocando la Server Action sin pasar por
+la UI ya oculta, sin reimplementar el protocolo interno de invocación de
+Server Actions de Next).
+
+Pendiente explícito (frentes siguientes del mismo plan, ramas separadas):
+estadísticas de clientes (edad/género) + top de productos comprados,
+filtros avanzados en Reportes (hora pico, canal, categoría/tipo de bebida
+en Recetas), recepción parcial reabrible + cancelar en Compras + alerta de
+stock bajo ahí mismo, arreglar la selección de tamaño/variante en Productos
+para que sea tarjetas (no menú lateral), y CRUD real de insumos + migrar
+`IngredientCategory` de enum a tabla en Inventario.
+
+## Cambios de Administración — Frente 6: CRUD de insumos y categorías en Inventario (rama `cambios-administracion`)
+
+Segundo frente del mismo plan, implementado antes que Compras (Frente 4)
+porque ese depende de `Ingredient`/`IngredientCategory` ya estables — ver
+"Orden recomendado" en el plan de la sesión.
+
+**Migración de schema (`20260927210000_ingredient_category_to_table`)**:
+`IngredientCategory` pasó de enum fijo (`CAFE|JARABES|LECHE|TOPPINGS|
+INSUMOS`) a modelo real (mismo patrón que `ProductCategory`, sin jerarquía
+— las categorías de insumo son planas). Migración escrita a mano (no
+`prisma migrate dev`, que se niega a generar un paso destructivo con datos
+existentes sin confirmación interactiva): crea `ingredient_categories`,
+siembra las 5 categorías **usando el texto del enum como `id`
+determinístico** (`'CAFE'`, `'LECHE'`, etc. — no un cuid nuevo), agrega
+`Ingredient.categoryId` nullable, hace `UPDATE ... SET "categoryId" =
+"category"::text` para el backfill, recién entonces exige `NOT NULL` y
+borra la columna/enum viejos. Verificado antes y después de aplicar
+(conteo por categoría en Postgres real): los 27 insumos existentes
+conservaron su categoría exacta. El truco de usar el texto del enum como
+`id` de la fila nueva es lo que permitió que checks existentes como
+`ingredient.categoryId === "LECHE"` (`findBaseMilkLine` en
+`actions/recipes.ts`, `excludedCategories`/`substitutionCategories` en
+`actions/pos.ts`) siguieran funcionando **sin** tener que agregar un
+`include: { category: true }` en cada lugar que solo necesitaba comparar
+la categoría, no mostrar su nombre.
+
+**Alcance real de la migración de código**: `category: X` → `categoryId:
+X` en `prisma/seed-demo.ts`/`prisma/seed-lapso.ts` (creación de insumos) y
+en cada `IngredientOption`/`InventoryOverviewItem`/etc. que traía el campo
+como string plano — la mayoría de estos consumían el valor solo como
+passthrough (nunca se leía en ningún componente), así que renombrar fue
+suficiente sin agregar joins nuevos. Única función que de verdad necesitó
+el `include: { category: true }` para mostrar el **nombre**: `lib/
+inventory.ts` `getInventoryOverview()` (nueva UI de Inventario).
+
+**CRUD nuevo, todo en `actions/inventory.ts`** (mismo permiso ya usado por
+`createIngredient`, `INVENTARIO_CREAR_ITEM`, más el gate de rol
+`requireAdminRole` de Frente 1): `updateIngredient`, `deleteIngredient`,
+`createIngredientCategory`, `updateIngredientCategory`,
+`deleteIngredientCategory`. **Sin borrado suave, pero con dos capas de
+protección**: `deleteIngredient` primero revisa a mano
+`recipeItems`/`modifierOptions` — las dos únicas relaciones con FK
+**opcional** hacia `Ingredient` (una línea de receta puede apuntar a un
+ingrediente compuesto en vez de uno atómico; una `ModifierOption` "base"
+no referencia ninguno) — porque ahí Postgres pondría la FK en `NULL` en
+vez de bloquear el borrado, corrompiendo silenciosamente una receta o un
+modificador ya usado. Todo lo demás (compras, movimientos, stock, lotes,
+conteos, transferencias, historial de costo, punto de reorden) tiene FK
+**obligatoria** — el `RESTRICT` de Postgres ya lo bloquea, se atrapa el
+error (`Prisma.PrismaClientKnownRequestError`, código `P2003`) y se
+traduce a un mensaje legible. `deleteIngredientCategory` hace el chequeo
+proactivo equivalente (`_count.ingredients > 0`) antes de intentar borrar.
+
+**UI nueva (`components/inventario/`)**: `inventory-workspace.tsx`
+reemplaza el acordeón-por-categoría que había antes (`inventory-overview.tsx`,
+borrado) reusando **sin modificar** el mismo `CategoryDrilldown` compartido
+por `/pos` y `/productos` — las categorías de insumo, al ser planas (sin
+`parentId`), caen solas en la rama "standalone" del componente y se
+renderizan igual que las categorías de nivel 1 de Productos (píldoras a la
+izquierda, tarjetas de insumo en el área principal), sin necesidad de
+generalizarlo como se especulaba en el plan. `ingredient-form-dialog.tsx`/
+`category-form-dialog.tsx` (crear+editar en un solo diálogo cada uno, mismo
+patrón que `EditCategoryDialog` de Productos) y `CategoryIconPicker`
+(`components/productos/category-icon-picker.tsx`, ya genérico) reusado tal
+cual para el ícono de categoría de insumo.
+
+**Dos bugs reales encontrados y corregidos durante la verificación**
+(Playwright + Postgres real):
+1. `IngredientFormDialog`/`CategoryFormDialog` quedan montados de forma
+   permanente en `InventoryWorkspace` (para poder abrirse/cerrarse sin
+   perder el resto del estado del workspace), con `open`/`ingredient`/
+   `category`/`defaultCategoryId` cambiando por prop — un `useState`
+   inicial **no se vuelve a evaluar** en cada apertura. Sin corregir esto,
+   "+ Nuevo insumo" en cualquier categoría creaba siempre el insumo en la
+   primera categoría de la lista (`categories[0]`), no en la que se estaba
+   viendo. Corregido con un `useEffect` que resincroniza los campos cuando
+   `open` pasa a `true` (mismo patrón que ya usaba `AdjustStockDialog`,
+   que sí lo hacía bien desde antes).
+2. `CategoryDrilldown` fija su categoría activa en un `useState` inicial y
+   nunca la reconcilia si esa categoría desaparece de la lista — invisible
+   en POS/Productos (esas categorías no se borran en vivo hoy), pero
+   Inventario sí permite borrar la categoría que se está viendo, y borrarla
+   dejaba la pantalla en "No hay categorías todavía" aunque quedaran otras.
+   Corregido **sin tocar el componente compartido**: `key={categories.map(c
+   => c.id).join(",")}` en el `<CategoryDrilldown>` de
+   `inventory-workspace.tsx` fuerza un remount (y un `activeTopId` fresco)
+   cada vez que cambia el set de categorías.
+
+Verificado end-to-end: crear categoría → crear insumo en ella → editarlo →
+intentar borrar la categoría con el insumo todavía dentro (bloqueado, con
+mensaje) → borrar el insumo → borrar la categoría (ahora sí, cae de
+vuelta a la primera categoría sin quedar en blanco) → confirmar que las 5
+categorías/27 insumos sembrados originales siguen intactos → confirmar que
+`/productos` (que ahora también depende de las categorías de insumo reales
+para su propio "+ Nuevo ingrediente" inline) y `/pos` siguen funcionando
+sin errores de consola.
+
+## Cambios de Administración — Frente 4: recepción parcial reabrible, cancelar y stock bajo en Compras (rama `cambios-administracion`)
+
+Tercer frente del mismo plan. Todo en `actions/purchases.ts` salvo donde
+se indica.
+
+**Recepción reabrible**: `PurchaseOrderStatus.PROVEIDA_PARCIALMENTE` deja
+de ser terminal (decisión confirmada con el usuario en el plan original,
+antes de tocar código) — `receivePurchaseOrder` ahora acepta `status ===
+"CREADA" || "PROVEIDA_PARCIALMENTE"`. `PurchaseOrderItem.receivedQuantity`
+pasó de "lo recibido en esta pasada" (se sobreescribía) a **acumulado
+entre pasadas** — cada pasada nueva valida contra lo que falta
+(`orderedQuantity - receivedQuantity` ya acumulado, rechaza recibir más de
+eso) y sólo entonces suma. El estado final (`PROVEIDA` vs
+`PROVEIDA_PARCIALMENTE`) se recalcula sobre el acumulado real de **todos**
+los ítems de la orden, no solo los tocados en la pasada actual — un ítem
+ya completado en una pasada anterior debe seguir contando como completo
+aunque la pasada nueva no lo toque. Los efectos de inventario (`InventoryStock`,
+`IngredientBatch`, `InventoryMovement`) ya eran correctamente
+incrementales por pasada desde antes (cada pasada mueve solo lo que llegó
+en ella) — no hicieron falta cambios ahí. `lib/purchases.ts`
+`PurchaseOrderItemDetail` ganó `pendingQuantity` (`orderedQuantity -
+receivedQuantity`, clamp a 0) para que `ReceiveOrderForm` (`components/
+compras/receive-order-form.tsx`) precargue el campo con lo que **falta**,
+no con el total original, y muestre "recibido hasta ahora" cuando aplica;
+un ítem ya completo en una pasada anterior se muestra de solo lectura
+("Ya se recibió por completo"), sin input.
+
+**Cancelar orden**: nueva `cancelPurchaseOrder`, solo si `status ===
+"CREADA"` (nunca sobre algo con recepción parcial o total ya aplicada, para
+no dejar inventario/costo ya movido inconsistente con el estado de la
+orden). Nuevo `components/compras/cancel-order-button.tsx` (confirmar con
+un segundo click, mismo patrón que otros botones destructivos del
+proyecto).
+
+**Editar orden**: nueva `updatePurchaseOrder`, también exclusiva de
+`status === "CREADA"` — borra y recrea las líneas de la orden (seguro
+solo porque en CREADA no hay `IngredientBatch` todavía referenciándolas).
+`NewOrderForm` (`components/compras/new-order-form.tsx`) ganó un prop
+opcional `existingOrder` que lo vuelve un formulario de edición en vez de
+creación (mismo componente para ambos casos). Nuevo
+`components/compras/purchase-order-detail-view.tsx` (client) reemplaza la
+lógica que vivía inline en la página de detalle: alterna entre la vista
+normal (con botones "Editar"/"Cancelar orden", solo en `CREADA`) y
+`NewOrderForm` en modo edición.
+
+**Bug real encontrado y corregido en la verificación** (Playwright +
+Postgres real, mismo patrón que los dos de Inventario en el Frente 6, ver
+[[feedback-stale-state-mounted-dialogs]]): editar una orden reemplaza sus
+`PurchaseOrderItem` con **ids nuevos** (borra y recrea). Al volver de modo
+edición a la vista normal, `ReceiveOrderForm` se monta de nuevo con la
+`order` (todavía la de antes de guardar, sin refrescar) — pero la
+revalidación automática de Server Actions de Next (cualquier `Server
+Action` que llama `revalidatePath` refresca sola los server components de
+la ruta actual, sin necesitar un `router.refresh()` explícito) le entrega
+casi de inmediato al mismo `ReceiveOrderForm` **ya montado** una `order`
+con los ids nuevos — pero su estado interno `lines` (inicializado una sola
+vez al montar) seguía apuntando a los ids viejos. Resultado: `lines.find(id
+=> ...)` no encontraba nada, `undefined!.receivedQuantity` tronaba la
+pantalla con un `TypeError` real (reproducido y confirmado con el stack
+completo antes de corregir). Arreglado igual que el bug de
+`CategoryDrilldown` en Inventario: `key={order.items.map(i =>
+i.id).join(",")}` en `<ReceiveOrderForm>` fuerza un remount limpio
+cualquier vez que cambie el set de ids de línea.
+
+**Insumos con stock bajo**: nueva tarjeta en `app/compras/page.tsx`
+reusando `getInventoryOverview()` (`lib/inventory.ts`, ya calcula
+`isLow` contra `ReorderPoint`, sin cambios ahí). Simplificación consciente
+respecto al plan original: el link "Pedir →" manda a `/compras/nueva` sin
+prellenar el insumo (el plan hablaba de prellenarlo) — prellenar hubiera
+requerido pasar el insumo por query param y que `NewOrderForm` lo
+consumiera, alcance no crítico para lo pedido. **No se pudo probar
+visualmente con datos reales**: no hay ningún `ReorderPoint` sembrado hoy
+en la base de dev (`lib/inventory.ts` ya lo documentaba como pendiente
+antes de este frente) y no existe todavía UI para crear uno — la tarjeta
+solo se verificó por code review + typecheck, no en el navegador con un
+insumo realmente bajo de stock.
+
+Verificado end-to-end (Playwright + Postgres real): crear orden → recibir
+parcialmente (5 de 10) → confirma `PROVEIDA_PARCIALMENTE` → recibir el
+resto (5 más) → confirma `PROVEIDA`, `pedido 10 · recibido 10`, y en DB dos
+`InventoryMovement` tipo `COMPRA` de 5 cada uno (no uno de 10 ni
+duplicado) → crear otra orden y cancelarla → confirma que ya no muestra
+ni "Editar" ni el formulario de recepción → crear una tercera orden,
+editarla (cambiar un valor de línea), guardarla → confirma que la vista
+de recepción vuelve a mostrarse sin errores con los datos ya actualizados
+(antes del fix, esto era exactamente lo que producía el `TypeError` de
+arriba). Datos de prueba (3 órdenes: una recibida, una cancelada, una
+editada) se quedaron en la base de dev — no hay acción de borrado de
+órdenes por diseño, y no representan un problema real (mismo criterio ya
+aplicado a otros artefactos de verificación en este proyecto).
+
+## Cambios de Administración — Frente 5: variantes como tarjetas en Productos (rama `cambios-administracion`)
+
+Cuarto frente del mismo plan, el más chico de los seis — un bug de UX
+concreto que el usuario reportó con un ejemplo exacto: al editar un
+producto (su ejemplo: Chocolates y Tés → Chai → Chai Caliente), elegir el
+tamaño ("Chico") lo mandaba a un menú angosto a la izquierda en vez de
+aparecer como tarjeta igual que el resto del drilldown de categoría →
+producto — rompía la continuidad del patrón. `docs/CONTINUE.md` (sección
+"Productos + POS 2") ya documentaba que `VariantNav` había quedado
+deliberadamente sin ese rediseño cuando se introdujo `CategoryDrilldown` en
+esa fase.
+
+**`components/productos/variant-nav.tsx` borrado**, reemplazado por
+`components/productos/variant-card.tsx` (`VariantCard`/`AddVariantCard`,
+mismo lenguaje visual que `ProductCard`: `rounded-2xl`, `aspect-square`,
+clic para abrir). En `productos-workspace.tsx`: el estado `"product-summary"`
+se renombró a `"product-variants"` y ahora renderiza una grilla de
+`VariantCard` (una tarjeta por tamaño/variante, con temperatura/precio/
+badge de inactiva) en el área principal a todo lo ancho — ya no hay
+columna lateral angosta de 192px. `"add-variant"`/`"edit-variant"` también
+pasaron a ocupar todo el ancho, con un breadcrumb "← <nombre del
+producto>" para volver a la grilla de variantes (en vez de que
+`VariantNav` sirviera de nav lateral persistente en esas dos vistas
+también). El breadcrumb "← Categorías" para volver del todo al drilldown
+de categorías se mantiene igual que antes.
+
+Verificado con Playwright siguiendo el **mismo path exacto que reportó el
+usuario** (Chocolates y Tés → Chai → producto → tamaño): los 10 tamaños de
+"Chai" aparecen como tarjetas en el área principal (Chico/Caliente,
+Chico/Fría, Grande/Frappé, etc., cada una con su precio), clic en una
+abre el formulario de edición de esa variante con el breadcrumb de
+regreso, y el breadcrumb regresa limpiamente a la grilla de tarjetas. Sin
+errores de consola — a diferencia de los Frentes 4 y 6, este no encontró
+ningún bug de estado obsoleto nuevo (no hay ids que cambien entre
+renders aquí, el riesgo de [[feedback-stale-state-mounted-dialogs]] no
+aplicaba).
+
+## Cambios de Administración — Frente 2: demografía + top de productos en Clientes (rama `cambios-administracion`)
+
+Quinto frente del mismo plan. `Customer.birthDate` ya existía y ya se
+capturaba en `CustomerForm` — la "edad" se deriva de ahí, sin campo nuevo.
+Lo único que faltaba de verdad era género.
+
+**Nuevo `Customer.gender`**: enum real `CustomerGender` (`FEMENINO`/
+`MASCULINO`/`OTRO`), nullable — migración puramente aditiva
+(`20260927212852_add_customer_gender`), los clientes existentes se quedan
+sin dato. `CustomerForm` (`components/clientes/customer-form.tsx`) ganó un
+select "Género (opcional, solo para estadísticas)" con una cuarta opción
+"Prefiere no decir" (value `""`, no se manda).
+
+**Bug real encontrado y corregido antes de que llegara a producción**
+(por inspección de código, no en el navegador — ver nota de alcance más
+abajo): `updateCustomer` (`actions/customers.ts`) hace **reemplazo
+completo** del registro — necesario para que el formulario de
+Administración pueda limpiar un campo (si no se reenvía `birthDate`, lo
+pone en `null`). Pero `updateCustomer` también se llama desde
+`components/pos/checkout-dialog.tsx` para un propósito totalmente
+distinto: actualizar solo la dirección de entrega cuando el pedido es "A
+domicilio". Ese call site nunca conocía `birthDate` (`CustomerOption`,
+el tipo del picker de clientes en POS, no lo traía) — cualquier cajero
+que corrigiera una dirección de entrega **le borraba la fecha de
+nacimiento al cliente sin darse cuenta**, un bug ya latente desde que se
+agregó la edición de domicilio en "Productos + POS 2", que iba a
+empeorar al agregar género al mismo patrón. Corregido agregando
+`birthDate`/`gender` a `CustomerOption` (`lib/customers.ts`,
+`getCustomerOptions()`) y reenviándolos de vuelta en la llamada de
+`checkout-dialog.tsx` — el registro sigue siendo reemplazo completo, pero
+ahora el caller que no debería tocar esos campos los reenvía intactos en
+vez de omitirlos.
+
+**Top productos por cliente**: `getCustomerDetail` (`lib/customers.ts`)
+ahora hace una segunda consulta (todo el historial de ventas
+`COMPLETADA` del cliente, no solo las últimas 20 que se muestran en
+"Historial de compras" — para que el ranking sea sobre el historial
+completo) y agrega por `productVariantId` con el mismo patrón `Map`
+de `getStatsReport` (`lib/reports.ts`), no un `groupBy` de Prisma. Nueva
+tarjeta "Top productos" en `app/clientes/[id]/page.tsx`, antes del
+historial existente (no lo reemplaza).
+
+**Estadísticas de clientes**: nueva `getCustomerDemographics()`
+(`lib/customers.ts`) — agrupa por rango de edad (6 buckets fijos más "Sin
+dato", calculado desde `birthDate` al vuelo, sin guardar edad) y por
+género (incluye "Sin dato" en vez de excluir clientes sin capturar, para
+que el total siempre cuadre). Nueva página `/clientes/estadisticas`,
+enlazada desde `/clientes` junto a "Códigos de descuento".
+
+Verificado con Playwright + Postgres real: capturar fecha de nacimiento y
+género en un cliente con historial de compras real → la tarjeta "Top
+productos" del cliente refleja las cantidades correctas ordenadas de
+mayor a menor → `/clientes/estadisticas` cuenta ese cliente en su bucket
+de edad y género correctos, y a los demás clientes (sin dato) en "Sin
+dato". **Alcance de la verificación**: el fix del bug de
+`checkout-dialog.tsx` (birthDate/gender sobreviviendo una actualización de
+domicilio) se verificó por inspección de código + `npm run typecheck`, no
+completando una venta real "A domicilio" en el navegador — hubiera
+requerido armar un carrito completo en POS solo para ese caso, y la
+corrección en sí (reenviar dos campos que ya se leían del mismo objeto)
+es de bajo riesgo una vez entendido cómo Prisma `update()` trata campos
+ausentes vs. explícitos.
+
+## Cambios de Administración — Frente 3: filtros avanzados en Reportes (rama `cambios-administracion`)
+
+Sexto y último frente del plan original de "cambios de administración".
+
+**`/reportes/estadisticas`** (`lib/reports.ts` `getStatsReport`, `app/
+reportes/estadisticas/page.tsx`): tres agregaciones nuevas, mismo patrón
+`Map` ya usado ahí para `dailySales`/`topProducts` —
+- `hourlySales` (hora del día 0-23, **en UTC** — mismo criterio ya
+  aceptado en este archivo para el bucketing por día
+  (`toISOString().slice(0,10)`), se mantuvo consistente en vez de
+  introducir una segunda convención de huso horario para esto).
+- `channelSales` (agregado por `Sale.orderType` — "Mesa"/"Para llevar"/
+  "A domicilio", mismas etiquetas que `cart-panel.tsx`). Simplificación
+  consciente respecto al plan original: es un resumen por canal, no una
+  matriz cruzada producto × canal — un cruce completo hubiera sido mucho
+  más UI para una utilidad marginal a la escala actual.
+- `sales` (detalle venta por venta del rango — ya se podía acotar a un
+  solo día con `DateRangePicker` existente, from=to; lo que faltaba era
+  poder ver el detalle, no solo el agregado de ese día).
+
+Card nueva "Hora pico" en el resumen superior (el bucket de `hourlySales`
+con más ventas).
+
+**`/reportes/recetas`** (`getRecipeCostReport`): ganó un segundo parámetro
+opcional `{categoryId?, temperature?}`, aplicado directamente en el
+`where` de Prisma (antes no aceptaba ningún filtro, ni siquiera traía
+categoría/temperatura en el `include`). Nuevo `components/reportes/
+recipe-report-filters.tsx` (dos `<Select>`, mismo patrón de
+`router.push` con `URLSearchParams` que `DateRangePicker`) — categorías
+reales vía `getProductCategories()` (ya existente, usado en Productos),
+temperatura contra los 3 valores del enum `VariantTemperature`. Cada
+tarjeta de receta ahora muestra su categoría/temperatura como subtítulo,
+antes no se mostraba en absoluto.
+
+**Bug real encontrado y corregido, no introducido por este frente pero
+sí por el anterior propio**: al verificar visualmente `/reportes/
+estadisticas` apareció el indicador de "1 Issue" del overlay de dev de
+Next — la consola tenía un error real de React: `Encountered two children
+with the same key... Chai-Chico`. La lista "Productos más vendidos" usaba
+`` `${productName}-${variantName}` `` como `key` en vez del
+`productVariantId` único que la propia agregación ya traía como llave del
+`Map` — dos variantes distintas con el mismo nombre de producto+variante
+colisionaban. Se agregó `productVariantId` a `TopProductStat`
+(`lib/reports.ts`) y se corrigió la key en la página. **Se encontró el
+mismo patrón exacto, ya introducido por mí en el Frente 2** (`CustomerTopProduct`
+en `lib/customers.ts`, la tarjeta "Top productos" de un cliente) — corregido
+igual, agregando `productVariantId` ahí también. Ninguno de los dos había
+tronado nada (React tolera keys duplicadas con una advertencia, no un
+crash), pero sí era el tipo de bug que "puede causar que hijos se dupliquen
+o se omitan" según la advertencia — se verificó explícitamente que la
+consola queda limpia después del fix.
+
+Verificado con Playwright + Postgres real contra datos ya existentes en
+dev (ventas de sesiones anteriores): "Hora pico" calculado correctamente,
+"Ventas por hora"/"Ventas por canal"/"Detalle de ventas" pobladas y
+coherentes con el resumen superior; en `/reportes/recetas`, filtrar por
+temperatura "Caliente" acotó la lista de 138 a 16 recetas. Sin errores de
+consola tras el fix del key duplicado.
+
+Con esto quedan cerrados los 6 frentes del plan de "cambios de
+administración" en esta rama (`cambios-administracion`), ninguno
+commiteado todavía.
+
 ## Próximos pasos recomendados (en orden)
 
 Fases 1, 2, 3 y 4 están cerradas, más los ajustes "Cambios Punto de Venta",

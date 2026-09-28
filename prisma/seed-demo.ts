@@ -51,7 +51,7 @@ async function main() {
     create: {
       id: "ing-cafe",
       name: "Café en grano",
-      category: "CAFE",
+      categoryId: "CAFE",
       kind: "ATOMICO",
       baseUnit: "ESPRESSO_SHOT",
       purchaseUnit: "KG",
@@ -64,7 +64,7 @@ async function main() {
     create: {
       id: "ing-leche",
       name: "Leche entera",
-      category: "LECHE",
+      categoryId: "LECHE",
       kind: "ATOMICO",
       baseUnit: "ML",
       purchaseUnit: "L",
@@ -77,7 +77,7 @@ async function main() {
     create: {
       id: "ing-vaso",
       name: "Vaso con tapa desechable",
-      category: "INSUMOS",
+      categoryId: "INSUMOS",
       kind: "ATOMICO",
       baseUnit: "PIEZA",
       purchaseUnit: "PIEZA",
@@ -91,7 +91,7 @@ async function main() {
     create: {
       id: "ing-azucar",
       name: "Azúcar",
-      category: "JARABES",
+      categoryId: "JARABES",
       kind: "ATOMICO",
       baseUnit: "G",
       purchaseUnit: "KG",
@@ -104,7 +104,7 @@ async function main() {
     create: {
       id: "ing-agua",
       name: "Agua",
-      category: "JARABES",
+      categoryId: "JARABES",
       kind: "ATOMICO",
       baseUnit: "ML",
       purchaseUnit: "L",
@@ -118,7 +118,7 @@ async function main() {
     create: {
       id: "ing-esencia-vainilla",
       name: "Esencia de vainilla",
-      category: "JARABES",
+      categoryId: "JARABES",
       kind: "ATOMICO",
       baseUnit: "ML",
       purchaseUnit: "L",
@@ -133,7 +133,7 @@ async function main() {
     create: {
       id: "ing-leche-deslactosada",
       name: "Leche deslactosada",
-      category: "LECHE",
+      categoryId: "LECHE",
       kind: "ATOMICO",
       baseUnit: "ML",
       purchaseUnit: "L",
@@ -146,7 +146,7 @@ async function main() {
     create: {
       id: "ing-leche-avena",
       name: "Leche de avena",
-      category: "LECHE",
+      categoryId: "LECHE",
       kind: "ATOMICO",
       baseUnit: "ML",
       purchaseUnit: "L",
@@ -159,7 +159,7 @@ async function main() {
     create: {
       id: "ing-hielo",
       name: "Hielo",
-      category: "INSUMOS",
+      categoryId: "INSUMOS",
       kind: "ATOMICO",
       baseUnit: "G",
       purchaseUnit: "KG",
