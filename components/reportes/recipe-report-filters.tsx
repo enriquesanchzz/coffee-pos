@@ -15,10 +15,12 @@ export function RecipeReportFilters({
   categories,
   categoryId,
   temperature,
+  view,
 }: {
   categories: ProductCategoryOption[];
   categoryId: string;
   temperature: string;
+  view?: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -30,6 +32,7 @@ export function RecipeReportFilters({
     } else {
       params.delete(key);
     }
+    if (view) params.set("view", view);
     router.push(`${pathname}?${params.toString()}`);
   }
 

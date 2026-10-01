@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { DiscountType } from "@prisma/client";
+import type { DiscountType, DiscountCodeCategory } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getSessionEmployeeId } from "@/lib/session";
@@ -13,6 +13,7 @@ export type CreateDiscountCodeInput = {
   type: DiscountType;
   value: number;
   expiresAt?: string; // ISO date, opcional
+  category?: DiscountCodeCategory | null;
 };
 
 export async function createDiscountCode(input: CreateDiscountCodeInput) {
@@ -36,21 +37,34 @@ export async function createDiscountCode(input: CreateDiscountCodeInput) {
       type: input.type,
       value: input.value,
       expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+      category: input.category ?? null,
     },
   });
 
-  revalidatePath("/clientes/descuentos");
+  revalidatePath("/descuentos");
 }
 
-export type ToggleDiscountCodeInput = {
+export type UpdateDiscountCodeInput = {
   employeeId: string;
   discountCodeId: string;
+  code: string;
+  type: DiscountType;
+  value: number;
+  expiresAt?: string; // ISO date, opcional
+  category?: DiscountCodeCategory | null;
   isActive: boolean;
 };
 
-export async function toggleDiscountCodeActive(input: ToggleDiscountCodeInput) {
+export async function updateDiscountCode(input: UpdateDiscountCodeInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
+  }
+  const code = input.code.trim().toUpperCase();
+  if (!code) {
+    throw new Error("El código es obligatorio.");
+  }
+  if (input.value <= 0) {
+    throw new Error("El valor del descuento debe ser mayor a cero.");
   }
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "DESCUENTO_CODIGO_CREAR");
@@ -58,10 +72,17 @@ export async function toggleDiscountCodeActive(input: ToggleDiscountCodeInput) {
 
   await prisma.discountCode.update({
     where: { id: input.discountCodeId },
-    data: { isActive: input.isActive },
+    data: {
+      code,
+      type: input.type,
+      value: input.value,
+      expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+      category: input.category ?? null,
+      isActive: input.isActive,
+    },
   });
 
-  revalidatePath("/clientes/descuentos");
+  revalidatePath("/descuentos");
 }
 
 export type FindDiscountCodeByCodeInput = {

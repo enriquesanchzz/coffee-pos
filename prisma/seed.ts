@@ -57,6 +57,7 @@ const gerentePermissionsPropios: Permission[] = [
   Permission.PRECIO_MODIFICAR,
   Permission.DESCUENTO_CODIGO_CREAR,
   Permission.DESCUENTO_MANUAL,
+  Permission.PROMOCION_GESTIONAR,
 ];
 
 // Gerente puede hacer todo lo de Barista y Auxiliar, además de lo suyo.

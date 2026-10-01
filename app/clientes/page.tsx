@@ -19,14 +19,6 @@ export default async function ClientesPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-semibold">Clientes</h1>
-            <div className="flex gap-3">
-              <Link href="/clientes/descuentos" className="text-sm text-muted-foreground hover:underline">
-                Códigos de descuento →
-              </Link>
-              <Link href="/clientes/estadisticas" className="text-sm text-muted-foreground hover:underline">
-                Estadísticas →
-              </Link>
-            </div>
           </div>
           <Link
             href="/clientes/nuevo"

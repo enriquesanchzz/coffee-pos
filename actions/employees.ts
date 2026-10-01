@@ -82,7 +82,7 @@ export async function createEmployee(input: CreateEmployeeInput) {
     });
   });
 
-  revalidatePath("/administracion");
+  revalidatePath("/empleados");
 }
 
 export type UpdateEmployeeInput = {
@@ -145,5 +145,5 @@ export async function updateEmployee(input: UpdateEmployeeInput) {
     });
   });
 
-  revalidatePath("/administracion");
+  revalidatePath("/empleados");
 }

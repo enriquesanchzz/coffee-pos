@@ -1800,6 +1800,335 @@ Postgres que la venta y sus modificadores quedaron correctos, sin ningún
 `[role="dialog"]` abierto durante el cobro. Tema de prueba revertido a
 los defaults (`#5a3a24`, sin fondo custom, claro) al terminar.
 
+## Reestructuración de Administración — Frente A: Dashboard, Empleados y Configuración como secciones propias (rama `administracion-dashboard-y-menus`)
+
+El usuario probó Administración ya con los 6 frentes anteriores y pidió
+una reorganización grande: sacar Códigos de descuento y Estadísticas de
+Clientes (nuevo módulo "Promociones" + Reportes rediseñado, ver plan
+completo en el próximo frente), convertir `/administracion` en un
+dashboard, y separar Empleados y Configuración/Apariencia en secciones de
+menú propias — "como Clientes", ya no embebidas en la pantalla de
+Administración. Se decidió (`AskUserQuestion`) que Promociones se
+detecta y aplica sola en el POS (no solo un catálogo manual) y que el
+Dashboard muestra KPIs del día + alertas — ver plan aprobado guardado en
+esa conversación para el resto de los frentes (C: Descuentos, B:
+Reportes, D: Promociones), este es solo el Frente A (navegación).
+
+**`/empleados`** (nuevo, mismo patrón que `/clientes`): se movió
+`app/administracion/nuevo` → `app/empleados/nuevo`,
+`app/administracion/[employeeId]` → `app/empleados/[employeeId]`, y la
+tarjeta "Empleados" de `app/administracion/page.tsx` se volvió
+`app/empleados/page.tsx`. `components/administracion/employee-form.tsx`
+→ `components/empleados/employee-form.tsx` (mismo componente, solo
+`router.push` apunta a `/empleados`). `actions/employees.ts` sin cambios
+de lógica, solo sus `revalidatePath("/administracion")` → `/empleados`.
+
+**`/configuracion`** (nuevo): las tarjetas "Configuración" (% food cost)
+y "Apariencia" se movieron a `app/configuracion/page.tsx` bajo un único
+título "Configuración del sistema" — es el lugar donde, según el
+usuario, caben más opciones de sistema en el futuro.
+`components/administracion/{settings,appearance}-form.tsx` →
+`components/configuracion/`, sin cambios internos.
+`actions/settings.ts`: `revalidatePath("/administracion")` (en
+`updateTargetFoodCostPercent`) → `/configuracion`; `updateAppearanceSettings`
+sigue revalidando `"/", "layout"` (afecta toda la app, no solo esta
+página).
+
+**`/administracion` → Dashboard**: reescrito por completo. 3 KPIs del
+día vía funciones que ya existían — `getStatsReport(inicio de hoy, fin de
+hoy)` (`lib/reports.ts`) para ventas/ticket promedio, `getOpenShift`
+(`lib/catalog.ts`, mismo helper que ya usa `/caja`) para el estado del
+turno, `getInventoryOverview().filter(i => i.isLow)` (`lib/inventory.ts`,
+mismo criterio que la tarjeta de stock bajo de `/compras`) para las
+alertas. La grilla de accesos rápidos se mantiene (Clientes/Reportes/
+Compras/Productos/Inventario) y gana Empleados/Configuración — Descuentos
+y Promociones se agregan aquí cuando existan sus rutas (Frentes C/D).
+
+**Sidebar/barra global**: `components/layout/sidebar.tsx` y
+`session-bar.tsx` ganan entradas para Empleados y Configuración
+(`adminOnly: true`, mismo patrón ya establecido) — Administración pasó a
+usar el ícono `LayoutDashboard` en vez de `Settings` (que ahora es de
+Configuración) y se reordenó primero dentro del bloque de admin (es la
+página de aterrizaje/resumen, no un módulo más de la lista).
+
+Verificado con Playwright + Postgres real (login como Ana): los 3 KPIs
+del Dashboard muestran datos reales (turno abierto MATUTINO, 0 ventas de
+hoy — correcto, no se hizo venta de prueba ese día), `/empleados` lista
+los 8 empleados reales y el CRUD completo funciona (se creó "QA Frente
+A", se verificó que aparece, se desactivó como limpieza), `/configuracion`
+carga ambas tarjetas (food cost e input de apariencia) sin errores de
+consola. `npm run typecheck` limpio.
+
+## Reestructuración de Administración — Frente C: Códigos de descuento como módulo propio de menú (rama `administracion-dashboard-y-menus`)
+
+Segundo frente del mismo plan grande que el Frente A (ver esa sección
+arriba para contexto completo). Códigos de descuento deja de vivir
+dentro de Clientes (`/clientes/descuentos`) y se vuelve un módulo de
+menú propio (`/descuentos`), con diseño de tarjetas + filtros — el mismo
+patrón que se usará para Promociones en el Frente D.
+
+**Schema**: nuevo enum `DiscountCodeCategory` (`CLIENTE_ESPECIFICO`,
+`CAMPANA`, `EMPLEADO`) + `DiscountCode.category` (nullable — los códigos
+ya sembrados, como los cupones de bienvenida, quedan "sin categoría"
+hasta que alguien la asigne desde la UI). Migración aditiva
+(`20260930025655_add_discount_code_category`). Nota importante ya
+documentada en el plan: esto es un mecanismo **nuevo y paralelo** a
+`ManualDiscountReason.DESCUENTO_EMPLEADO` (un descuento autorizado con
+PIN en el momento del cobro) — no se tocó.
+
+**`lib/discounts.ts`**: `getDiscountCodes()` gana `category` en el tipo
+de retorno. **`actions/discounts.ts`**: `createDiscountCode` gana
+`category` opcional; nueva `updateDiscountCode` (antes solo existía
+`toggleDiscountCodeActive`, que se reemplazó por una edición completa —
+código, tipo, valor, expiración, categoría e isActive en un solo save,
+mismo patrón que `updateIngredient`). `revalidatePath` de ambas apunta a
+`/descuentos` en vez de `/clientes/descuentos`.
+
+**`/descuentos`** (nuevo, reemplaza `/clientes/descuentos`, que se
+borró junto con sus componentes `discount-code-form.tsx`/
+`discount-code-toggle.tsx`): `DiscountCodesWorkspace`
+(`components/descuentos/discount-codes-workspace.tsx`, client) con
+barra de búsqueda (por código), filtro de estado (activo/inactivo/todos)
+y filtro de categoría (las 3 + "todas") — los 3 filtros se aplican en
+memoria sobre la lista ya cargada. Tarjetas (`DiscountCodeCard`,
+`rounded-2xl`, mismo lenguaje visual que `ProductCard`/`VariantCard`):
+código, tipo+valor, badge activo/inactivo, categoría. Clic en una
+tarjeta abre `DiscountCodeFormDialog` — un solo diálogo para crear y
+editar (mismo patrón de resincronización por `useEffect` cuando `open`
+pasa a true que `IngredientFormDialog`, para no repetir el bug de estado
+obsoleto ya encontrado dos veces antes en Inventario/Compras).
+
+**Sidebar/barra global**: nueva entrada "Códigos de descuento"
+(`/descuentos`, ícono `Tag`) entre Clientes y Reportes. El link
+"Códigos de descuento →" se quitó de `/clientes` (Estadísticas se queda
+ahí por ahora — se mueve a Reportes en el Frente B). El Dashboard
+(`/administracion`) ganó una tarjeta de acceso rápido a Descuentos.
+
+**Verificado con Playwright + Postgres real**: se crearon 3 códigos de
+prueba (uno por categoría), se confirmó que los 3 filtros (búsqueda,
+estado, categoría) acotan la grilla correctamente por separado; se
+editó uno a inactivo y se confirmó que aparece en el filtro
+"Inactivos"; se aplicó un código de prueba en el checkout real de
+`/pos` (agregar Malteada, "Cobrar" → "Código" → validar) y se confirmó
+que el descuento se calculó y mostró igual que antes (`findDiscountCodeByCode`
+no se tocó). Los 3 códigos de prueba quedaron desactivados al terminar
+(no hay borrado de `DiscountCode`, mismo criterio que antes — tiene
+`Sale[]` como relación). `npm run typecheck` limpio.
+
+## Reestructuración de Administración — Frente B: Reportes consolidado con submenú lateral (rama `administracion-dashboard-y-menus`)
+
+Tercer frente del mismo plan grande (ver Frente A para contexto). Las 4
+rutas sueltas de Reportes (`/reportes/utilidad`, `/recetas`,
+`/inventario`, `/estadisticas`, cada una con su propio `AuthenticatedShell`)
+se consolidan en **una sola ruta** `/reportes?view=utilidad|recetas|
+inventario|estadisticas|clientes`, con un submenú fijo a la izquierda
+(mismo lenguaje visual que `Sidebar` — pastilla activa — pero es
+navegación de secciones dentro de una ruta, no tarjetas de selección
+como Productos/Inventario). A diferencia de esos dos módulos (que
+cargan todo el catálogo de una vez y cambian de vista sin red), cada
+reporte es una agregación cara con su propio rango de fechas, así que
+**solo se hace fetch del reporte activo**, no los 5 de una vez.
+
+**Estadísticas de Clientes se mudó aquí** como una 5ª vista
+("Clientes"): `app/clientes/estadisticas/page.tsx` se borró,
+`getCustomerDemographics()` (`lib/customers.ts`, ya existía, autocontenido)
+ahora se llama desde `app/reportes/page.tsx`. El link "Estadísticas →"
+se quitó de `/clientes`.
+
+**Archivos**: `app/reportes/page.tsx` reescrito por completo — resuelve
+`view` de `searchParams` (default `"utilidad"`, valida contra un
+`Set` cerrado), calcula qué vistas son visibles según los mismos 3
+permisos que ya filtraban la grilla de tarjetas anterior
+(`REPORTE_UTILIDAD_VER` → Utilidad+Recetas, `REPORTE_INVENTARIO_VER` →
+Inventario, `ESTADISTICAS_GESTIONAR` → Estadísticas+Clientes), redirige a
+`/pos` si el empleado no tiene ningún permiso o pide una vista sin
+acceso, y solo entonces hace el fetch del reporte activo. Nuevo
+`components/reportes/reportes-nav.tsx` (el submenú, server component —
+no hace falta `usePathname` en cliente porque `active` ya se resuelve
+en el server desde `searchParams`). El JSX de contenido de cada una de
+las 4 páginas viejas se volvió un componente reusable
+(`components/reportes/{utilidad,recetas,inventario,estadisticas,clientes}-report.tsx`),
+sin cambios de lógica, solo extraídos de su antiguo `page.tsx`.
+
+**Bug evitado antes de que pasara**: `DateRangePicker` y
+`RecipeReportFilters` (ambos ya existían) reconstruían
+`URLSearchParams` desde cero al aplicar un filtro — en las páginas
+sueltas de antes no importaba porque no había ningún otro parámetro que
+preservar, pero consolidadas en una sola ruta con `?view=`, cambiar de
+fecha o de categoría/temperatura habría hecho perder la vista activa
+(volver siempre a Utilidad). Los dos componentes ganaron una prop
+opcional `view` que se agrega al `URLSearchParams` antes de navegar.
+
+**Verificado con Playwright + Postgres real**: las 5 vistas cargan sus
+datos reales (Utilidad con 32 transacciones reales, Clientes con 7
+clientes reales — mismos números que mostraba `/clientes/estadisticas`
+antes de moverse); cambiar de vista por el submenú funciona; cambiar el
+rango de fechas en Estadísticas y el filtro de temperatura en Recetas
+**preservan** `view=` en la URL (no vuelven a Utilidad). `npm run
+typecheck` limpio, sin errores de consola.
+
+## Reestructuración de Administración — Frente D: Promociones con aplicación automática en el POS (rama `administracion-dashboard-y-menus`)
+
+Último y más grande de los 4 frentes del plan (ver Frente A para contexto
+completo). Nuevo módulo **Promociones** (`/promociones`): Paquetes precio
+reducido (revive `Combo`/`ComboItem`, que existían en el schema desde
+antes sin implementarse), 2x1 y Día temático (modelo `Promotion` nuevo) —
+las 3 se **detectan y aplican solas en el POS**, no son solo un catálogo
+que el cajero activa a mano (decisión confirmada con el usuario antes de
+planear).
+
+### D1 — Schema
+
+`Combo` ganó `daysOfWeek Int[]`/`startTime`/`endTime` (mismo shape en
+los 3: vacío/null = siempre). Nuevo enum `PromotionCategory`
+(`DOS_POR_UNO`/`DIA_TEMATICO`) + modelos `Promotion`/`PromotionVariant`
+(ver schema para el detalle completo, documentado también en el plan
+original de esta reestructuración). Nuevo permiso `PROMOCION_GESTIONAR`
+(agregado a `gerentePermissionsPropios` en `prisma/seed.ts`, mismo nivel
+que `DESCUENTO_CODIGO_CREAR` — GERENTE lo tiene a nivel de permiso
+aunque hoy solo ADMINISTRADOR llega a la página). Migración aditiva
+(`20261001015227_add_promotions_module`), seed re-corrido para sincronizar
+`RolePermission`.
+
+### D2 — CRUD (`lib/promotions.ts`, `actions/promotions.ts`, `/promociones`)
+
+Mismo patrón que Descuentos (Frente C): `PromocionesWorkspace` con
+búsqueda + filtro activo/inactivo + filtro de categoría (Paquetes/2x1/Día
+temático), tarjetas `rounded-2xl`. Un combo/promoción no se puede borrar
+(`Combo`/`Promotion` tienen `SaleItem[]`/referencias históricas), solo
+desactivar — mismo criterio que `DiscountCode`. 3 botones de creación
+("+ Paquete"/"+ 2x1"/"+ Día temático") en vez de un selector de categoría
+dentro del formulario, porque cada categoría pide campos distintos.
+Nuevo `components/promociones/`: `days-of-week-picker.tsx` (toggle de 7
+días, vacío = "todos"), `combo-items-editor.tsx` (líneas producto+cantidad,
+mismo patrón que `RecipeLinesEditor`), `variant-multi-picker.tsx`
+(checkboxes para elegir qué productos califican), `combo-form-dialog.tsx`/
+`promotion-form-dialog.tsx` (crear/editar en un solo diálogo, resync por
+`useEffect` igual que `IngredientFormDialog`).
+
+**Bug real encontrado durante la verificación**: dos variantes del mismo
+producto pueden compartir nombre y diferir solo en temperatura (ej.
+"Americano Chico" Caliente vs. Frío) — el selector de variantes era
+ambiguo sin mostrarla. `lib/promotions.ts` ahora arma
+`"{nombre} — {temperatura}"` cuando aplica (`variantDisplayName`),
+usado en `getVariantOptions`/`getCombos`/`getPromotions` por igual.
+
+### D3 — Aplicación automática en `actions/pos.ts` (la parte de más riesgo)
+
+Nueva `applyPromotions(tx, saleItemsData, now)`, llamada al final de
+`resolveSaleItems` (después de resolver las líneas normales, antes de
+devolver el subtotal) — afecta por igual a `createSale`, `openTab`,
+`addItemsToTab` y `closeTab` (última ronda), que ya comparten
+`resolveSaleItems`. `isPromotionActiveNow(daysOfWeek, startTime, endTime,
+now)` evalúa día de la semana + minutos-desde-medianoche, sin manejo de
+zona horaria especial (hora del servidor).
+
+**Orden de precedencia, cada línea recibe como máximo una promoción**:
+Paquetes primero (match exacto `productVariantId`+`quantity` contra
+`ComboItem[]`, nunca se parte una línea — alcance explícito; combos
+activos ordenados por mayor descuento primero; reparto del precio del
+combo proporcional al precio normal de cada línea, el último renglón
+absorbe el redondeo para que la suma sea exacta), luego 2x1
+(`lineTotal = unitPrice × ceil(quantity/2)`), luego Día temático
+(`computeDiscount` existente, aplicado por línea, con clamp a 0 por si
+un descuento mal configurado superara el precio). `SaleItem.comboId`
+(ya existía en el schema) se persiste para Paquetes.
+
+**Bug real encontrado y corregido en la propia verificación — importante**:
+la primera versión descalificaba cualquier línea con **algún**
+modificador, literal del plan ("un renglón modificado no califica"). Pero
+"Tipo de leche" con su opción base ("Entera", `priceDelta=0`, sin
+sustituir ingrediente) se preselecciona automáticamente en casi toda
+bebida con leche — con la regla literal, un Latte **nunca** podría
+calificar para nada, ni pidiéndolo tal cual, lo cual contradice el propio
+pedido original del usuario ("Jueves de Latte el segundo al 50%" es su
+ejemplo textual de Día temático). Se corrigió: una línea descalifica solo
+si tiene un modificador con `priceDelta != 0` (un cambio real de precio/
+receta), no por tener seleccionada la opción base gratuita por default.
+
+**Bug real encontrado y corregido — el checkout del POS no sabía de
+promociones**: `components/pos/cart-store.ts` calcula el subtotal
+mostrado en el carrito sumando `quantity × unitBasePrice` del lado del
+cliente — nunca llamaba al servidor, así que Paquetes/2x1/Día temático
+nunca se reflejaban en el total que veía el cajero ni en el monto que
+capturaba como pago, y `createSale` rechaza la venta si el pago no
+coincide EXACTO con el total real. Se agregó `previewSaleTotal`
+(`actions/pos.ts`, de solo lectura — llama a `resolveSaleItems` con el
+cliente de Prisma normal, sin transacción, porque esa función nunca
+escribe) y `checkout-form.tsx` ahora lo consulta cada vez que cambia el
+carrito, mostrando el total server-verificado en vez del cálculo naive
+(con un estado "Calculando total..." que deshabilita "Confirmar venta"
+hasta tener el valor real). La vista previa del descuento de código/
+manual también se corrigió para calcularse sobre el subtotal
+"descontable" (sin las líneas ya promocionadas), no el subtotal completo
+— si no, el cajero vería un descuento más generoso del que el servidor
+en realidad aplica.
+
+**Regla de "no apilar" (mutua exclusión por línea) con DiscountCode/
+ManualDiscount**: `resolveSaleItems` ahora regresa también
+`discountableSubtotal` (la suma de `lineTotal` de las líneas que NO
+recibieron una promoción automática) — `createSale` calcula el
+descuento de código/manual sobre esa base, no sobre el subtotal
+completo. Para `closeTab` (cuenta abierta con varias rondas ya
+persistidas), no hace falta una columna nueva: nueva
+`computeDiscountableSubtotal(tx, saleId)` re-deriva qué `SaleItem`s ya
+persistidos recibieron una promoción sin necesitar un flag propio — un
+`SaleItem` con `comboId` seteado, o cuyo `lineTotal` ya no es
+`unitPrice × quantity` (la única forma en que eso pasa para una línea sin
+modificadores que sumen precio), ya fue tocado por una promoción.
+
+**Verificado con Playwright + Postgres real** (5 escenarios, cada uno
+confirmado tanto en el total mostrado en el checkout como en el
+`SaleItem` persistido): Paquete activo (Americano Chico + Macaron, $45 →
+$40, `comboId` seteado en ambas líneas, reparto 24/16 proporcional al
+precio normal 27/18); 2x1 activo (Espresso Doble ×3 → se cobran 2,
+$93 → $62); Día temático activo (Cortado Sencillo con leche "Entera" por
+default, 20% off, $32 → $25.60, confirmando que el modificador gratis no
+descalifica); 2x1 **fuera** de su día (`daysOfWeek` sin hoy) → precio
+normal sin cambios; combinación 2x1 + código de descuento 10% en el
+mismo carrito (Espresso Doble ×2 promocionado + Americano sin promoción)
+→ el código **solo** descontó sobre la línea sin promoción ($55.30, no
+$52.20 que hubiera salido si se apilara). Las promociones/combos/código
+de prueba quedaron desactivados al terminar (no hay borrado, mismo
+criterio que `DiscountCode`) — las 5 ventas de prueba quedaron
+registradas en la base de datos local (no existe cancelar/borrar venta
+todavía, ver simplificaciones abajo), visibles en Reportes con el
+prefijo "QA" en sus líneas.
+
+### Simplificaciones de alcance de este frente (documentadas también en el plan original)
+
+- Sin manejo de zona horaria especial para día/hora de promociones — hora
+  del servidor, igual que el resto del sistema.
+- Paquetes: match exacto de línea completa (`productVariantId`+`quantity`
+  idénticos a un `ComboItem`) — una línea con modificadores/extras nunca
+  califica, y no se "parte" una línea más grande de lo que el combo pide
+  (ej. un combo que pide 1 café no se arma a partir de una línea de 2
+  cafés) — extensión posible a futuro, no bloqueante hoy.
+- Una línea califica para como máximo una promoción automática (sin
+  combinarlas entre sí).
+- Paquetes/2x1/Día temático se resuelven **por ronda** — una cuenta
+  abierta (Mesa) con varias rondas no combina líneas de rondas distintas
+  para armar un paquete (cada ronda llama a `resolveSaleItems` por
+  separado, igual que ya pasa con recetas/consumo de inventario).
+- `updateTabItemQuantity`/`removeTabItem` (ajustar/quitar un producto ya
+  registrado en una cuenta abierta) no re-evalúan promociones — ajustan
+  el `lineTotal` persistido directamente vía `unitPrice × quantity` nueva,
+  sin pasar por `applyPromotions`. Si la línea ajustada ya tenía una
+  promoción (ej. un paquete), el ajuste la ignora. No es un caso nuevo:
+  es la misma limitación que ya existía (sin alcance) para `comboId`
+  desde que el campo se agregó al schema, nunca implementado hasta este
+  frente. Vale la pena resolverlo si el negocio ajusta cantidades de
+  líneas promocionadas con frecuencia.
+- Sin UI para que el cajero vea/entienda **por qué** un precio bajó en el
+  carrito antes de cobrar (sí ve el total correcto, ver bug de
+  `previewSaleTotal` arriba) — no hay un badge "2x1 aplicado" junto a la
+  línea. El ticket final tampoco lo explica hoy. Vale la pena preguntarle
+  al usuario si hace falta antes de darlo por definitivo.
+- Sigue sin existir cancelar/anular una venta ya completada
+  (`VENTA_CANCELAR` es un permiso reservado, sin acción implementada,
+  documentado desde antes de este frente) — las ventas de prueba de la
+  verificación de este frente quedaron en la base de datos real.
+
 ## Próximos pasos recomendados (en orden)
 
 Fases 1, 2, 3 y 4 están cerradas, más los ajustes "Cambios Punto de Venta",

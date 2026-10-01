@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { PaymentMethod, DiscountType, ManualDiscountReason, type CustomerGender } from "@prisma/client";
 import type { DomicilioOrigen } from "@prisma/client";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { cn, formatCurrency, posAccentClass, posAccentBorderClass } from "@/lib/utils";
-import { createSale, closeTab } from "@/actions/pos";
+import { createSale, closeTab, previewSaleTotal } from "@/actions/pos";
 import { findDiscountCodeByCode, type FoundDiscountCode } from "@/actions/discounts";
 import { updateCustomer } from "@/actions/customers";
 import type { CustomerOption } from "@/lib/customers";
@@ -84,6 +84,55 @@ export function CheckoutForm({
   const [method, setMethod] = useState<PaymentMethod>("EFECTIVO");
   const [transferNote, setTransferNote] = useState("");
 
+  // El subtotal "de verdad" de esta ronda — lo que sumaría quantity×precio
+  // del lado del cliente NO refleja Paquetes/2x1/Día temático (esas
+  // promociones solo se resuelven server-side, ver resolveSaleItems/
+  // applyPromotions en actions/pos.ts), así que se revalida contra el
+  // servidor cada vez que cambia el carrito. Mientras carga, se usa la
+  // suma naive como mejor estimado visual, pero "Confirmar venta" se
+  // deshabilita hasta tener el valor real — cobrar con un monto que no
+  // coincida haría que createSale rechace la venta.
+  const [verifiedSubtotal, setVerifiedSubtotal] = useState<number | null>(null);
+  // Base para el descuento de código/manual de ESTA ronda — excluye lo
+  // que ya haya recibido una promoción automática (mismo criterio que
+  // discountableSubtotal en el servidor, para que la vista previa no
+  // "regale" un descuento extra sobre una línea ya promocionada). En una
+  // cuenta abierta con rondas previas, esto solo cubre la ronda actual —
+  // si el combo se compone con el total ya acumulado, el servidor igual
+  // valida el monto exacto al cobrar y rechaza un desajuste con seguridad.
+  const [verifiedDiscountableSubtotal, setVerifiedDiscountableSubtotal] = useState<number | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+
+  useEffect(() => {
+    if (lines.length === 0) {
+      setVerifiedSubtotal(0);
+      setVerifiedDiscountableSubtotal(0);
+      return;
+    }
+    let cancelled = false;
+    setIsPreviewLoading(true);
+    previewSaleTotal(employeeId, lines.map(cartLineToSaleItemInput))
+      .then(({ subtotal: serverSubtotal, discountableSubtotal }) => {
+        if (!cancelled) {
+          setVerifiedSubtotal(serverSubtotal);
+          setVerifiedDiscountableSubtotal(discountableSubtotal);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setVerifiedSubtotal(null);
+          setVerifiedDiscountableSubtotal(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsPreviewLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines, employeeId]);
+
   const [discountMode, setDiscountMode] = useState<DiscountMode>("NINGUNO");
   const [codeInput, setCodeInput] = useState("");
   const [resolvedCode, setResolvedCode] = useState<FoundDiscountCode | null>(null);
@@ -98,12 +147,18 @@ export function CheckoutForm({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const rawSubtotal = subtotal() + (activeTabBaseTotal ?? 0);
+  const rawSubtotal = (verifiedSubtotal ?? subtotal()) + (activeTabBaseTotal ?? 0);
+  // Base del descuento: lo "descontable" de esta ronda + lo ya acumulado
+  // de rondas previas de la cuenta (que el servidor trata como
+  // descontable en su totalidad hasta que se re-deriva al cerrar — ver
+  // computeDiscountableSubtotal — así que activeTabBaseTotal se suma tal
+  // cual, igual que antes).
+  const discountableBase = (verifiedDiscountableSubtotal ?? subtotal()) + (activeTabBaseTotal ?? 0);
   const discountPreview =
     discountMode === "CODIGO" && resolvedCode
-      ? previewDiscountAmount(resolvedCode.type, resolvedCode.value, rawSubtotal)
+      ? previewDiscountAmount(resolvedCode.type, resolvedCode.value, discountableBase)
       : discountMode === "MANUAL"
-        ? previewDiscountAmount(manualType, Number(manualValue) || 0, rawSubtotal)
+        ? previewDiscountAmount(manualType, Number(manualValue) || 0, discountableBase)
         : 0;
   const total = Math.max(0, rawSubtotal - discountPreview);
 
@@ -403,12 +458,14 @@ export function CheckoutForm({
         onClick={handleConfirm}
         disabled={
           isPending ||
+          isPreviewLoading ||
+          verifiedSubtotal === null ||
           (lines.length === 0 && !activeTabId) ||
           (discountMode === "CODIGO" && !resolvedCode) ||
           (discountMode === "MANUAL" && !authorizingPin)
         }
       >
-        {isPending ? "Procesando..." : "Confirmar venta"}
+        {isPending ? "Procesando..." : isPreviewLoading ? "Calculando total..." : "Confirmar venta"}
       </Button>
     </div>
   );

@@ -11,10 +11,14 @@ const ZONES = [
   { href: "/pos", label: "Punto de Venta", adminOnly: false },
   { href: "/caja", label: "Caja", adminOnly: false },
   { href: "/clientes", label: "Clientes", adminOnly: true },
+  { href: "/descuentos", label: "Códigos de descuento", adminOnly: true },
+  { href: "/promociones", label: "Promociones", adminOnly: true },
   { href: "/reportes", label: "Reportes", adminOnly: true },
   { href: "/compras", label: "Compras", adminOnly: true },
   { href: "/productos", label: "Productos", adminOnly: true },
   { href: "/inventario", label: "Inventario", adminOnly: true },
+  { href: "/empleados", label: "Empleados", adminOnly: true },
+  { href: "/configuracion", label: "Configuración", adminOnly: true },
   { href: "/administracion", label: "Administración", adminOnly: true },
 ];
 

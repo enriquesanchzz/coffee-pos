@@ -141,12 +141,184 @@ type ResolvedSaleItem = {
     baseUnit: UnitOfMeasure;
     priceDelta: Prisma.Decimal;
   }[];
+  // Promociones automáticas (Paquetes/2x1/Día temático) — ver
+  // applyPromotions. comboId se persiste en SaleItem.comboId (campo que
+  // ya existía en el schema); hasAutomaticPromotion marca que lineTotal
+  // ya refleja un ajuste automático, para excluir la línea del subtotal
+  // "descontable" por DiscountCode/ManualDiscount (no se apilan).
+  comboId: string | null;
+  hasAutomaticPromotion: boolean;
 };
+
+// -----------------------------------------------------------------------
+// Promociones automáticas (Paquetes/2x1/Día temático) — módulo
+// Promociones. Sin manejo de zona horaria especial (hora del servidor,
+// igual que el resto del sistema). Se evalúa una vez por ronda de
+// resolveSaleItems — una cuenta abierta (Mesa) con varias rondas NO
+// combina líneas de rondas distintas para armar un paquete (cada ronda
+// se resuelve por separado, igual que ya pasa con recetas/consumo).
+//
+// Orden de precedencia, cada línea recibe como máximo UNA promoción:
+// Paquetes primero (consumen líneas limpias enteras — sin modificadores
+// ni extras — por mayor descuento primero), luego 2x1, luego Día
+// temático sobre lo que quede sin tocar.
+function isPromotionActiveNow(
+  daysOfWeek: number[],
+  startTime: string | null,
+  endTime: string | null,
+  now: Date
+): boolean {
+  if (daysOfWeek.length > 0 && !daysOfWeek.includes(now.getDay())) return false;
+  if (startTime || endTime) {
+    const toMinutes = (t: string) => {
+      const [h, m] = t.split(":").map(Number);
+      return h * 60 + m;
+    };
+    const minutesNow = now.getHours() * 60 + now.getMinutes();
+    const start = startTime ? toMinutes(startTime) : 0;
+    const end = endTime ? toMinutes(endTime) : 23 * 60 + 59;
+    if (minutesNow < start || minutesNow > end) return false;
+  }
+  return true;
+}
+
+async function applyPromotions(
+  tx: Prisma.TransactionClient,
+  saleItemsData: ResolvedSaleItem[],
+  now: Date
+): Promise<Prisma.Decimal> {
+  // Una línea "modificada" no califica (combo/2x1/día temático), pero un
+  // grupo de modificadores como "Tipo de leche" con su opción base
+  // seleccionada (ej. "Entera", priceDelta=0, sin sustituir ingrediente)
+  // no cuenta como modificación real — es solo la receta por default, no
+  // algo que el cliente cambió. Sin este matiz, ninguna bebida con leche
+  // (Latte, Cortado, etc.) podría calificar nunca, ni siquiera sin pedir
+  // ningún cambio — y el pedido original del usuario usa justo "Jueves de
+  // Latte al 50%" como ejemplo de Día temático.
+  function isEligible(item: ResolvedSaleItem) {
+    const hasRealModifier = item.modifiers.some((m) => !m.priceDelta.equals(0));
+    return !hasRealModifier && item.extraIngredients.length === 0 && !item.hasAutomaticPromotion;
+  }
+
+  // --- Paquetes (Combo) — match exacto de productVariantId+cantidad,
+  // nunca se parte una línea (alcance explícito de esta primera versión).
+  const combos = await tx.combo.findMany({
+    where: { isActive: true },
+    include: { items: { include: { productVariant: true } } },
+  });
+  const activeCombos = combos.filter((c) => isPromotionActiveNow(c.daysOfWeek, c.startTime, c.endTime, now));
+
+  function comboDiscount(combo: (typeof activeCombos)[number]) {
+    const normalTotal = combo.items.reduce(
+      (sum, item) => sum.add(item.productVariant.price.mul(item.quantity)),
+      new Prisma.Decimal(0)
+    );
+    return normalTotal.sub(combo.price);
+  }
+  activeCombos.sort((a, b) => comboDiscount(b).sub(comboDiscount(a)).toNumber());
+
+  for (const combo of activeCombos) {
+    const matchedIndices: number[] = [];
+    let allMatched = true;
+    for (const comboItem of combo.items) {
+      const matchIndex = saleItemsData.findIndex(
+        (item, idx) =>
+          isEligible(item) &&
+          !matchedIndices.includes(idx) &&
+          item.productVariantId === comboItem.productVariantId &&
+          item.quantity === comboItem.quantity
+      );
+      if (matchIndex === -1) {
+        allMatched = false;
+        break;
+      }
+      matchedIndices.push(matchIndex);
+    }
+    if (!allMatched) continue;
+
+    // Reparto proporcional al precio normal de cada línea, para que la
+    // suma sea EXACTAMENTE combo.price — el último renglón absorbe el
+    // redondeo, para no perder ni ganar centavos.
+    const originalTotal = matchedIndices.reduce(
+      (sum, idx) => sum.add(saleItemsData[idx].lineTotal),
+      new Prisma.Decimal(0)
+    );
+    let assigned = new Prisma.Decimal(0);
+    matchedIndices.forEach((idx, i) => {
+      const isLast = i === matchedIndices.length - 1;
+      const share = isLast
+        ? combo.price.sub(assigned)
+        : saleItemsData[idx].lineTotal.div(originalTotal).mul(combo.price).toDecimalPlaces(2);
+      assigned = assigned.add(share);
+      saleItemsData[idx].lineTotal = share;
+      saleItemsData[idx].comboId = combo.id;
+      saleItemsData[idx].hasAutomaticPromotion = true;
+    });
+  }
+
+  // --- 2x1 — de cada 2 unidades de la línea, se cobra 1.
+  const dosPorUnoPromotions = await tx.promotion.findMany({
+    where: { isActive: true, category: "DOS_POR_UNO" },
+    include: { variants: true },
+  });
+  const activeDosPorUno = dosPorUnoPromotions.filter((p) =>
+    isPromotionActiveNow(p.daysOfWeek, p.startTime, p.endTime, now)
+  );
+  const dosPorUnoVariantIds = new Set(activeDosPorUno.flatMap((p) => p.variants.map((v) => v.productVariantId)));
+
+  for (const item of saleItemsData) {
+    if (!isEligible(item)) continue;
+    if (!dosPorUnoVariantIds.has(item.productVariantId)) continue;
+    const chargeableQuantity = Math.ceil(item.quantity / 2);
+    item.lineTotal = item.unitPrice.mul(chargeableQuantity);
+    item.hasAutomaticPromotion = true;
+  }
+
+  // --- Día temático — descuento porcentaje/monto fijo/precio final
+  // sobre la línea, vía el mismo computeDiscount que usan los
+  // descuentos de venta completa.
+  const diaTematicoPromotions = await tx.promotion.findMany({
+    where: { isActive: true, category: "DIA_TEMATICO" },
+    include: { variants: true },
+  });
+  const activeDiaTematico = diaTematicoPromotions.filter((p) =>
+    isPromotionActiveNow(p.daysOfWeek, p.startTime, p.endTime, now)
+  );
+  const diaTematicoByVariantId = new Map<string, (typeof activeDiaTematico)[number]>();
+  for (const promo of activeDiaTematico) {
+    for (const v of promo.variants) {
+      if (!diaTematicoByVariantId.has(v.productVariantId)) {
+        diaTematicoByVariantId.set(v.productVariantId, promo);
+      }
+    }
+  }
+
+  for (const item of saleItemsData) {
+    if (!isEligible(item)) continue;
+    const promo = diaTematicoByVariantId.get(item.productVariantId);
+    if (!promo || !promo.discountType || !promo.discountValue) continue;
+    const discount = computeDiscount(promo.discountType, promo.discountValue, item.lineTotal);
+    item.lineTotal = Prisma.Decimal.max(0, item.lineTotal.sub(discount));
+    item.hasAutomaticPromotion = true;
+  }
+
+  // Subtotal "descontable" por DiscountCode/ManualDiscount — excluye las
+  // líneas que ya recibieron una promoción automática, para que no se
+  // apilen dos descuentos sobre la misma línea.
+  return saleItemsData
+    .filter((item) => !item.hasAutomaticPromotion)
+    .reduce((sum, item) => sum.add(item.lineTotal), new Prisma.Decimal(0));
+}
 
 async function resolveSaleItems(
   tx: Prisma.TransactionClient,
   items: CreateSaleItemInput[]
-): Promise<{ saleItemsData: ResolvedSaleItem[]; consumption: Map<string, Prisma.Decimal>; subtotal: Prisma.Decimal }> {
+): Promise<{
+  saleItemsData: ResolvedSaleItem[];
+  consumption: Map<string, Prisma.Decimal>;
+  subtotal: Prisma.Decimal;
+  discountableSubtotal: Prisma.Decimal;
+}> {
   const ingredientInfoCache = new Map<string, { baseUnit: UnitOfMeasure; categoryId: string }>();
   const consumption = new Map<string, Prisma.Decimal>();
 
@@ -222,7 +394,6 @@ async function resolveSaleItems(
     orderBy: { cupCapacityOz: "asc" },
   });
 
-  let subtotal = new Prisma.Decimal(0);
   const saleItemsData: ResolvedSaleItem[] = [];
 
   for (const item of items) {
@@ -276,7 +447,6 @@ async function resolveSaleItems(
 
     const unitPrice = variant.price.add(modifierTotal).add(extrasTotal);
     const lineTotal = unitPrice.mul(item.quantity);
-    subtotal = subtotal.add(lineTotal);
 
     saleItemsData.push({
       productVariantId: variant.id,
@@ -287,6 +457,8 @@ async function resolveSaleItems(
       notes: item.notes?.trim() || null,
       modifiers: modifierOptions.map((opt) => ({ modifierOptionId: opt.id, priceDelta: opt.priceDelta })),
       extraIngredients: resolvedExtras,
+      comboId: null,
+      hasAutomaticPromotion: false,
     });
 
     const substitutionCategories = new Set<string>();
@@ -315,7 +487,10 @@ async function resolveSaleItems(
     }
   }
 
-  return { saleItemsData, consumption, subtotal };
+  const discountableSubtotal = await applyPromotions(tx, saleItemsData, new Date());
+  const subtotal = saleItemsData.reduce((sum, item) => sum.add(item.lineTotal), new Prisma.Decimal(0));
+
+  return { saleItemsData, consumption, subtotal, discountableSubtotal };
 }
 
 // Crea los SaleItem (+ modificadores + extras libres) de una ronda de
@@ -332,6 +507,7 @@ async function persistSaleItems(tx: Prisma.TransactionClient, saleId: string, sa
         unitPrice: item.unitPrice,
         lineTotal: item.lineTotal,
         notes: item.notes,
+        comboId: item.comboId,
         modifiers: {
           create: item.modifiers.map((m) => ({ modifierOptionId: m.modifierOptionId, priceDelta: m.priceDelta })),
         },
@@ -438,6 +614,31 @@ function serializeSale(sale: {
 //
 // Simplificaciones conocidas de este MVP (ver docs/CONTINUE.md):
 //   - No hay impuestos todavía (el descuento sí — ver computeDiscount).
+// Vista previa de precio para el carrito del POS — resolveSaleItems ya
+// resuelve modificadores/extras/promociones automáticas, pero eso solo
+// corre dentro de createSale/openTab/etc. al cobrar de verdad. Sin esto,
+// el carrito solo sabe sumar quantity×unitPrice del lado del cliente, que
+// NO refleja Paquetes/2x1/Día temático — el cajero vería un total
+// distinto al que de verdad se cobra, y el monto que captura en efectivo
+// no cuadraría con createSale (que sí exige que coincidan exactos). Es de
+// solo lectura (ninguna de las consultas dentro de resolveSaleItems
+// escribe nada), por eso se llama con el cliente de Prisma normal, sin
+// transacción.
+export async function previewSaleTotal(
+  employeeId: string,
+  items: CreateSaleItemInput[]
+): Promise<{ subtotal: number; discountableSubtotal: number }> {
+  if (employeeId !== (await getSessionEmployeeId())) {
+    throw new Error("El empleado no coincide con la sesión activa.");
+  }
+  if (items.length === 0) {
+    return { subtotal: 0, discountableSubtotal: 0 };
+  }
+
+  const { subtotal, discountableSubtotal } = await resolveSaleItems(prisma, items);
+  return { subtotal: subtotal.toNumber(), discountableSubtotal: discountableSubtotal.toNumber() };
+}
+
 export async function createSale(input: CreateSaleInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
@@ -454,7 +655,7 @@ export async function createSale(input: CreateSaleInput) {
       throw new Error("No hay un turno abierto válido para esta venta.");
     }
 
-    const { saleItemsData, consumption, subtotal } = await resolveSaleItems(tx, input.items);
+    const { saleItemsData, consumption, subtotal, discountableSubtotal } = await resolveSaleItems(tx, input.items);
 
     // Descuento: código o manual, nunca ambos a la vez.
     if (input.discountCodeId && input.manualDiscount) {
@@ -469,12 +670,16 @@ export async function createSale(input: CreateSaleInput) {
       authorizedById: string;
     } | null = null;
 
+    // El código/descuento manual se calcula solo sobre discountableSubtotal
+    // (el subtotal SIN las líneas que ya recibieron una promoción
+    // automática — Paquetes/2x1/Día temático, ver applyPromotions) para
+    // que una línea nunca lleve dos descuentos a la vez.
     if (input.discountCodeId) {
       await requirePermission(input.employeeId, input.branchId, "DESCUENTO_APLICAR_CODIGO");
       discountTotal = await validateAndConsumeDiscountCode(tx, {
         discountCodeId: input.discountCodeId,
         customerId: input.customerId,
-        subtotal,
+        subtotal: discountableSubtotal,
       });
     }
 
@@ -486,7 +691,7 @@ export async function createSale(input: CreateSaleInput) {
       await requirePermission(authorizer.id, input.branchId, "DESCUENTO_MANUAL");
 
       const value = new Prisma.Decimal(input.manualDiscount.value);
-      discountTotal = computeDiscount(input.manualDiscount.type, value, subtotal);
+      discountTotal = computeDiscount(input.manualDiscount.type, value, discountableSubtotal);
       manualDiscountData = {
         type: input.manualDiscount.type,
         value,
@@ -495,7 +700,7 @@ export async function createSale(input: CreateSaleInput) {
       };
     }
 
-    if (discountTotal.lessThan(0) || discountTotal.greaterThan(subtotal)) {
+    if (discountTotal.lessThan(0) || discountTotal.greaterThan(discountableSubtotal)) {
       throw new Error("El descuento no puede ser mayor al subtotal de la venta.");
     }
 
@@ -613,6 +818,24 @@ export async function openTab(input: OpenTabInput) {
   return serializeSale(sale);
 }
 
+// Para cerrar una cuenta abierta (closeTab): el descuento de código/manual
+// se calcula sobre el subtotal acumulado de TODAS las rondas ya
+// persistidas, no solo la última — así que hay que re-derivar qué líneas
+// ya persistidas recibieron una promoción automática (Paquetes/2x1/Día
+// temático) para excluirlas, igual que discountableSubtotal en
+// resolveSaleItems/applyPromotions. No hace falta una columna nueva: un
+// SaleItem con comboId (Paquetes) o cuyo lineTotal ya no es
+// unitPrice×quantity (2x1/Día temático, la única forma en que eso pasa
+// para una línea sin modificadores que sumen al precio) ya quedó
+// marcado por una promoción.
+async function computeDiscountableSubtotal(tx: Prisma.TransactionClient, saleId: string): Promise<Prisma.Decimal> {
+  const items = await tx.saleItem.findMany({ where: { saleId } });
+  return items.reduce((sum, item) => {
+    const hasPromotion = item.comboId !== null || !item.lineTotal.equals(item.unitPrice.mul(item.quantity));
+    return hasPromotion ? sum : sum.add(item.lineTotal);
+  }, new Prisma.Decimal(0));
+}
+
 async function loadOpenTab(tx: Prisma.TransactionClient, saleId: string, branchId: string, shiftId: string) {
   const sale = await tx.sale.findUniqueOrThrow({ where: { id: saleId } });
   if (sale.status !== "ABIERTA") {
@@ -706,9 +929,14 @@ export async function closeTab(input: CloseTabInput) {
     }
 
     // El subtotal acumulado de toda la cuenta (todas las rondas) es la
-    // base del descuento — una cuenta abierta no carga descuento hasta
-    // que se cierra.
+    // base del total — una cuenta abierta no carga descuento hasta que
+    // se cierra.
     const subtotal = existing.subtotal;
+    // El código/descuento manual, en cambio, solo se calcula sobre lo
+    // que NO recibió ya una promoción automática en alguna ronda previa
+    // (ver computeDiscountableSubtotal) — misma regla de "no apilar"
+    // que createSale.
+    const discountableSubtotal = await computeDiscountableSubtotal(tx, existing.id);
 
     if (input.discountCodeId && input.manualDiscount) {
       throw new Error("Solo se puede aplicar un tipo de descuento por venta.");
@@ -727,7 +955,7 @@ export async function closeTab(input: CloseTabInput) {
       discountTotal = await validateAndConsumeDiscountCode(tx, {
         discountCodeId: input.discountCodeId,
         customerId: input.customerId || existing.customerId || undefined,
-        subtotal,
+        subtotal: discountableSubtotal,
       });
     }
 
@@ -739,7 +967,7 @@ export async function closeTab(input: CloseTabInput) {
       await requirePermission(authorizer.id, input.branchId, "DESCUENTO_MANUAL");
 
       const value = new Prisma.Decimal(input.manualDiscount.value);
-      discountTotal = computeDiscount(input.manualDiscount.type, value, subtotal);
+      discountTotal = computeDiscount(input.manualDiscount.type, value, discountableSubtotal);
       manualDiscountData = {
         type: input.manualDiscount.type,
         value,
@@ -748,7 +976,7 @@ export async function closeTab(input: CloseTabInput) {
       };
     }
 
-    if (discountTotal.lessThan(0) || discountTotal.greaterThan(subtotal)) {
+    if (discountTotal.lessThan(0) || discountTotal.greaterThan(discountableSubtotal)) {
       throw new Error("El descuento no puede ser mayor al subtotal de la cuenta.");
     }
 
