@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function DateRangePicker({ from, to }: { from: string; to: string }) {
+export function DateRangePicker({ from, to, view }: { from: string; to: string; view?: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const [fromValue, setFromValue] = useState(from);
@@ -14,6 +14,7 @@ export function DateRangePicker({ from, to }: { from: string; to: string }) {
 
   function apply() {
     const params = new URLSearchParams({ from: fromValue, to: toValue });
+    if (view) params.set("view", view);
     router.push(`${pathname}?${params.toString()}`);
   }
 

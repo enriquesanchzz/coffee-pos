@@ -10,7 +10,11 @@ import {
   Truck,
   BarChart3,
   Users,
+  UserCog,
   Settings,
+  LayoutDashboard,
+  Tag,
+  Percent,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -23,12 +27,16 @@ import { Badge } from "@/components/ui/badge";
 const modules = [
   { href: "/pos", label: "Punto de Venta", icon: ShoppingCart, enabled: true, adminOnly: false },
   { href: "/caja", label: "Caja", icon: Wallet, enabled: true, adminOnly: false },
+  { href: "/administracion", label: "Administración", icon: LayoutDashboard, enabled: true, adminOnly: true },
   { href: "/clientes", label: "Clientes", icon: Users, enabled: true, adminOnly: true },
+  { href: "/descuentos", label: "Códigos de descuento", icon: Tag, enabled: true, adminOnly: true },
+  { href: "/promociones", label: "Promociones", icon: Percent, enabled: true, adminOnly: true },
   { href: "/reportes", label: "Reportes", icon: BarChart3, enabled: true, adminOnly: true },
   { href: "/compras", label: "Compras", icon: Truck, enabled: true, adminOnly: true },
   { href: "/productos", label: "Productos", icon: BookOpen, enabled: true, adminOnly: true },
   { href: "/inventario", label: "Inventario", icon: Package, enabled: true, adminOnly: true },
-  { href: "/administracion", label: "Administración", icon: Settings, enabled: true, adminOnly: true },
+  { href: "/empleados", label: "Empleados", icon: UserCog, enabled: true, adminOnly: true },
+  { href: "/configuracion", label: "Configuración", icon: Settings, enabled: true, adminOnly: true },
 ];
 
 export function Sidebar({ isAdmin }: { isAdmin: boolean }) {

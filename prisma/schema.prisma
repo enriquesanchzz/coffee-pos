@@ -83,6 +83,7 @@ enum Permission {
   CLIENTE_CONFIGURAR
   ASISTENCIA_CHECAR
   MENU_CONSULTAR
+  PROMOCION_GESTIONAR
   // Exclusivos de ADMINISTRADOR — ningún otro rol los recibe en el seed.
   SUCURSAL_GESTIONAR // crear, editar o cerrar sucursales
   REPORTE_CONSOLIDADO_VER // reportes agregados de TODAS las sucursales
@@ -154,6 +155,16 @@ enum DiscountType {
   PORCENTAJE
   MONTO_FIJO
   PRECIO_FINAL // reemplaza el total de la venta por un monto final fijo
+}
+
+// Subcategoría de DiscountCode para el módulo Promociones (nuevo menú,
+// separado de Clientes) — nullable porque los códigos ya sembrados antes
+// de este campo (ej. cupones de bienvenida) no tienen categoría hasta que
+// alguien la asigne desde /descuentos.
+enum DiscountCodeCategory {
+  CLIENTE_ESPECIFICO
+  CAMPANA
+  EMPLEADO
 }
 
 // Catálogo precargado de justificaciones para descuento manual (gerente).
@@ -529,10 +540,11 @@ model ProductVariant {
   // gerente ajusta el precio o descarta la alerta.
   costAtLastPriceReview Decimal? @db.Decimal(10, 2)
 
-  recipes         Recipe[]
-  modifierGroups  VariantModifierGroup[]
-  saleItems       SaleItem[]
-  comboItems      ComboItem[]
+  recipes           Recipe[]
+  modifierGroups    VariantModifierGroup[]
+  saleItems         SaleItem[]
+  comboItems        ComboItem[]
+  promotionVariants PromotionVariant[]
 
   @@map("product_variants")
 }
@@ -688,6 +700,15 @@ model Combo {
   price     Decimal     @db.Decimal(10, 2) // precio único del combo (utilidad se calcula agregada)
   isActive  Boolean     @default(true)
 
+  // Vigencia por día/horario — mismo shape que Promotion, para que las 3
+  // categorías del módulo Promociones (Paquetes/2x1/Día temático)
+  // compartan una noción de "cuándo aplica". Vacío/null = todo el
+  // tiempo. Sin manejo de zona horaria especial — hora del servidor,
+  // igual que el resto del sistema (ver docs/CONTINUE.md).
+  daysOfWeek Int[]  @default([]) // 0=domingo…6=sábado, vacío = todos
+  startTime  String? // "HH:mm", null = todo el día
+  endTime    String?
+
   items     ComboItem[]
   saleItems SaleItem[]
 
@@ -705,6 +726,46 @@ model ComboItem {
   quantity         Int             @default(1)
 
   @@map("combo_items")
+}
+
+enum PromotionCategory {
+  DOS_POR_UNO
+  DIA_TEMATICO
+}
+
+// 2x1 y Día temático — Paquetes vive en Combo/ComboItem arriba (ya
+// existían en el schema desde antes de este módulo, solo nunca se
+// habían implementado). Ambas categorías comparten vigencia por
+// día/horario (mismo shape que Combo, ver comentario ahí).
+model Promotion {
+  id       String            @id @default(cuid())
+  name     String
+  category PromotionCategory
+  isActive Boolean           @default(true)
+
+  daysOfWeek Int[]  @default([]) // 0=domingo…6=sábado, vacío = todos
+  startTime  String? // "HH:mm", null = todo el día
+  endTime    String?
+
+  // Solo DIA_TEMATICO — 2x1 no necesita tipo/valor de descuento, su
+  // mecánica ya está fija (cobrar la mitad redondeando hacia arriba).
+  discountType  DiscountType?
+  discountValue Decimal?      @db.Decimal(10, 2)
+
+  variants PromotionVariant[]
+
+  @@map("promotions")
+}
+
+model PromotionVariant {
+  id               String         @id @default(cuid())
+  promotionId      String
+  promotion        Promotion      @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  productVariantId String
+  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id])
+
+  @@unique([promotionId, productVariantId])
+  @@map("promotion_variants")
 }
 
 // =========================================================================
@@ -1217,6 +1278,9 @@ model DiscountCode {
   customerId String?
   customer   Customer? @relation(fields: [customerId], references: [id])
   usedAt     DateTime?
+
+  // Subcategoría para el módulo Promociones — ver DiscountCodeCategory.
+  category DiscountCodeCategory?
 
   sales Sale[]
 

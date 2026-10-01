@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import type { DiscountCodeCategory } from "@prisma/client";
 
 export type DiscountCodeListItem = {
   id: string;
@@ -7,6 +8,7 @@ export type DiscountCodeListItem = {
   value: number;
   isActive: boolean;
   expiresAt: string | null;
+  category: DiscountCodeCategory | null;
 };
 
 export async function getDiscountCodes(): Promise<DiscountCodeListItem[]> {
@@ -18,5 +20,6 @@ export async function getDiscountCodes(): Promise<DiscountCodeListItem[]> {
     value: discountCode.value.toNumber(),
     isActive: discountCode.isActive,
     expiresAt: discountCode.expiresAt?.toISOString() ?? null,
+    category: discountCode.category,
   }));
 }

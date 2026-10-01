@@ -54,7 +54,7 @@ export function EmployeeForm({
             isCashier,
           });
         }
-        router.push("/administracion");
+        router.push("/empleados");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo guardar el empleado.");
       }

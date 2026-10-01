@@ -27,7 +27,7 @@ export async function updateTargetFoodCostPercent(percent: number) {
     data: { targetFoodCostPercent: percent },
   });
 
-  revalidatePath("/administracion");
+  revalidatePath("/configuracion");
   revalidatePath("/productos");
 }
 
