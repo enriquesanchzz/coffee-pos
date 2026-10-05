@@ -11,6 +11,7 @@ import { closeShift, previewShiftClose } from "@/actions/shift";
 type Preview = {
   openingCash: number;
   cashSalesTotal: number;
+  paymentsByMethod: Record<"EFECTIVO" | "TARJETA" | "TRANSFERENCIA", number>;
   retirosTotal: number;
   ingresosTotal: number;
   expectedCash: number;
@@ -79,6 +80,14 @@ export function CloseShiftDialog({
             <div className="flex justify-between">
               <span className="text-muted-foreground">Ventas en efectivo</span>
               <span>{formatCurrency(preview.cashSalesTotal)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Ventas con tarjeta</span>
+              <span>{formatCurrency(preview.paymentsByMethod.TARJETA)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Ventas por transferencia</span>
+              <span>{formatCurrency(preview.paymentsByMethod.TRANSFERENCIA)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Retiros</span>
