@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { DiscountCodeCategory } from "@prisma/client";
-import type { DiscountCodeListItem } from "@/lib/discounts";
+import type { DiscountCodeListItem, DiscountCodeStatus } from "@/lib/discounts";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { DiscountCodeCard } from "./discount-code-card";
 import { DiscountCodeFormDialog } from "./discount-code-form-dialog";
 import { discountCategoryLabels } from "./enum-labels";
 
-type StatusFilter = "todos" | "activo" | "inactivo";
+type StatusFilter = "todos" | DiscountCodeStatus;
 type CategoryFilter = "todas" | DiscountCodeCategory;
 
 // Filtros en memoria sobre la lista ya cargada (búsqueda + estado +
@@ -35,8 +35,7 @@ export function DiscountCodesWorkspace({
     const trimmedQuery = query.trim().toUpperCase();
     return codes.filter((discountCode) => {
       if (trimmedQuery && !discountCode.code.includes(trimmedQuery)) return false;
-      if (statusFilter === "activo" && !discountCode.isActive) return false;
-      if (statusFilter === "inactivo" && discountCode.isActive) return false;
+      if (statusFilter !== "todos" && discountCode.status !== statusFilter) return false;
       if (categoryFilter !== "todas" && discountCode.category !== categoryFilter) return false;
       return true;
     });
@@ -67,8 +66,10 @@ export function DiscountCodesWorkspace({
           className="w-40"
         >
           <option value="todos">Todos</option>
-          <option value="activo">Activos</option>
-          <option value="inactivo">Inactivos</option>
+          <option value="ACTIVO">Activos</option>
+          <option value="USADO">Usados</option>
+          <option value="VENCIDO">Vencidos</option>
+          <option value="INACTIVO">Inactivos</option>
         </Select>
         <Select
           value={categoryFilter}

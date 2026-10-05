@@ -6,10 +6,23 @@ import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { hashSecret } from "@/lib/password";
 import { isPinTaken, requirePasswordSession, resolveRoleName, SessionExpiredError } from "@/lib/session";
-import { isValidEmail } from "@/lib/utils";
+import { normalizeEmail } from "@/lib/validation";
 import { requirePermission } from "@/lib/permissions";
 
 const PIN_PATTERN = /^\d{4,6}$/;
+
+async function assertEmailAvailable(email: string | null, excludeEmployeeId?: string) {
+  if (!email) return;
+  const existing = await prisma.employee.findFirst({
+    where: {
+      email: { equals: email, mode: "insensitive" },
+      ...(excludeEmployeeId ? { id: { not: excludeEmployeeId } } : {}),
+    },
+  });
+  if (existing) {
+    throw new Error(`Ese email ya lo usa ${existing.name}.`);
+  }
+}
 
 const PIN_TAKEN_MESSAGE = "Ese PIN ya lo usa otro empleado activo. Elige uno distinto.";
 
@@ -61,9 +74,8 @@ export const createEmployee = safeAction(async function createEmployee(input: Cr
   if (!input.roleId) {
     throw new Error("Elige un rol.");
   }
-  if (input.email?.trim() && !isValidEmail(input.email.trim())) {
-    throw new Error("El email no es válido.");
-  }
+  const email = normalizeEmail(input.email);
+  await assertEmailAvailable(email);
   if (pin && (await isPinTaken(pin))) {
     throw new Error(PIN_TAKEN_MESSAGE);
   }
@@ -75,7 +87,7 @@ export const createEmployee = safeAction(async function createEmployee(input: Cr
     const employee = await tx.employee.create({
       data: {
         name,
-        email: input.email?.trim() || null,
+        email,
         pin: pinHash,
         passwordHash,
       },
@@ -149,9 +161,8 @@ export const updateEmployee = safeAction(async function updateEmployee(input: Up
   if (!input.roleId) {
     throw new Error("Elige un rol.");
   }
-  if (input.email?.trim() && !isValidEmail(input.email.trim())) {
-    throw new Error("El email no es válido.");
-  }
+  const email = normalizeEmail(input.email);
+  await assertEmailAvailable(email, input.employeeId);
   if (pin && (await isPinTaken(pin, input.employeeId))) {
     throw new Error(PIN_TAKEN_MESSAGE);
   }
@@ -165,7 +176,7 @@ export const updateEmployee = safeAction(async function updateEmployee(input: Up
       where: { id: input.employeeId },
       data: {
         name,
-        email: input.email?.trim() || null,
+        email,
         isActive: input.isActive,
         ...(newPinHash ? { pin: newPinHash } : {}),
         ...(newPasswordHash ? { passwordHash: newPasswordHash } : {}),

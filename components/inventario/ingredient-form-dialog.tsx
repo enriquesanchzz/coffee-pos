@@ -50,6 +50,8 @@ export function IngredientFormDialog({
   );
   const [tracksExpiration, setTracksExpiration] = useState(ingredient?.tracksExpiration ?? true);
   const [extraUnitPrice, setExtraUnitPrice] = useState(ingredient?.extraUnitPrice?.toString() ?? "");
+  const [presentationName, setPresentationName] = useState(ingredient?.purchasePresentationName ?? "");
+  const [presentationSize, setPresentationSize] = useState(ingredient?.purchasePresentationSize?.toString() ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -70,6 +72,8 @@ export function IngredientFormDialog({
     setPurchaseUnit((ingredient?.purchaseUnit as UnitOfMeasure) ?? units[0]);
     setTracksExpiration(ingredient?.tracksExpiration ?? true);
     setExtraUnitPrice(ingredient?.extraUnitPrice?.toString() ?? "");
+    setPresentationName(ingredient?.purchasePresentationName ?? "");
+    setPresentationSize(ingredient?.purchasePresentationSize?.toString() ?? "");
     setError(null);
     setConfirmingDelete(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -98,6 +102,8 @@ export function IngredientFormDialog({
             purchaseUnit,
             tracksExpiration,
             extraUnitPrice: parsedExtraPrice,
+            purchasePresentationName: presentationName,
+            purchasePresentationSize: presentationSize.trim() === "" ? null : Number(presentationSize),
           });
         } else {
           await createIngredient({
@@ -107,6 +113,8 @@ export function IngredientFormDialog({
             baseUnit,
             purchaseUnit,
             extraUnitPrice: parsedExtraPrice,
+            purchasePresentationName: presentationName,
+            purchasePresentationSize: presentationSize.trim() === "" ? null : Number(presentationSize),
           });
         }
         onSaved();
@@ -185,6 +193,32 @@ export function IngredientFormDialog({
             ))}
           </Select>
         </div>
+
+        <fieldset className="flex flex-col gap-1">
+          <legend className="text-sm font-medium">Presentación de compra (opcional)</legend>
+          <p className="text-xs text-muted-foreground">
+            Para capturar órdenes de compra por caja, bolsa, garrafa… Si la dejas vacía se compra por{" "}
+            {unitLabels[purchaseUnit]} (o {unitLabels[baseUnit]}).
+          </p>
+          <div className="flex gap-2">
+            <Input
+              aria-label="Nombre de la presentación"
+              value={presentationName}
+              onChange={(e) => setPresentationName(e.target.value)}
+              placeholder="ej. Caja 12 L"
+            />
+            <Input
+              aria-label={`Contenido de la presentación en ${unitLabels[baseUnit]}`}
+              type="number"
+              min="0"
+              step="any"
+              className="w-32"
+              value={presentationSize}
+              onChange={(e) => setPresentationSize(e.target.value)}
+              placeholder={`ej. 12000 ${unitLabels[baseUnit]}`}
+            />
+          </div>
+        </fieldset>
 
         <div className="flex flex-col gap-1">
           <Label htmlFor="ingredient-extra-price">

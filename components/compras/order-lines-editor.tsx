@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { formatCurrency, formatUnitCost } from "@/lib/utils";
 import { unitLabels } from "./enum-labels";
+import { roundQty } from "@/lib/units";
 
 export type OrderLineDraft = {
   key: string;
@@ -55,15 +56,17 @@ export function OrderLinesEditor({
         <div className="hidden items-center gap-2 text-xs font-medium text-muted-foreground sm:flex">
           <span className="flex-1">Insumo</span>
           <span className="w-24">Cantidad</span>
-          <span className="w-12">Unidad</span>
-          <span className="w-24">Costo por unidad</span>
+          <span className="w-20">Presentación</span>
+          <span className="w-24">Costo c/u</span>
           <span className="w-20 text-right">Subtotal</span>
           <span className="w-[68px]" />
         </div>
       )}
       {lines.map((line) => {
         const ingredient = ingredientById.get(line.ingredientId);
-        const unit = ingredient ? unitLabels[ingredient.baseUnit as keyof typeof unitLabels] : "";
+        const baseUnit = ingredient ? unitLabels[ingredient.baseUnit as keyof typeof unitLabels] : "";
+        const presentation = ingredient?.presentation ?? null;
+        const unit = presentation ? presentation.name : baseUnit;
         const lineTotal = (Number(line.quantity) || 0) * (Number(line.estimatedUnitCost) || 0);
         return (
           <div key={line.key} className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
@@ -73,10 +76,15 @@ export function OrderLinesEditor({
               value={line.ingredientId}
               onChange={(e) => {
                 const ingredientId = e.target.value;
+                // El costo cotizado está por unidad base; se pasa al
+                // precio por presentación (ej. $0.03/ml → $30 por L).
                 const suggestedCost = supplierCosts.get(ingredientId);
+                const size = ingredients.find((i) => i.id === ingredientId)?.presentation?.size ?? 1;
                 updateLine(line.key, {
                   ingredientId,
-                  ...(suggestedCost !== undefined ? { estimatedUnitCost: String(suggestedCost) } : {}),
+                  ...(suggestedCost !== undefined
+                    ? { estimatedUnitCost: String(roundQty(suggestedCost * size)) }
+                    : {}),
                 });
               }}
             >
@@ -97,7 +105,14 @@ export function OrderLinesEditor({
               value={line.quantity}
               onChange={(e) => updateLine(line.key, { quantity: e.target.value })}
             />
-            <span className="w-12 text-sm text-muted-foreground">{unit}</span>
+            <span className="w-20 text-sm text-muted-foreground" title={presentation ? `${presentation.size} ${baseUnit}` : undefined}>
+              {unit}
+              {presentation && (
+                <span className="block text-[11px] leading-tight">
+                  = {roundQty(presentation.size)} {baseUnit}
+                </span>
+              )}
+            </span>
 
             <Input
               type="number"
@@ -128,7 +143,8 @@ export function OrderLinesEditor({
       )}
       {lines.some((line) => Number(line.estimatedUnitCost) > 0 && Number(line.estimatedUnitCost) < 1) && (
         <p className="text-xs text-muted-foreground">
-          Costos como {formatUnitCost(0.03)} son por unidad base (ej. por ml), no por litro o paquete.
+          Costos como {formatUnitCost(0.03)} son por unidad base (ej. por ml). Configura la presentación
+          de compra del insumo en Inventario para capturar por litro, kilo o caja.
         </p>
       )}
       <Button type="button" variant="outline" size="sm" onClick={() => onChange([...lines, emptyOrderLine()])}>

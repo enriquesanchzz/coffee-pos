@@ -10,6 +10,7 @@ import { Select } from "@/components/ui/select";
 import { createPurchaseOrder as createPurchaseOrderAction, updatePurchaseOrder as updatePurchaseOrderAction } from "@/actions/purchases";
 import { OrderLinesEditor, initialOrderLine, type OrderLineDraft } from "./order-lines-editor";
 import { withActionErrors } from "@/lib/action-result";
+import { roundQty } from "@/lib/units";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const createPurchaseOrder = withActionErrors(createPurchaseOrderAction);
@@ -37,14 +38,19 @@ export function NewOrderForm({
   const router = useRouter();
   const isEdit = Boolean(existingOrder);
   const [supplierId, setSupplierId] = useState(existingOrder?.supplierId ?? suppliers[0]?.id ?? "");
+  // Las líneas se capturan en la presentación de compra del insumo (ver
+  // lib/units.ts); al editar, lo guardado en baseUnit se convierte de vuelta.
   const [lines, setLines] = useState<OrderLineDraft[]>(
     existingOrder
-      ? existingOrder.items.map((item) => ({
-          key: item.id,
-          ingredientId: item.ingredientId,
-          quantity: String(item.orderedQuantity),
-          estimatedUnitCost: String(item.estimatedUnitCost),
-        }))
+      ? existingOrder.items.map((item) => {
+          const size = ingredients.find((i) => i.id === item.ingredientId)?.presentation?.size ?? 1;
+          return {
+            key: item.id,
+            ingredientId: item.ingredientId,
+            quantity: String(roundQty(item.orderedQuantity / size)),
+            estimatedUnitCost: String(roundQty(item.estimatedUnitCost * size)),
+          };
+        })
       : [initialOrderLine()]
   );
   const [error, setError] = useState<string | null>(null);

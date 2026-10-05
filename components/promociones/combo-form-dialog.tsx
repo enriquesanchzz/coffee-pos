@@ -146,6 +146,11 @@ export function ComboFormDialog({
             <Input id="combo-end" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
           </div>
         </div>
+        <p className="-mt-2 text-xs text-muted-foreground">
+          {startTime && endTime && startTime > endTime
+            ? `Cruza la medianoche: aplica de ${startTime} a ${endTime} del día siguiente.`
+            : "Sin horario = todo el día. Si «Hasta» es menor que «Desde», cruza la medianoche."}
+        </p>
 
         {isEdit && (
           <label className="flex items-center gap-2 text-sm">

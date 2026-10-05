@@ -326,6 +326,15 @@ async function main() {
     milkAlternatives.push(milk);
   }
 
+  // El seed de demo crea "Leche deslactosada" (ing-leche-deslactosada) para
+  // sus productos de ejemplo, que este menú real reemplaza (quedan
+  // inactivos). Se desactiva para no tener dos "Leche deslactosada" en
+  // Inventario/Compras (QA-027); sus registros históricos se conservan.
+  await prisma.ingredient.updateMany({
+    where: { id: "ing-leche-deslactosada" },
+    data: { isActive: false },
+  });
+
   console.log("Sembrando dosis estándar de captura (pump, splash)...");
 
   // "Módulo Productos y POS 2" — evita pedir mililitros crudos al

@@ -198,7 +198,9 @@ export async function findEmployeeByEmailPassword(email: string, password: strin
   }
 
   const employee = await prisma.employee.findFirst({
-    where: { email, isActive: true },
+    // Sin distinguir mayúsculas: en celular el teclado capitaliza la primera
+    // letra y "Ana@…" no entraba (QA-010).
+    where: { email: { equals: email.trim(), mode: "insensitive" }, isActive: true },
   });
   const valid = employee ? await verifySecret(password, employee.passwordHash) : false;
 

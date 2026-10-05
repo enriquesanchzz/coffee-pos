@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getSessionEmployeeId, assertSessionEmployee } from "@/lib/session";
 import { requirePermission } from "@/lib/permissions";
-import { isValidEmail } from "@/lib/utils";
+import { normalizeEmail, normalizePhoneMx } from "@/lib/validation";
 
 // Validaciones comunes de alta/edición — el teléfono es @unique en la base;
 // sin este chequeo el duplicado solo llegaba como error genérico de Prisma.
@@ -15,11 +15,19 @@ async function validateContact(
   input: { phone?: string; email?: string },
   excludeCustomerId?: string
 ) {
-  const email = input.email?.trim();
-  if (email && !isValidEmail(email)) {
-    throw new Error("El email no es válido.");
+  const email = normalizeEmail(input.email);
+  if (email) {
+    const sameEmail = await prisma.customer.findFirst({
+      where: {
+        email: { equals: email, mode: "insensitive" },
+        ...(excludeCustomerId ? { id: { not: excludeCustomerId } } : {}),
+      },
+    });
+    if (sameEmail) {
+      throw new Error(`Ya existe un cliente con ese email (${sameEmail.name}).`);
+    }
   }
-  const phone = input.phone?.trim();
+  const phone = normalizePhoneMx(input.phone);
   if (phone) {
     const existing = await prisma.customer.findFirst({
       where: { phone, ...(excludeCustomerId ? { id: { not: excludeCustomerId } } : {}) },
@@ -63,8 +71,8 @@ export const createCustomer = safeAction(async function createCustomer(input: Cr
     const customer = await tx.customer.create({
       data: {
         name,
-        phone: input.phone?.trim() || null,
-        email: input.email?.trim() || null,
+        phone: normalizePhoneMx(input.phone),
+        email: normalizeEmail(input.email),
         address: input.address?.trim() || null,
         birthDate: input.birthDate ? new Date(input.birthDate) : null,
         gender: input.gender ?? null,
@@ -138,8 +146,8 @@ export const updateCustomer = safeAction(async function updateCustomer(input: Up
     where: { id: input.customerId },
     data: {
       name,
-      phone: optionalText(input.phone),
-      email: optionalText(input.email),
+      phone: input.phone === undefined ? undefined : normalizePhoneMx(input.phone),
+      email: input.email === undefined ? undefined : normalizeEmail(input.email),
       address: optionalText(input.address),
       birthDate:
         input.birthDate === undefined ? undefined : input.birthDate ? new Date(input.birthDate) : null,

@@ -140,7 +140,7 @@ export function CustomerPicker({
 
   return (
     <div className="flex flex-col gap-1">
-      <Label htmlFor="customer">Cliente (opcional)</Label>
+      <Label htmlFor="customer">Cliente {orderType === "DOMICILIO" ? "(obligatorio)" : "(opcional)"}</Label>
       <div className="relative">
         <Input
           id="customer"
@@ -230,7 +230,7 @@ export function CustomerPicker({
             <span className="text-muted-foreground">Teléfono:</span> {selectedCustomer.phone ?? "sin registrar"}
           </p>
           <div className="flex flex-col gap-1">
-            <Label htmlFor="domicilio-address">Domicilio de entrega</Label>
+            <Label htmlFor="domicilio-address">Domicilio de entrega (obligatorio)</Label>
             <Input
               id="domicilio-address"
               value={domicilioAddress}

@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { resolvePurchasePresentation, type PurchasePresentation } from "./units";
 import { DEFAULT_BRANCH_ID } from "./constants";
 
 export type SupplierListItem = {
@@ -96,6 +97,9 @@ export type IngredientOption = {
   categoryId: string;
   baseUnit: string;
   tracksExpiration: boolean;
+  // Presentación en la que se compra (ver lib/units.ts) — las órdenes de
+  // compra se capturan en ella; null = en baseUnit.
+  presentation: PurchasePresentation | null;
 };
 
 export async function getIngredientOptions(): Promise<IngredientOption[]> {
@@ -109,6 +113,12 @@ export async function getIngredientOptions(): Promise<IngredientOption[]> {
     categoryId: ingredient.categoryId,
     baseUnit: ingredient.baseUnit,
     tracksExpiration: ingredient.tracksExpiration,
+    presentation: resolvePurchasePresentation({
+      baseUnit: ingredient.baseUnit,
+      purchaseUnit: ingredient.purchaseUnit,
+      purchasePresentationName: ingredient.purchasePresentationName,
+      purchasePresentationSize: ingredient.purchasePresentationSize?.toNumber() ?? null,
+    }),
   }));
 }
 
@@ -164,6 +174,10 @@ export type PurchaseOrderItemDetail = {
   unit: string;
   estimatedUnitCost: number;
   actualUnitCost: number | null;
+  // Presentación con la que se capturó (cantidades/costos de arriba siguen
+  // en baseUnit; la UI los muestra convertidos).
+  presentationName: string | null;
+  unitsPerPresentation: number | null;
 };
 
 export type PurchaseOrderDetail = {
@@ -203,6 +217,8 @@ export async function getPurchaseOrderDetail(id: string): Promise<PurchaseOrderD
         unit: item.unit,
         estimatedUnitCost: item.estimatedUnitCost.toNumber(),
         actualUnitCost: item.actualUnitCost?.toNumber() ?? null,
+        presentationName: item.presentationName,
+        unitsPerPresentation: item.unitsPerPresentation?.toNumber() ?? null,
       };
     }),
   };

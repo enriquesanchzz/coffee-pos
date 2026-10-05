@@ -96,7 +96,25 @@ export type UpdateIngredientInput = {
   // Precio al cliente como extra libre; vacío/undefined = costo ÷ % de
   // food cost objetivo (ver extraPriceDelta en actions/pos.ts).
   extraUnitPrice?: number | null;
+  // Presentación de compra (ver Ingredient.purchasePresentationName); ambos
+  // vacíos = se compra en purchaseUnit/baseUnit.
+  purchasePresentationName?: string | null;
+  purchasePresentationSize?: number | null;
 };
+
+// Presentación de compra: nombre y contenido (en baseUnit) van juntos.
+function validPresentation(name: string | null | undefined, size: number | null | undefined) {
+  const trimmed = name?.trim() || null;
+  const hasSize = size !== null && size !== undefined && !Number.isNaN(size);
+  if (!trimmed && !hasSize) return { purchasePresentationName: null, purchasePresentationSize: null };
+  if (!trimmed || !hasSize) {
+    throw new Error("La presentación de compra necesita nombre y contenido (ej. Caja 12 L = 12000).");
+  }
+  if (size! <= 0) {
+    throw new Error("El contenido de la presentación debe ser mayor a cero.");
+  }
+  return { purchasePresentationName: trimmed, purchasePresentationSize: size! };
+}
 
 function validExtraPrice(value: number | null) {
   if (value === null || Number.isNaN(value)) return null;
@@ -126,6 +144,9 @@ export const updateIngredient = safeAction(async function updateIngredient(input
       tracksExpiration: input.tracksExpiration,
       ...(input.extraUnitPrice !== undefined
         ? { extraUnitPrice: validExtraPrice(input.extraUnitPrice) }
+        : {}),
+      ...(input.purchasePresentationName !== undefined || input.purchasePresentationSize !== undefined
+        ? validPresentation(input.purchasePresentationName, input.purchasePresentationSize)
         : {}),
     },
   });

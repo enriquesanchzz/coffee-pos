@@ -328,6 +328,12 @@ model Ingredient {
   // como antes.
   standardDoseQuantity Decimal?        @db.Decimal(8, 2)
   standardDoseUnit     UnitOfMeasure?
+  // Presentación en la que se compra (ej. "Caja 12 L" = 12000 ml). Las
+  // órdenes de compra se capturan en esta presentación y se convierten a
+  // baseUnit al guardarlas. null = se usa purchaseUnit con la conversión
+  // estándar (L→ml, kg→g...) o, si no hay, baseUnit (ver lib/units.ts).
+  purchasePresentationName String?
+  purchasePresentationSize Decimal?     @db.Decimal(12, 4) // en baseUnit
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
@@ -1039,6 +1045,13 @@ model PurchaseOrderItem {
   // (orderedQuantity - receivedQuantity = pendiente).
   receivedQuantity Decimal?       @db.Decimal(12, 4)
   unit             UnitOfMeasure
+
+  // Presentación con la que se capturó la línea (copia al momento de crear
+  // la orden): orderedQuantity/receivedQuantity/costos SIEMPRE se guardan en
+  // baseUnit, y estos campos solo sirven para mostrarlos y capturar la
+  // recepción en la misma presentación (ver lib/units.ts).
+  presentationName     String?
+  unitsPerPresentation Decimal?       @db.Decimal(12, 4)
 
   estimatedUnitCost Decimal        @db.Decimal(10, 4)
   // capturado al recibir, para ver variación estimado vs. real

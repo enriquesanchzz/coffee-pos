@@ -192,18 +192,30 @@ function isPromotionActiveNow(
 ): boolean {
   // Día y hora de la sucursal, no del servidor (ver lib/time.ts).
   const clock = zonedClock(now);
-  if (daysOfWeek.length > 0 && !daysOfWeek.includes(clock.weekday)) return false;
-  if (startTime || endTime) {
-    const toMinutes = (t: string) => {
-      const [h, m] = t.split(":").map(Number);
-      return h * 60 + m;
-    };
-    const minutesNow = clock.hour * 60 + clock.minute;
-    const start = startTime ? toMinutes(startTime) : 0;
-    const end = endTime ? toMinutes(endTime) : 23 * 60 + 59;
-    if (minutesNow < start || minutesNow > end) return false;
+  const toMinutes = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + m;
+  };
+  const minutesNow = clock.hour * 60 + clock.minute;
+  const start = startTime ? toMinutes(startTime) : 0;
+  const end = endTime ? toMinutes(endTime) : 23 * 60 + 59;
+
+  // Horario que cruza la medianoche (ej. 18:00 → 02:00, QA-007): activo
+  // desde `start` hasta el fin del día y de 00:00 a `end`. La parte de
+  // madrugada pertenece al día en que empezó la promoción (viernes 18:00 →
+  // sábado 02:00 cuenta como "viernes" para daysOfWeek).
+  const crossesMidnight = start > end;
+  let weekday = clock.weekday;
+  if (crossesMidnight) {
+    const inLateWindow = minutesNow >= start;
+    const inEarlyWindow = minutesNow <= end;
+    if (!inLateWindow && !inEarlyWindow) return false;
+    if (inEarlyWindow && !inLateWindow) weekday = (weekday + 6) % 7;
+  } else if (minutesNow < start || minutesNow > end) {
+    return false;
   }
-  return true;
+
+  return daysOfWeek.length === 0 || daysOfWeek.includes(weekday);
 }
 
 // Promoción automática aplicada en una ronda — se regresa al POS para que
@@ -806,6 +818,20 @@ export const createSale = safeAction(async function createSale(input: CreateSale
 
     const { saleItemsData, consumption, subtotal, discountableSubtotal } = await resolveSaleItems(tx, input.items);
     await assertStockOrAllowed(tx, consumption, input.allowShortage);
+
+    // A domicilio: sin cliente con dirección no hay a dónde entregar
+    // (QA-012). El POS guarda la dirección capturada antes de cobrar.
+    if (input.orderType === "DOMICILIO") {
+      const customer = input.customerId
+        ? await tx.customer.findUnique({ where: { id: input.customerId } })
+        : null;
+      if (!customer) {
+        throw new Error("Un pedido a domicilio necesita un cliente.");
+      }
+      if (!customer.address?.trim()) {
+        throw new Error("Captura el domicilio de entrega del cliente.");
+      }
+    }
 
     // Descuento: código o manual, nunca ambos a la vez.
     if (input.discountCodeId && input.manualDiscount) {

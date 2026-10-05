@@ -267,6 +267,10 @@ export function CheckoutForm({
       setError("Busca o crea un cliente arriba antes de cobrar un pedido a domicilio.");
       return;
     }
+    if (orderType === "DOMICILIO" && !domicilioAddress.trim()) {
+      setError("Captura el domicilio de entrega (arriba, junto al cliente).");
+      return;
+    }
 
     if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID();
     const clientRequestId = requestIdRef.current;

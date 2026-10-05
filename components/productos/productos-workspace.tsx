@@ -69,8 +69,14 @@ export function ProductosWorkspace({
 
   const selectedProduct = products.find((p) => p.id === selectedProductId) ?? null;
 
+  // Los productos inactivos (ej. el catálogo de demo reemplazado por el
+  // menú real) se ocultan por default para no ensuciar la navegación
+  // (QA-027); se pueden mostrar para reactivarlos.
+  const [showInactive, setShowInactive] = useState(false);
+  const visibleProducts = showInactive ? products : products.filter((p) => p.isActive);
+
   const drilldownCategories: DrilldownCategory[] = categories
-    .filter((c) => products.some((p) => p.categoryId === c.id))
+    .filter((c) => visibleProducts.some((p) => p.categoryId === c.id))
     .map((c) => ({ id: c.id, name: c.name, icon: c.icon, parentId: c.parentId, parentName: c.parentName }));
 
   function backToBrowse() {
@@ -138,14 +144,20 @@ export function ProductosWorkspace({
           <h1 className="text-lg font-semibold">Productos</h1>
           <p className="text-sm text-muted-foreground">Bebidas con receta, merch, souvenirs y tarjetas de regalo.</p>
         </div>
-        <Button
-          onClick={() => {
-            setSelectedProductId(null);
-            setMainView("new-product");
-          }}
-        >
-          + Nuevo producto
-        </Button>
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
+            Mostrar inactivos
+          </label>
+          <Button
+            onClick={() => {
+              setSelectedProductId(null);
+              setMainView("new-product");
+            }}
+          >
+            + Nuevo producto
+          </Button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-hidden">
@@ -158,13 +170,13 @@ export function ProductosWorkspace({
             onEditCategory={setEditingCategory}
             renderLeaf={(categoryId) =>
               productGrid(
-                products.filter((p) => p.categoryId === categoryId),
+                visibleProducts.filter((p) => p.categoryId === categoryId),
                 "Sin productos en esta categoría."
               )
             }
             renderSearchResults={(q) =>
               productGrid(
-                products.filter((p) => p.name.toLowerCase().includes(q.toLowerCase())),
+                visibleProducts.filter((p) => p.name.toLowerCase().includes(q.toLowerCase())),
                 `Sin resultados para "${q}".`
               )
             }

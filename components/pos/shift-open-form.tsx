@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { ShiftType } from "@prisma/client";
 import { openShift as openShiftAction } from "@/actions/shift";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { withActionErrors } from "@/lib/action-result";
+import { zonedClock } from "@/lib/time";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const openShift = withActionErrors(openShiftAction);
@@ -20,6 +21,12 @@ export function ShiftOpenForm({
   employeeId: string;
 }) {
   const [type, setType] = useState<ShiftType>("MATUTINO");
+  // Propone el turno según la hora de la sucursal (antes siempre decía
+  // Matutino, incluso de noche). En un efecto para no desalinear el HTML
+  // del servidor al hidratar.
+  useEffect(() => {
+    if (zonedClock(new Date()).hour >= 14) setType("VESPERTINO");
+  }, []);
   const [openingCash, setOpeningCash] = useState("0");
   const [confirmingPin, setConfirmingPin] = useState("");
   const [error, setError] = useState<string | null>(null);

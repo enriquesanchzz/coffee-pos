@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatCurrency, formatUnitCost } from "@/lib/utils";
+import { roundQty } from "@/lib/units";
 import { receivePurchaseOrder as receivePurchaseOrderAction } from "@/actions/purchases";
 import { unitLabels } from "./enum-labels";
 import { withActionErrors } from "@/lib/action-result";
@@ -31,12 +32,17 @@ export function ReceiveOrderForm({
 }) {
   const router = useRouter();
   const [lines, setLines] = useState<LineState[]>(
-    order.items.map((item) => ({
-      purchaseOrderItemId: item.id,
-      receivedQuantity: String(item.pendingQuantity),
-      actualUnitCost: String(item.estimatedUnitCost),
-      expirationDate: "",
-    }))
+    // Se captura en la presentación con que se pidió (ej. cajas); el
+    // servidor convierte a baseUnit (ver receivePurchaseOrder).
+    order.items.map((item) => {
+      const size = item.unitsPerPresentation ?? 1;
+      return {
+        purchaseOrderItemId: item.id,
+        receivedQuantity: String(roundQty(item.pendingQuantity / size)),
+        actualUnitCost: String(roundQty(item.estimatedUnitCost * size)),
+        expirationDate: "",
+      };
+    })
   );
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -74,15 +80,17 @@ export function ReceiveOrderForm({
       <CardContent className="flex flex-col gap-4">
         {order.items.map((item) => {
           const line = lines.find((l) => l.purchaseOrderItemId === item.id)!;
-          const unitLabel = unitLabels[item.unit as keyof typeof unitLabels] ?? item.unit;
+          const size = item.unitsPerPresentation ?? 1;
+          const unitLabel = item.presentationName ?? unitLabels[item.unit as keyof typeof unitLabels] ?? item.unit;
           const isFullyReceived = item.pendingQuantity <= 0;
           return (
             <div key={item.id} className="flex flex-col gap-2 border-b border-border pb-3 last:border-0">
               <p className="text-sm font-medium">
-                {item.ingredientName} — pedido: {item.orderedQuantity} {unitLabel}
-                {(item.receivedQuantity ?? 0) > 0 && ` · recibido hasta ahora: ${item.receivedQuantity}`}
-                {" · "}pendiente: {item.pendingQuantity} {unitLabel} · costo estimado{" "}
-                {formatUnitCost(item.estimatedUnitCost)} por {unitLabel} (≈{" "}
+                {item.ingredientName} — pedido: {roundQty(item.orderedQuantity / size)} {unitLabel}
+                {(item.receivedQuantity ?? 0) > 0 &&
+                  ` · recibido hasta ahora: ${roundQty((item.receivedQuantity ?? 0) / size)} ${unitLabel}`}
+                {" · "}pendiente: {roundQty(item.pendingQuantity / size)} {unitLabel} · costo estimado{" "}
+                {formatUnitCost(item.estimatedUnitCost * size)} por {unitLabel} (≈{" "}
                 {formatCurrency(item.estimatedUnitCost * item.orderedQuantity)})
               </p>
               {isFullyReceived ? (
@@ -95,7 +103,7 @@ export function ReceiveOrderForm({
                       id={`qty-${item.id}`}
                       type="number"
                       min="0"
-                      max={item.pendingQuantity}
+                      max={roundQty(item.pendingQuantity / size)}
                       step="0.01"
                       className="w-28"
                       value={line.receivedQuantity}

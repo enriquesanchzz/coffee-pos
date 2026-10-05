@@ -1,6 +1,7 @@
 "use server";
 
 import { safeAction } from "@/lib/safe-action";
+import { assertMoney } from "@/lib/validation";
 import { revalidatePath } from "next/cache";
 import { Permission, PaymentMethod, Prisma, ShiftType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -43,6 +44,9 @@ export type OpenShiftInput = {
 
 export const openShift = safeAction(async function openShift(input: OpenShiftInput) {
   await assertSessionEmployee(input.cashierId);
+  // El navegador ya lo impide con min=0, pero el servidor no debe confiar
+  // en eso (QA-022).
+  assertMoney(input.openingCash, "El fondo de caja inicial", { max: 100_000 });
 
   const existing = await prisma.shift.findFirst({
     where: { branchId: input.branchId, status: "ABIERTO" },

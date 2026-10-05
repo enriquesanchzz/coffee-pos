@@ -9,6 +9,7 @@ import { getSessionEmployeeId, assertSessionEmployee, SessionExpiredError } from
 import { requirePermission, requireAdminRole } from "@/lib/permissions";
 import { recordRecipeCostSnapshot } from "@/lib/recipe-cost";
 import { getVariantRecipeDetail } from "@/lib/recipes";
+import { assertMoney, normalizeImageUrl } from "@/lib/validation";
 
 export type CreateIngredientInput = {
   employeeId: string;
@@ -19,6 +20,10 @@ export type CreateIngredientInput = {
   // Precio al cliente como extra libre; vacío/undefined = costo ÷ % de
   // food cost objetivo (ver extraPriceDelta en actions/pos.ts).
   extraUnitPrice?: number | null;
+  // Presentación de compra (ver Ingredient.purchasePresentationName); ambos
+  // vacíos = se compra en purchaseUnit/baseUnit.
+  purchasePresentationName?: string | null;
+  purchasePresentationSize?: number | null;
 };
 
 export const createIngredient = safeAction(async function createIngredient(input: CreateIngredientInput) {
@@ -41,6 +46,11 @@ export const createIngredient = safeAction(async function createIngredient(input
         input.extraUnitPrice === undefined || input.extraUnitPrice === null || input.extraUnitPrice < 0
           ? null
           : input.extraUnitPrice,
+      purchasePresentationName: input.purchasePresentationName?.trim() || null,
+      purchasePresentationSize:
+        input.purchasePresentationName?.trim() && input.purchasePresentationSize && input.purchasePresentationSize > 0
+          ? input.purchasePresentationSize
+          : null,
     },
   });
 
@@ -272,6 +282,7 @@ export const createProductWithRecipe = safeAction(async function createProductWi
     if (variant.price <= 0) {
       throw new Error(`${variant.name}: el precio debe ser mayor a cero.`);
     }
+    assertMoney(variant.price, `${variant.name}: el precio`);
     if (type === "RECETA") {
       validateLines(variant.lines, variant.name);
     }
@@ -293,7 +304,7 @@ export const createProductWithRecipe = safeAction(async function createProductWi
       : await tx.productCategory.findUniqueOrThrow({ where: { id: input.categoryId } });
 
     const product = await tx.product.create({
-      data: { name: productName, imageUrl: input.imageUrl?.trim() || null, categoryId: category.id, type },
+      data: { name: productName, imageUrl: normalizeImageUrl(input.imageUrl), categoryId: category.id, type },
     });
 
     await tx.branchProduct.create({
@@ -366,6 +377,7 @@ export const addVariantToProduct = safeAction(async function addVariantToProduct
   if (variant.price <= 0) {
     throw new Error("El precio debe ser mayor a cero.");
   }
+  assertMoney(variant.price, "El precio");
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "PRODUCTO_CREAR");
   await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
@@ -454,6 +466,7 @@ export const updateVariantRecipe = safeAction(async function updateVariantRecipe
   if (input.price <= 0) {
     throw new Error("El precio debe ser mayor a cero.");
   }
+  assertMoney(input.price, "El precio");
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "RECETA_MODIFICAR");
   await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
@@ -477,7 +490,7 @@ export const updateVariantRecipe = safeAction(async function updateVariantRecipe
     if (input.imageUrl !== undefined) {
       await tx.product.update({
         where: { id: updatedVariant.productId },
-        data: { imageUrl: input.imageUrl.trim() || null },
+        data: { imageUrl: normalizeImageUrl(input.imageUrl) },
       });
     }
 
