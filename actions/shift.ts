@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Permission, Prisma, ShiftType } from "@prisma/client";
+import { Permission, PaymentMethod, Prisma, ShiftType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { findEmployeeByPin, getSessionEmployeeId } from "@/lib/session";
 import { requirePermission } from "@/lib/permissions";
@@ -81,9 +81,14 @@ async function computeExpectedCash(
   shiftId: string,
   openingCash: number
 ) {
-  const [cashSales, retiros, ingresos] = await Promise.all([
+  const [cashSales, paymentsByMethodRows, retiros, ingresos] = await Promise.all([
     tx.salePayment.aggregate({
       where: { method: "EFECTIVO", sale: { shiftId } },
+      _sum: { amount: true },
+    }),
+    tx.salePayment.groupBy({
+      by: ["method"],
+      where: { sale: { shiftId } },
       _sum: { amount: true },
     }),
     tx.cashMovement.aggregate({
@@ -100,8 +105,14 @@ async function computeExpectedCash(
   const retirosTotal = retiros._sum.amount?.toNumber() ?? 0;
   const ingresosTotal = ingresos._sum.amount?.toNumber() ?? 0;
 
+  const paymentsByMethod: Record<PaymentMethod, number> = { EFECTIVO: 0, TARJETA: 0, TRANSFERENCIA: 0 };
+  for (const row of paymentsByMethodRows) {
+    paymentsByMethod[row.method] = row._sum.amount?.toNumber() ?? 0;
+  }
+
   return {
     cashSalesTotal,
+    paymentsByMethod,
     retirosTotal,
     ingresosTotal,
     expectedCash: openingCash + cashSalesTotal - retirosTotal + ingresosTotal,
@@ -111,10 +122,10 @@ async function computeExpectedCash(
 export async function previewShiftClose(shiftId: string) {
   const shift = await prisma.shift.findUniqueOrThrow({ where: { id: shiftId } });
   const openingCash = shift.openingCash.toNumber();
-  const { cashSalesTotal, retirosTotal, ingresosTotal, expectedCash } =
+  const { cashSalesTotal, paymentsByMethod, retirosTotal, ingresosTotal, expectedCash } =
     await computeExpectedCash(prisma, shiftId, openingCash);
 
-  return { openingCash, cashSalesTotal, retirosTotal, ingresosTotal, expectedCash };
+  return { openingCash, cashSalesTotal, paymentsByMethod, retirosTotal, ingresosTotal, expectedCash };
 }
 
 export type CloseShiftInput = {
