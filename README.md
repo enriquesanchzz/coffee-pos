@@ -51,6 +51,14 @@ email + password, no PIN — solo Ana tiene una cuenta de demo con acceso:
 
 - Ana — `ana@nomada.cafe` / `admin1234`
 
+Administración y sus módulos son exclusivos del rol ADMINISTRADOR. Si tu base
+se sembró antes de que Ana tuviera ese rol, vuelve a correr
+`npm run prisma:seed-demo` (actualiza su rol sin borrar datos).
+
+Las fechas, horas, cortes de día y promociones por horario usan la zona
+horaria de la sucursal: `America/Mexico_City` por defecto, configurable con
+`NEXT_PUBLIC_APP_TIME_ZONE` en `.env`.
+
 ## Scripts
 
 | Script | Qué hace |

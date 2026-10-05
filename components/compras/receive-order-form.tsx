@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatUnitCost } from "@/lib/utils";
 import { receivePurchaseOrder as receivePurchaseOrderAction } from "@/actions/purchases";
 import { unitLabels } from "./enum-labels";
 import { withActionErrors } from "@/lib/action-result";
@@ -81,8 +81,9 @@ export function ReceiveOrderForm({
               <p className="text-sm font-medium">
                 {item.ingredientName} — pedido: {item.orderedQuantity} {unitLabel}
                 {(item.receivedQuantity ?? 0) > 0 && ` · recibido hasta ahora: ${item.receivedQuantity}`}
-                {" · "}pendiente: {item.pendingQuantity} {unitLabel} · estimado{" "}
-                {formatCurrency(item.estimatedUnitCost)}
+                {" · "}pendiente: {item.pendingQuantity} {unitLabel} · costo estimado{" "}
+                {formatUnitCost(item.estimatedUnitCost)} por {unitLabel} (≈{" "}
+                {formatCurrency(item.estimatedUnitCost * item.orderedQuantity)})
               </p>
               {isFullyReceived ? (
                 <p className="text-xs text-muted-foreground">Ya se recibió por completo.</p>
@@ -102,7 +103,7 @@ export function ReceiveOrderForm({
                     />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <Label htmlFor={`cost-${item.id}`}>Costo real</Label>
+                    <Label htmlFor={`cost-${item.id}`}>Costo real por {unitLabel}</Label>
                     <Input
                       id={`cost-${item.id}`}
                       type="number"

@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { PurchaseOrderDetail, ActiveSupplierOption, IngredientOption } from "@/lib/purchases";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatUnitCost } from "@/lib/utils";
 import { ReceiveOrderForm } from "./receive-order-form";
 import { NewOrderForm } from "./new-order-form";
 import { CancelOrderButton } from "./cancel-order-button";
@@ -96,7 +96,15 @@ export function PurchaseOrderDetailView({
                       {unitLabel}
                     </p>
                   </div>
-                  <span>{formatCurrency(item.actualUnitCost ?? item.estimatedUnitCost)}</span>
+                  <span className="text-right">
+                    {formatUnitCost(item.actualUnitCost ?? item.estimatedUnitCost)} / {unitLabel}
+                    <span className="block text-xs text-muted-foreground">
+                      {formatCurrency(
+                        (item.actualUnitCost ?? item.estimatedUnitCost) *
+                          (item.receivedQuantity ?? item.orderedQuantity)
+                      )}
+                    </span>
+                  </span>
                 </div>
               );
             })}

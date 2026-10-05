@@ -1,7 +1,7 @@
 import type { ProfitReport } from "@/lib/reports";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateRangePicker } from "./date-range-picker";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, pluralize } from "@/lib/utils";
 
 export function UtilidadReport({ report, fromStr, toStr }: { report: ProfitReport; fromStr: string; toStr: string }) {
   return (
@@ -48,7 +48,7 @@ export function UtilidadReport({ report, fromStr, toStr }: { report: ProfitRepor
                   {line.productName} {line.variantName}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {line.quantitySold} vendidos · costo {formatCurrency(line.cogs)}
+                  {pluralize(line.quantitySold, "vendido")} · costo {formatCurrency(line.cogs)}
                 </p>
               </div>
               <div className="text-right">

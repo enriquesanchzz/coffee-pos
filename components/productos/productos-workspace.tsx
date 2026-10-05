@@ -59,11 +59,11 @@ export function ProductosWorkspace({
   const [query, setQuery] = useState("");
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [mainView, setMainView] = useState<MainView>("browse");
-  const [editingVariantId, setEditingVariantId] = useState<string | null>(null);
+  const [, setEditingVariantId] = useState<string | null>(null);
   const [editingDetail, setEditingDetail] = useState<VariantRecipeDetail | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
-  const [ingredients, setIngredients] = useState(ingredientOptions.ingredients);
+  const [ingredients] = useState(ingredientOptions.ingredients);
   const [editingCategory, setEditingCategory] = useState<DrilldownCategory | null>(null);
   const [, startTransition] = useTransition();
 

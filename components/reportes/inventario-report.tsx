@@ -1,7 +1,7 @@
 import type { InventoryReport } from "@/lib/reports";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateRangePicker } from "./date-range-picker";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatUnitCost } from "@/lib/utils";
 
 const movementTypeLabels: Record<string, string> = {
   VENTA: "Venta",
@@ -39,7 +39,7 @@ export function InventarioReport({
             <div key={item.ingredientId} className="flex items-center justify-between text-sm">
               <p>{item.name}</p>
               <p className="text-xs text-muted-foreground">
-                {item.quantity} × {formatCurrency(item.unitCost)} ={" "}
+                {item.quantity} × {formatUnitCost(item.unitCost)} ={" "}
                 <span className="font-medium text-foreground">{formatCurrency(item.value)}</span>
               </p>
             </div>

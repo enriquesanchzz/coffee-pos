@@ -11,7 +11,7 @@ import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { createProductWithRecipe as createProductWithRecipeAction, type RecipeLineInput } from "@/actions/recipes";
 import { emptyLine, initialLine, type LineDraft } from "./recipe-lines-editor";
-import { emptyModifierOption, modifierOptionsToInput, type ModifierOptionDraft } from "./modifier-options-editor";
+import { modifierOptionsToInput, type ModifierOptionDraft } from "./modifier-options-editor";
 import { VariantFields } from "./variant-fields";
 import { CategoryIconPicker } from "./category-icon-picker";
 import { withActionErrors } from "@/lib/action-result";

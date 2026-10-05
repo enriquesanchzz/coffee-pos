@@ -29,6 +29,35 @@ Claude Code) pueda retomarlo sin arqueología.
 | **Tarjeta de lealtad pública + cupón de bienvenida** (`/lealtad/[code]`, QR, cupón de 10% de un solo uso, link de WhatsApp) | ✅ Construido (rama `tarjeta-lealtad-publica`). Envío real por WhatsApp API y pases nativos de Apple/Google Wallet **no** incluidos — requieren cuentas de terceros que el negocio no tiene. Ver sección dedicada abajo. |
 | Multi-sucursal en UI (Fase 5) | ⚪ No construido. `DEFAULT_BRANCH_ID` fijo en `lib/constants.ts`. |
 
+## Correcciones del QA de octubre 2026
+
+Un QA completo contra el build de producción (`npm run build && npm start`)
+encontró y corrigió lo siguiente. Convenciones nuevas que conviene seguir:
+
+- **Server Actions = `safeAction(...)`** (`lib/safe-action.ts`). Next.js
+  oculta en producción el mensaje de cualquier `throw` de un Server Action
+  (el usuario veía "An error occurred in the Server Components render…" en
+  inglés). Las acciones de `actions/*.ts` se envuelven con `safeAction`, que
+  regresa `{ __actionError }`; en el cliente se importan como
+  `fooAction` y se envuelven con `withActionErrors` (`lib/action-result.ts`)
+  para que `try/catch` + `err.message` sigan funcionando igual. Toda acción
+  nueva debe seguir el mismo patrón.
+- **Zona horaria**: usar `lib/time.ts` (`formatDateTime`, `zonedDateKey`,
+  `zonedStartOfDay`…) en vez de `toLocaleString`/`setHours`/`getHours`.
+- **Detalle por id**: `orNotFound(...)` (`lib/not-found.ts`) para dar 404.
+- **PIN**: único entre empleados activos (`isPinTaken`) y con límite de 5
+  intentos fallidos por IP cada 5 min (`lib/rate-limit.ts`, en memoria).
+- **Anular ventas**: `cancelSale` (Caja → Ventas del turno), PIN con
+  `VENTA_CANCELAR` + motivo (`Sale.cancelReason`); revierte inventario,
+  cupón y sello. Una mesa solo puede tener una cuenta abierta.
+- **Extras libres**: se cobran con `Ingredient.extraUnitPrice` (editable en
+  Inventario) o, si no tiene, costo ÷ % de food cost objetivo — ya no a costo.
+- **`updateCustomer` es parcial**: un campo omitido se conserva.
+- Seed demo: Ana es ADMINISTRADOR (antes GERENTE, no podía entrar a
+  Administración). Layout responsive (sidebar oculto bajo `xl`), diálogos
+  con Esc/foco, tarjetas operables con teclado, resumen con cambio a
+  entregar al cobrar, ESLint configurado (`.eslintrc.json`).
+
 ## Qué se verificó en esta sesión
 
 No solo se escribió código: se probó de punta a punta contra una base

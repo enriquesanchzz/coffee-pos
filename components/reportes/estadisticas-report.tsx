@@ -1,7 +1,7 @@
 import type { StatsReport } from "@/lib/reports";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateRangePicker } from "./date-range-picker";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, pluralize } from "@/lib/utils";
 import { formatDateTime } from "@/lib/time";
 
 // Mismas etiquetas que components/pos/cart-panel.tsx (no exportadas desde
@@ -66,7 +66,7 @@ export function EstadisticasReport({
                 {index + 1}. {product.productName} {product.variantName}
               </p>
               <p className="text-xs text-muted-foreground">
-                {product.quantitySold} vendidos · {formatCurrency(product.revenue)}
+                {pluralize(product.quantitySold, "vendido")} · {formatCurrency(product.revenue)}
               </p>
             </div>
           ))}

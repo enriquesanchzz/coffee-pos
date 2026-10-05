@@ -1,7 +1,6 @@
 import type { VariantTemperature } from "@prisma/client";
 import { prisma } from "./prisma";
 import { DEFAULT_BRANCH_ID, DEFAULT_STOCK_LOCATION_ID } from "./constants";
-import { getTargetFoodCostPercent } from "./recipes";
 
 export type { VariantTemperature };
 
@@ -220,7 +219,12 @@ export async function getExtraIngredientOptions(): Promise<ExtraIngredientOption
       include: { suppliers: { where: { isSelected: true }, take: 1 } },
     }),
     prisma.unitConversion.findMany(),
-    getTargetFoodCostPercent(),
+    // Mismo default (30%) que getTargetFoodCostPercent en lib/recipes.ts —
+    // no se importa de ahí porque este módulo también lo cargan componentes
+    // cliente (tipos) y lib/recipes arrastra código server-only.
+    prisma.branch
+      .findUnique({ where: { id: DEFAULT_BRANCH_ID } })
+      .then((branch) => branch?.targetFoodCostPercent?.toNumber() ?? 30),
   ]);
 
   return ingredients.map((ingredient) => {
