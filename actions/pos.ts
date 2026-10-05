@@ -198,11 +198,22 @@ function isPromotionActiveNow(
   return true;
 }
 
+// Promoción automática aplicada en una ronda — se regresa al POS para que
+// el cajero vea por qué cambió el total (antes el subtotal bajaba o subía
+// sin ninguna explicación).
+export type AppliedPromotion = { name: string; saving: number };
+
 async function applyPromotions(
   tx: Prisma.TransactionClient,
   saleItemsData: ResolvedSaleItem[],
   now: Date
-): Promise<Prisma.Decimal> {
+): Promise<{ discountableSubtotal: Prisma.Decimal; applied: AppliedPromotion[] }> {
+  const savings = new Map<string, Prisma.Decimal>();
+  function recordSaving(name: string, saving: Prisma.Decimal) {
+    if (saving.lessThanOrEqualTo(0)) return;
+    savings.set(name, (savings.get(name) ?? new Prisma.Decimal(0)).add(saving));
+  }
+
   // Una línea "modificada" no califica (combo/2x1/día temático), pero un
   // grupo de modificadores como "Tipo de leche" con su opción base
   // seleccionada (ej. "Entera", priceDelta=0, sin sustituir ingrediente)
@@ -222,15 +233,19 @@ async function applyPromotions(
     where: { isActive: true },
     include: { items: { include: { productVariant: true } } },
   });
-  const activeCombos = combos.filter((c) => isPromotionActiveNow(c.daysOfWeek, c.startTime, c.endTime, now));
-
-  function comboDiscount(combo: (typeof activeCombos)[number]) {
+  function comboDiscount(combo: (typeof combos)[number]) {
     const normalTotal = combo.items.reduce(
       (sum, item) => sum.add(item.productVariant.price.mul(item.quantity)),
       new Prisma.Decimal(0)
     );
     return normalTotal.sub(combo.price);
   }
+  // Un paquete solo se aplica si de verdad abarata: uno guardado con
+  // precio >= a sus productos por separado (posible antes de validar al
+  // crearlo) cobraba DE MÁS automáticamente sin que el cajero lo notara.
+  const activeCombos = combos.filter(
+    (c) => isPromotionActiveNow(c.daysOfWeek, c.startTime, c.endTime, now) && comboDiscount(c).greaterThan(0)
+  );
   activeCombos.sort((a, b) => comboDiscount(b).sub(comboDiscount(a)).toNumber());
 
   for (const combo of activeCombos) {
@@ -259,6 +274,8 @@ async function applyPromotions(
       (sum, idx) => sum.add(saleItemsData[idx].lineTotal),
       new Prisma.Decimal(0)
     );
+    if (originalTotal.lessThanOrEqualTo(combo.price)) continue;
+    recordSaving(combo.name, originalTotal.sub(combo.price));
     let assigned = new Prisma.Decimal(0);
     matchedIndices.forEach((idx, i) => {
       const isLast = i === matchedIndices.length - 1;
@@ -280,13 +297,21 @@ async function applyPromotions(
   const activeDosPorUno = dosPorUnoPromotions.filter((p) =>
     isPromotionActiveNow(p.daysOfWeek, p.startTime, p.endTime, now)
   );
-  const dosPorUnoVariantIds = new Set(activeDosPorUno.flatMap((p) => p.variants.map((v) => v.productVariantId)));
+  const dosPorUnoByVariantId = new Map<string, (typeof activeDosPorUno)[number]>();
+  for (const promo of activeDosPorUno) {
+    for (const v of promo.variants) {
+      if (!dosPorUnoByVariantId.has(v.productVariantId)) dosPorUnoByVariantId.set(v.productVariantId, promo);
+    }
+  }
 
   for (const item of saleItemsData) {
     if (!isEligible(item)) continue;
-    if (!dosPorUnoVariantIds.has(item.productVariantId)) continue;
+    const promo = dosPorUnoByVariantId.get(item.productVariantId);
+    if (!promo) continue;
     const chargeableQuantity = Math.ceil(item.quantity / 2);
-    item.lineTotal = item.unitPrice.mul(chargeableQuantity);
+    const newTotal = item.unitPrice.mul(chargeableQuantity);
+    recordSaving(promo.name, item.lineTotal.sub(newTotal));
+    item.lineTotal = newTotal;
     item.hasAutomaticPromotion = true;
   }
 
@@ -314,16 +339,20 @@ async function applyPromotions(
     const promo = diaTematicoByVariantId.get(item.productVariantId);
     if (!promo || !promo.discountType || !promo.discountValue) continue;
     const discount = computeDiscount(promo.discountType, promo.discountValue, item.lineTotal);
-    item.lineTotal = Prisma.Decimal.max(0, item.lineTotal.sub(discount));
+    const newTotal = Prisma.Decimal.max(0, item.lineTotal.sub(discount));
+    recordSaving(promo.name, item.lineTotal.sub(newTotal));
+    item.lineTotal = newTotal;
     item.hasAutomaticPromotion = true;
   }
 
   // Subtotal "descontable" por DiscountCode/ManualDiscount — excluye las
   // líneas que ya recibieron una promoción automática, para que no se
   // apilen dos descuentos sobre la misma línea.
-  return saleItemsData
+  const discountableSubtotal = saleItemsData
     .filter((item) => !item.hasAutomaticPromotion)
     .reduce((sum, item) => sum.add(item.lineTotal), new Prisma.Decimal(0));
+  const applied = [...savings].map(([name, saving]) => ({ name, saving: saving.toNumber() }));
+  return { discountableSubtotal, applied };
 }
 
 async function resolveSaleItems(
@@ -334,6 +363,7 @@ async function resolveSaleItems(
   consumption: Map<string, Prisma.Decimal>;
   subtotal: Prisma.Decimal;
   discountableSubtotal: Prisma.Decimal;
+  appliedPromotions: AppliedPromotion[];
 }> {
   const ingredientInfoCache = new Map<string, { baseUnit: UnitOfMeasure; categoryId: string }>();
   const consumption = new Map<string, Prisma.Decimal>();
@@ -529,10 +559,14 @@ async function resolveSaleItems(
     }
   }
 
-  const discountableSubtotal = await applyPromotions(tx, saleItemsData, new Date());
+  const { discountableSubtotal, applied: appliedPromotions } = await applyPromotions(
+    tx,
+    saleItemsData,
+    new Date()
+  );
   const subtotal = saleItemsData.reduce((sum, item) => sum.add(item.lineTotal), new Prisma.Decimal(0));
 
-  return { saleItemsData, consumption, subtotal, discountableSubtotal };
+  return { saleItemsData, consumption, subtotal, discountableSubtotal, appliedPromotions };
 }
 
 // Crea los SaleItem (+ modificadores + extras libres) de una ronda de
@@ -669,16 +703,20 @@ function serializeSale(sale: {
 export const previewSaleTotal = safeAction(async function previewSaleTotal(
   employeeId: string,
   items: CreateSaleItemInput[]
-): Promise<{ subtotal: number; discountableSubtotal: number }> {
+): Promise<{ subtotal: number; discountableSubtotal: number; appliedPromotions: AppliedPromotion[] }> {
   if (employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
   if (items.length === 0) {
-    return { subtotal: 0, discountableSubtotal: 0 };
+    return { subtotal: 0, discountableSubtotal: 0, appliedPromotions: [] };
   }
 
-  const { subtotal, discountableSubtotal } = await resolveSaleItems(prisma, items);
-  return { subtotal: subtotal.toNumber(), discountableSubtotal: discountableSubtotal.toNumber() };
+  const { subtotal, discountableSubtotal, appliedPromotions } = await resolveSaleItems(prisma, items);
+  return {
+    subtotal: subtotal.toNumber(),
+    discountableSubtotal: discountableSubtotal.toNumber(),
+    appliedPromotions,
+  };
 });
 
 export const createSale = safeAction(async function createSale(input: CreateSaleInput) {

@@ -54,9 +54,30 @@ function validateComboInput(input: { name: string; price: number; items: ComboIt
   }
 }
 
+// Un paquete debe costar MENOS que sus productos por separado — uno más
+// caro se aplicaba solo en el POS y cobraba de más sin que el cajero lo
+// notara (QA-002). applyPromotions también lo ignora por si quedó alguno
+// guardado de antes.
+async function assertComboIsCheaper(price: number, items: ComboItemInput[]) {
+  const variants = await prisma.productVariant.findMany({
+    where: { id: { in: items.map((item) => item.productVariantId) } },
+  });
+  const priceById = new Map(variants.map((v) => [v.id, v.price.toNumber()]));
+  const normalTotal = items.reduce(
+    (sum, item) => sum + (priceById.get(item.productVariantId) ?? 0) * item.quantity,
+    0
+  );
+  if (price >= normalTotal) {
+    throw new Error(
+      `El paquete debe costar menos que sus productos por separado ($${normalTotal.toFixed(2)}).`
+    );
+  }
+}
+
 export const createCombo = safeAction(async function createCombo(input: CreateComboInput) {
   await assertActor(input.employeeId);
   validateComboInput(input);
+  await assertComboIsCheaper(input.price, input.items);
 
   const variants = await prisma.productVariant.findMany({
     where: { id: { in: input.items.map((item) => item.productVariantId) } },
@@ -90,6 +111,7 @@ export type UpdateComboInput = CreateComboInput & { comboId: string; isActive: b
 export const updateCombo = safeAction(async function updateCombo(input: UpdateComboInput) {
   await assertActor(input.employeeId);
   validateComboInput(input);
+  await assertComboIsCheaper(input.price, input.items);
 
   await prisma.$transaction(async (tx) => {
     await tx.combo.update({

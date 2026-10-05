@@ -106,8 +106,33 @@ export type UpdateEmployeeInput = {
   isCashier: boolean;
 };
 
+// Administración (y por lo tanto la gestión de empleados) es exclusiva del
+// rol ADMINISTRADOR: si el único administrador activo pierde el rol o se
+// desactiva, nadie puede volver a entrar a corregirlo desde la app
+// (QA-001). Se valida contra la base, no contra lo que diga el cliente.
+async function assertKeepsAnAdmin(employeeId: string, newRoleId: string, willBeActive: boolean) {
+  const adminRole = await prisma.role.findUnique({ where: { name: "ADMINISTRADOR" } });
+  if (!adminRole) return;
+  const staysAdmin = newRoleId === adminRole.id && willBeActive;
+  if (staysAdmin) return;
+
+  const otherActiveAdmins = await prisma.employeeBranch.count({
+    where: {
+      branchId: DEFAULT_BRANCH_ID,
+      roleId: adminRole.id,
+      employeeId: { not: employeeId },
+      employee: { isActive: true },
+    },
+  });
+  if (otherActiveAdmins === 0) {
+    throw new Error(
+      "Debe quedar al menos un administrador activo. Asigna el rol ADMINISTRADOR a otra persona antes de cambiar este."
+    );
+  }
+}
+
 export const updateEmployee = safeAction(async function updateEmployee(input: UpdateEmployeeInput) {
-  await requireEmployeeManager("EMPLEADO_MODIFICAR");
+  const actor = await requireEmployeeManager("EMPLEADO_MODIFICAR");
 
   const name = input.name.trim();
   if (!name) {
@@ -130,6 +155,7 @@ export const updateEmployee = safeAction(async function updateEmployee(input: Up
   if (pin && (await isPinTaken(pin, input.employeeId))) {
     throw new Error(PIN_TAKEN_MESSAGE);
   }
+  await assertKeepsAnAdmin(input.employeeId, input.roleId, input.isActive);
 
   const newPinHash = pin ? await hashSecret(pin) : undefined;
   const newPasswordHash = password ? await hashSecret(password) : undefined;
@@ -162,4 +188,7 @@ export const updateEmployee = safeAction(async function updateEmployee(input: Up
   });
 
   revalidatePath("/empleados");
+  // Si alguien se quitó a sí mismo el rol o el acceso, el formulario debe
+  // explicarlo en vez de que la siguiente página lo mande a /pos sin aviso.
+  return { changedOwnAccess: actor?.id === input.employeeId };
 });

@@ -20,7 +20,7 @@ export default async function EditarEmpleadoPage({
 
   return (
     <AuthenticatedShell isAdmin employeeName={actor.name}>
-      <EmployeeForm roles={roles} employee={employee} />
+      <EmployeeForm roles={roles} employee={employee} currentEmployeeId={actor.id} />
     </AuthenticatedShell>
   );
 }

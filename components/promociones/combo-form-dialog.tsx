@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import type { ComboListItem, VariantOption } from "@/lib/promotions";
+import { cn, formatCurrency } from "@/lib/utils";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +48,13 @@ export function ComboFormDialog({
   const [name, setName] = useState(combo?.name ?? "");
   const [price, setPrice] = useState(combo ? String(combo.price) : "");
   const [items, setItems] = useState<ComboItemDraft[]>(itemsFromCombo(combo));
+  // Vista previa del ahorro (el servidor valida lo mismo al guardar).
+  const priceByVariantId = new Map(variants.map((v) => [v.id, v.price]));
+  const normalTotal = items.reduce(
+    (sum, item) => sum + (priceByVariantId.get(item.productVariantId) ?? 0) * (Number(item.quantity) || 0),
+    0
+  );
+  const saving = normalTotal - (Number(price) || 0);
   const [daysOfWeek, setDaysOfWeek] = useState<number[]>(combo?.daysOfWeek ?? []);
   const [startTime, setStartTime] = useState(combo?.startTime ?? "");
   const [endTime, setEndTime] = useState(combo?.endTime ?? "");
@@ -112,6 +120,16 @@ export function ComboFormDialog({
           <Label>Productos combinados (mínimo 2)</Label>
           <ComboItemsEditor items={items} onChange={setItems} variants={variants} />
         </div>
+
+        {normalTotal > 0 && (
+          <p className={cn("text-sm", saving > 0 ? "text-muted-foreground" : "text-destructive")}>
+            Precio normal {formatCurrency(normalTotal)}
+            {Number(price) > 0 &&
+              (saving > 0
+                ? ` · el cliente ahorra ${formatCurrency(saving)}`
+                : " · el paquete debe costar menos que sus productos por separado")}
+          </p>
+        )}
 
         <div className="flex flex-col gap-1">
           <Label>Días en que aplica</Label>

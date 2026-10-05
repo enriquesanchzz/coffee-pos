@@ -8,7 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { cn, formatCurrency, posAccentClass, posAccentBorderClass } from "@/lib/utils";
-import { createSale as createSaleAction, closeTab as closeTabAction, previewSaleTotal as previewSaleTotalAction } from "@/actions/pos";
+import {
+  createSale as createSaleAction,
+  closeTab as closeTabAction,
+  previewSaleTotal as previewSaleTotalAction,
+  type AppliedPromotion,
+} from "@/actions/pos";
 import { findDiscountCodeByCode as findDiscountCodeByCodeAction, type FoundDiscountCode } from "@/actions/discounts";
 import { updateCustomer as updateCustomerAction } from "@/actions/customers";
 import type { CustomerOption } from "@/lib/customers";
@@ -119,21 +124,24 @@ export function CheckoutForm({
   // si el combo se compone con el total ya acumulado, el servidor igual
   // valida el monto exacto al cobrar y rechaza un desajuste con seguridad.
   const [verifiedDiscountableSubtotal, setVerifiedDiscountableSubtotal] = useState<number | null>(null);
+  const [appliedPromotions, setAppliedPromotions] = useState<AppliedPromotion[]>([]);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
   useEffect(() => {
     if (lines.length === 0) {
       setVerifiedSubtotal(0);
       setVerifiedDiscountableSubtotal(0);
+      setAppliedPromotions([]);
       return;
     }
     let cancelled = false;
     setIsPreviewLoading(true);
     previewSaleTotal(employeeId, lines.map(cartLineToSaleItemInput))
-      .then(({ subtotal: serverSubtotal, discountableSubtotal }) => {
+      .then(({ subtotal: serverSubtotal, discountableSubtotal, appliedPromotions: promos }) => {
         if (!cancelled) {
           setVerifiedSubtotal(serverSubtotal);
           setVerifiedDiscountableSubtotal(discountableSubtotal);
+          setAppliedPromotions(promos);
         }
       })
       .catch(() => {
@@ -473,6 +481,12 @@ export function CheckoutForm({
           <span>Subtotal</span>
           <span>{formatCurrency(rawSubtotal)}</span>
         </div>
+        {appliedPromotions.map((promo) => (
+          <div key={promo.name} className="flex items-center justify-between text-emerald-700">
+            <span>Promoción: {promo.name}</span>
+            <span>ya incluye −{formatCurrency(promo.saving)}</span>
+          </div>
+        ))}
         {discountPreview > 0 && (
           <div className="flex items-center justify-between text-muted-foreground">
             <span>Descuento</span>
