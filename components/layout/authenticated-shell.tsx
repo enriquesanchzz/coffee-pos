@@ -22,7 +22,7 @@ export function AuthenticatedShell({
     <div className="flex h-screen flex-col">
       <div className="flex flex-1 overflow-hidden">
         <Sidebar isAdmin={isAdmin} />
-        <div className={cn("flex-1", contentClassName ?? "overflow-y-auto")}>{children}</div>
+        <main className={cn("min-w-0 flex-1", contentClassName ?? "overflow-y-auto")}>{children}</main>
       </div>
       <SessionBar employeeName={employeeName} isAdmin={isAdmin} />
     </div>

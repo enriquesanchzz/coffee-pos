@@ -1,6 +1,7 @@
 import type { VariantTemperature } from "@prisma/client";
 import { prisma } from "./prisma";
 import { DEFAULT_BRANCH_ID, DEFAULT_STOCK_LOCATION_ID } from "./constants";
+import { getTargetFoodCostPercent } from "./recipes";
 
 export type { VariantTemperature };
 
@@ -196,6 +197,9 @@ export type ExtraIngredientOption = {
   // cliente sea correcto sin que el cliente necesite conocer factores de
   // conversión.
   unitCost: number;
+  // Precio al cliente por la misma unidad que unitCost: extraUnitPrice del
+  // ingrediente, o unitCost ÷ % de food cost objetivo si no tiene.
+  unitPrice: number;
   // Dosis estándar de captura (ej. "1 pump" de vainilla, "30 ml" de
   // leche) — el diálogo de "agregar otro ingrediente" la usa como valor
   // inicial en vez de "1" del baseUnit crudo. null = sigue usando
@@ -206,16 +210,17 @@ export type ExtraIngredientOption = {
 
 // Para "agregar otro ingrediente" libre en el POS (fuera de los
 // ModifierOption curados) — el precio que ve el barista aquí es solo vista
-// previa, actions/pos.ts recalcula el precio real con el mismo costo al
+// previa, actions/pos.ts recalcula el precio real con el mismo criterio al
 // confirmar la venta.
 export async function getExtraIngredientOptions(): Promise<ExtraIngredientOption[]> {
-  const [ingredients, conversions] = await Promise.all([
+  const [ingredients, conversions, targetFoodCostPercent] = await Promise.all([
     prisma.ingredient.findMany({
       where: { isActive: true },
       orderBy: { name: "asc" },
       include: { suppliers: { where: { isSelected: true }, take: 1 } },
     }),
     prisma.unitConversion.findMany(),
+    getTargetFoodCostPercent(),
   ]);
 
   return ingredients.map((ingredient) => {
@@ -229,12 +234,18 @@ export async function getExtraIngredientOptions(): Promise<ExtraIngredientOption
         )?.factor
       : null;
     const unitCost = doseFactor ? costPerBaseUnit * doseFactor.toNumber() : costPerBaseUnit;
+    // Mismo criterio que extraPriceDelta en actions/pos.ts (el servidor
+    // recalcula el precio real al cobrar; esto es la vista previa).
+    const unitPrice =
+      ingredient.extraUnitPrice?.toNumber() ??
+      Math.round((unitCost / (targetFoodCostPercent / 100)) * 100) / 100;
 
     return {
       id: ingredient.id,
       name: ingredient.name,
       baseUnit: ingredient.baseUnit,
       unitCost,
+      unitPrice,
       standardDoseQuantity: ingredient.standardDoseQuantity?.toNumber() ?? null,
       standardDoseUnit: ingredient.standardDoseUnit,
     };

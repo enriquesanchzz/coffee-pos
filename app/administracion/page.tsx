@@ -9,6 +9,7 @@ import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
+import { formatTime, zonedDateKey, zonedEndOfDay, zonedStartOfDay } from "@/lib/time";
 
 // Accesos rápidos — Empleados y Configuración ya viven en sus propias
 // rutas (ver Sidebar); Descuentos/Promociones se agregan aquí cuando
@@ -30,10 +31,10 @@ export default async function AdministracionPage() {
   if (!actor) redirect("/administracion/login");
   if (resolveRoleName(actor, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
 
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date();
-  endOfDay.setHours(23, 59, 59, 999);
+  // "Hoy" en la zona horaria de la sucursal, no la del servidor.
+  const todayKey = zonedDateKey(new Date());
+  const startOfDay = zonedStartOfDay(todayKey);
+  const endOfDay = zonedEndOfDay(todayKey);
 
   const [todayStats, shift, inventory] = await Promise.all([
     getStatsReport(startOfDay, endOfDay),
@@ -80,10 +81,7 @@ export default async function AdministracionPage() {
                   </p>
                   <p className="text-xs text-muted-foreground">
                     desde las{" "}
-                    {new Date(shift.openedAt).toLocaleTimeString("es-MX", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    {formatTime(shift.openedAt, { hour: "2-digit", minute: "2-digit" })}
                   </p>
                 </>
               ) : (

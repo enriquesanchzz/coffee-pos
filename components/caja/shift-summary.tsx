@@ -1,12 +1,26 @@
 "use client";
 
 import { useState } from "react";
-import type { ShiftDetail } from "@/lib/shift";
+import type { ShiftDetail, ShiftSaleRow } from "@/lib/shift";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils";
 import { CashMovementDialog } from "./cash-movement-dialog";
 import { CloseShiftDialog } from "./close-shift-dialog";
+import { CancelSaleDialog } from "./cancel-sale-dialog";
+
+const orderTypeLabels: Record<string, string> = {
+  CONSUMO_LOCAL: "Mesa",
+  PARA_LLEVAR: "Para llevar",
+  DOMICILIO: "A domicilio",
+};
+
+const paymentMethodLabels: Record<string, string> = {
+  EFECTIVO: "Efectivo",
+  TARJETA: "Tarjeta",
+  TRANSFERENCIA: "Transferencia",
+};
+import { formatDateTime } from "@/lib/time";
 
 export function ShiftSummary({
   shift,
@@ -17,6 +31,7 @@ export function ShiftSummary({
 }) {
   const [movementOpen, setMovementOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
+  const [saleToCancel, setSaleToCancel] = useState<ShiftSaleRow | null>(null);
 
   return (
     <div className="mx-auto flex h-full max-w-2xl flex-col gap-4 overflow-y-auto p-6">
@@ -26,7 +41,7 @@ export function ShiftSummary({
         </p>
         <p className="text-xs text-muted-foreground">
           Turno {shift.type.toLowerCase()} — abierto{" "}
-          {new Date(shift.openedAt).toLocaleString("es-MX")}
+          {formatDateTime(shift.openedAt)}
         </p>
       </div>
 
@@ -48,6 +63,40 @@ export function ShiftSummary({
 
       <Card>
         <CardHeader>
+          <CardTitle>Ventas del turno</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2">
+          {shift.sales.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin ventas todavía.</p>
+          ) : (
+            shift.sales.map((sale) => (
+              <div key={sale.id} className="flex items-center justify-between gap-3 text-sm">
+                <div className="min-w-0">
+                  <p>
+                    {sale.status === "ABIERTA"
+                      ? `Cuenta abierta · Mesa ${sale.tableNumber ?? "—"}`
+                      : `${orderTypeLabels[sale.orderType] ?? sale.orderType}${
+                          sale.tableNumber ? ` ${sale.tableNumber}` : ""
+                        } · ${sale.paymentMethods.map((m) => paymentMethodLabels[m] ?? m).join(", ")}`}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {sale.employeeName} — {formatDateTime(sale.createdAt)}
+                  </p>
+                </div>
+                <div className="flex flex-shrink-0 items-center gap-3">
+                  <span>{formatCurrency(sale.total + sale.tipAmount)}</span>
+                  <Button size="sm" variant="outline" onClick={() => setSaleToCancel(sale)}>
+                    {sale.status === "ABIERTA" ? "Cancelar" : "Anular"}
+                  </Button>
+                </div>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Movimientos de efectivo</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
@@ -62,7 +111,7 @@ export function ShiftSummary({
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {movement.employeeName} —{" "}
-                    {new Date(movement.createdAt).toLocaleString("es-MX")}
+                    {formatDateTime(movement.createdAt)}
                   </p>
                 </div>
                 <span>
@@ -87,6 +136,15 @@ export function ShiftSummary({
       <CashMovementDialog
         open={movementOpen}
         onOpenChange={setMovementOpen}
+        shiftId={shift.id}
+        employeeId={employee.id}
+      />
+      <CancelSaleDialog
+        sale={saleToCancel}
+        onOpenChange={(open) => {
+          if (!open) setSaleToCancel(null);
+        }}
+        branchId={shift.branchId}
         shiftId={shift.id}
         employeeId={employee.id}
       />

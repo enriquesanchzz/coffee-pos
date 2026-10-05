@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { PaymentMethod, DiscountType, ManualDiscountReason, type CustomerGender } from "@prisma/client";
+import { PaymentMethod, DiscountType, ManualDiscountReason } from "@prisma/client";
 import type { DomicilioOrigen } from "@prisma/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -259,13 +259,9 @@ export function CheckoutForm({
             employeeId,
             customerId: selectedCustomer.id,
             name: selectedCustomer.name,
-            phone: selectedCustomer.phone ?? undefined,
-            address: domicilioAddress.trim() || undefined,
-            // updateCustomer reemplaza el registro completo — sin
-            // reenviar estos dos, actualizar solo la dirección los
-            // borraría (ver nota en lib/customers.ts CustomerOption).
-            birthDate: selectedCustomer.birthDate ?? undefined,
-            gender: (selectedCustomer.gender as CustomerGender | null) ?? undefined,
+            // updateCustomer es parcial: solo cambia el domicilio, el resto
+            // de los datos del cliente se conserva.
+            address: domicilioAddress.trim(),
           });
         }
 

@@ -157,7 +157,7 @@ export function CartPanel({
 
   if (view === "checkout") {
     return (
-      <div className="flex h-full flex-col overflow-y-auto border-l border-border">
+      <div className="flex h-full flex-col overflow-y-auto border-t border-border md:border-l md:border-t-0">
         <CheckoutForm
           branchId={branchId}
           shiftId={shiftId}
@@ -174,7 +174,7 @@ export function CartPanel({
   }
 
   return (
-    <div className="flex h-full flex-col border-l border-border">
+    <div className="flex h-full min-h-0 flex-col border-t border-border md:border-l md:border-t-0">
       <div className="flex flex-col gap-3 border-b border-border p-4">
         <p className="font-semibold">Cuenta actual</p>
         <div className="flex gap-1.5">

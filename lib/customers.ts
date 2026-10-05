@@ -44,6 +44,7 @@ export type CustomerDetail = {
   name: string;
   phone: string | null;
   email: string | null;
+  address: string | null;
   birthDate: string | null;
   gender: string | null;
   stamps: number;
@@ -57,7 +58,7 @@ export async function getCustomerDetail(id: string): Promise<CustomerDetail> {
     where: { id },
     include: {
       loyaltyCard: { include: { tier: true } },
-      sales: { orderBy: { createdAt: "desc" }, take: 20 },
+      sales: { where: { status: "COMPLETADA" }, orderBy: { createdAt: "desc" }, take: 20 },
     },
   });
 
@@ -93,6 +94,7 @@ export async function getCustomerDetail(id: string): Promise<CustomerDetail> {
     name: customer.name,
     phone: customer.phone,
     email: customer.email,
+    address: customer.address,
     birthDate: customer.birthDate?.toISOString() ?? null,
     gender: customer.gender,
     stamps: customer.loyaltyCard?.stamps ?? 0,
@@ -113,11 +115,9 @@ export type CustomerOption = {
   phone: string | null;
   address: string | null;
   loyaltyCode: string | null;
-  // Se cargan aunque el picker de checkout no los muestre: updateCustomer()
-  // hace reemplazo completo (el formulario de Administración depende de eso
-  // para poder limpiar un campo), así que cualquier caller que solo quiera
-  // tocar un campo (ver checkout-dialog.tsx, actualiza domicilioAddress)
-  // tiene que reenviar estos dos de vuelta o los borra sin querer.
+  // updateCustomer() ya es parcial (un campo omitido se conserva), así que
+  // ya no hace falta reenviarlos; se siguen cargando por si el picker los
+  // necesita mostrar.
   birthDate: string | null;
   gender: string | null;
 };

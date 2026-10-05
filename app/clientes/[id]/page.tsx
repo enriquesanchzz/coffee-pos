@@ -7,6 +7,8 @@ import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CustomerForm } from "@/components/clientes/customer-form";
 import { formatCurrency } from "@/lib/utils";
+import { formatDateTime } from "@/lib/time";
+import { orNotFound } from "@/lib/not-found";
 
 export default async function DetalleClientePage({
   params,
@@ -21,7 +23,7 @@ export default async function DetalleClientePage({
   }
 
   const { id } = await params;
-  const customer = await getCustomerDetail(id);
+  const customer = await orNotFound(getCustomerDetail(id));
 
   return (
     <AuthenticatedShell isAdmin employeeName={employee.name}>
@@ -71,7 +73,7 @@ export default async function DetalleClientePage({
               )}
               {customer.sales.map((sale) => (
                 <div key={sale.id} className="flex items-center justify-between text-sm">
-                  <span>{new Date(sale.createdAt).toLocaleString("es-MX")}</span>
+                  <span>{formatDateTime(sale.createdAt)}</span>
                   <span>{formatCurrency(sale.total)}</span>
                 </div>
               ))}

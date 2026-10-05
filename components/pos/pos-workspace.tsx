@@ -60,9 +60,11 @@ export function PosWorkspace({
   }, [activeTabId]);
 
   return (
-    <div className="grid h-full grid-cols-[minmax(0,1fr)_360px]">
+    // Celular: catálogo arriba y cuenta abajo. Tablet: cuenta a 320px.
+    // Escritorio: 360px (el drawer de ProductDialog se alinea a ese ancho).
+    <div className="grid h-full grid-rows-[minmax(0,1fr)_minmax(0,45%)] md:grid-cols-[minmax(0,1fr)_320px] md:grid-rows-1 lg:grid-cols-[minmax(0,1fr)_360px]">
       <div className="flex h-full min-w-0 flex-col">
-        <div className="flex items-center justify-end gap-4 border-b border-border px-5 py-3">
+        <div className="flex items-center justify-end gap-4 border-b border-border px-3 py-2 sm:px-5 sm:py-3">
           <button
             type="button"
             className="text-sm text-muted-foreground hover:underline"

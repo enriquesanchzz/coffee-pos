@@ -106,7 +106,7 @@ export function CategoryDrilldown({
 
   return (
     <div className="flex h-full">
-      <nav className="flex w-48 flex-shrink-0 flex-col gap-1 overflow-y-auto p-3">
+      <nav className="flex w-36 flex-shrink-0 flex-col gap-1 overflow-y-auto p-2 sm:w-48 sm:p-3">
         {topEntries.map((entry) => {
           const id = entry.kind === "standalone" ? entry.category.id : entry.id;
           const name = entry.kind === "standalone" ? entry.category.name : entry.name;
@@ -139,7 +139,7 @@ export function CategoryDrilldown({
         })}
       </nav>
 
-      <div className="flex flex-1 flex-col gap-4 overflow-hidden p-4">
+      <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-hidden p-2 sm:gap-4 sm:p-4">
         <div className="relative max-w-sm flex-shrink-0">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -156,7 +156,7 @@ export function CategoryDrilldown({
           ) : !activeTop ? (
             <p className="text-sm text-muted-foreground">No hay categorías todavía.</p>
           ) : activeTop.kind === "parent" && activeSubId === null ? (
-            <div className="grid auto-rows-min grid-cols-2 gap-4 pr-1 sm:grid-cols-3 lg:grid-cols-4">
+            <div className="grid auto-rows-min grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-3 pr-1 sm:gap-4">
               {activeTop.children.map((child) => (
                 <Card
                   key={child.id}

@@ -7,6 +7,28 @@ import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getSessionEmployeeId } from "@/lib/session";
 import { requirePermission } from "@/lib/permissions";
+import { isValidEmail } from "@/lib/utils";
+
+// Validaciones comunes de alta/edición — el teléfono es @unique en la base;
+// sin este chequeo el duplicado solo llegaba como error genérico de Prisma.
+async function validateContact(
+  input: { phone?: string; email?: string },
+  excludeCustomerId?: string
+) {
+  const email = input.email?.trim();
+  if (email && !isValidEmail(email)) {
+    throw new Error("El email no es válido.");
+  }
+  const phone = input.phone?.trim();
+  if (phone) {
+    const existing = await prisma.customer.findFirst({
+      where: { phone, ...(excludeCustomerId ? { id: { not: excludeCustomerId } } : {}) },
+    });
+    if (existing) {
+      throw new Error(`Ya existe un cliente con ese teléfono (${existing.name}).`);
+    }
+  }
+}
 
 export type CreateCustomerInput = {
   employeeId: string;
@@ -37,6 +59,7 @@ export const createCustomer = safeAction(async function createCustomer(input: Cr
   }
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "CLIENTE_CONFIGURAR");
+  await validateContact(input);
 
   const { customer, loyaltyCard, welcomeCoupon } = await prisma.$transaction(async (tx) => {
     const customer = await tx.customer.create({
@@ -84,6 +107,10 @@ export const createCustomer = safeAction(async function createCustomer(input: Cr
   };
 });
 
+// Actualización parcial: un campo omitido (undefined) se conserva tal cual;
+// una cadena vacía (o null en gender) lo borra. Antes reemplazaba el
+// registro completo, así que editar desde /clientes/[id] (que no captura
+// domicilio) borraba el domicilio guardado desde el POS.
 export type UpdateCustomerInput = {
   employeeId: string;
   customerId: string;
@@ -92,8 +119,12 @@ export type UpdateCustomerInput = {
   email?: string;
   address?: string;
   birthDate?: string;
-  gender?: CustomerGender;
+  gender?: CustomerGender | null;
 };
+
+function optionalText(value: string | undefined) {
+  return value === undefined ? undefined : value.trim() || null;
+}
 
 export const updateCustomer = safeAction(async function updateCustomer(input: UpdateCustomerInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
@@ -105,16 +136,18 @@ export const updateCustomer = safeAction(async function updateCustomer(input: Up
   }
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "CLIENTE_CONFIGURAR");
+  await validateContact(input, input.customerId);
 
   await prisma.customer.update({
     where: { id: input.customerId },
     data: {
       name,
-      phone: input.phone?.trim() || null,
-      email: input.email?.trim() || null,
-      address: input.address?.trim() || null,
-      birthDate: input.birthDate ? new Date(input.birthDate) : null,
-      gender: input.gender ?? null,
+      phone: optionalText(input.phone),
+      email: optionalText(input.email),
+      address: optionalText(input.address),
+      birthDate:
+        input.birthDate === undefined ? undefined : input.birthDate ? new Date(input.birthDate) : null,
+      gender: input.gender,
     },
   });
 

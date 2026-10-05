@@ -2,6 +2,7 @@ import type { StatsReport } from "@/lib/reports";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateRangePicker } from "./date-range-picker";
 import { formatCurrency } from "@/lib/utils";
+import { formatDateTime } from "@/lib/time";
 
 // Mismas etiquetas que components/pos/cart-panel.tsx (no exportadas desde
 // ahí, es una const local de ese archivo) — "Mesa" es CONSUMO_LOCAL.
@@ -27,13 +28,13 @@ export function EstadisticasReport({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">Estadísticas</h2>
         <DateRangePicker from={fromStr} to={toStr} view="estadisticas" />
       </div>
 
       <Card>
-        <CardContent className="grid grid-cols-4 gap-4 pt-4 text-sm">
+        <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4 pt-4 text-sm">
           <div>
             <p className="text-muted-foreground">Transacciones</p>
             <p className="text-lg font-semibold">{report.totalSales}</p>
@@ -131,7 +132,7 @@ export function EstadisticasReport({
           {report.sales.length === 0 && <p className="text-sm text-muted-foreground">No hay ventas en este periodo.</p>}
           {report.sales.map((sale) => (
             <div key={sale.id} className="flex items-center justify-between text-sm">
-              <p>{new Date(sale.createdAt).toLocaleString("es-MX")}</p>
+              <p>{formatDateTime(sale.createdAt)}</p>
               <p className="text-xs text-muted-foreground">
                 {orderTypeLabels[sale.orderType] ?? sale.orderType} · {formatCurrency(sale.total)}
               </p>

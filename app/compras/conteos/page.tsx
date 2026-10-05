@@ -7,6 +7,7 @@ import { getPhysicalCounts } from "@/lib/counts";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { physicalCountStatusLabels } from "@/components/compras/enum-labels";
+import { formatDate } from "@/lib/time";
 
 export default async function ConteosPage() {
   const employee = await getCurrentEmployee();
@@ -58,7 +59,7 @@ export default async function ConteosPage() {
                       {physicalCountStatusLabels[count.status as keyof typeof physicalCountStatusLabels] ??
                         count.status}{" "}
                       · {count.lineCount} ingrediente{count.lineCount === 1 ? "" : "s"} ·{" "}
-                      {new Date(count.startedAt).toLocaleDateString("es-MX")}
+                      {formatDate(count.startedAt)}
                     </p>
                   </div>
                 </Link>

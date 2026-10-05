@@ -1,6 +1,8 @@
 "use server";
 
 import { safeAction } from "@/lib/safe-action";
+// Un código "expira el 31" debe valer todo el 31 en la hora de la sucursal.
+import { zonedEndOfDay } from "@/lib/time";
 import { revalidatePath } from "next/cache";
 import type { DiscountType, DiscountCodeCategory } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -37,7 +39,7 @@ export const createDiscountCode = safeAction(async function createDiscountCode(i
       code,
       type: input.type,
       value: input.value,
-      expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+      expiresAt: input.expiresAt ? zonedEndOfDay(input.expiresAt.slice(0, 10)) : null,
       category: input.category ?? null,
     },
   });
@@ -77,7 +79,7 @@ export const updateDiscountCode = safeAction(async function updateDiscountCode(i
       code,
       type: input.type,
       value: input.value,
-      expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+      expiresAt: input.expiresAt ? zonedEndOfDay(input.expiresAt.slice(0, 10)) : null,
       category: input.category ?? null,
       isActive: input.isActive,
     },

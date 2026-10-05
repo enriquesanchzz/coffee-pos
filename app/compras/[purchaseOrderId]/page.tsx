@@ -10,6 +10,7 @@ import {
 } from "@/lib/purchases";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { PurchaseOrderDetailView } from "@/components/compras/purchase-order-detail-view";
+import { orNotFound } from "@/lib/not-found";
 
 export default async function DetalleOrdenPage({
   params,
@@ -27,7 +28,7 @@ export default async function DetalleOrdenPage({
 
   const { purchaseOrderId } = await params;
   const [order, suppliers, ingredients, supplierCostsBySupplier] = await Promise.all([
-    getPurchaseOrderDetail(purchaseOrderId),
+    orNotFound(getPurchaseOrderDetail(purchaseOrderId)),
     getActiveSuppliers(),
     getIngredientOptions(),
     getSupplierCostMap(),

@@ -88,12 +88,12 @@ async function computeExpectedCash(
       _sum: { total: true, tipAmount: true },
     }),
     tx.salePayment.aggregate({
-      where: { method: "EFECTIVO", sale: { shiftId } },
+      where: { method: "EFECTIVO", sale: { shiftId, status: "COMPLETADA" } },
       _sum: { amount: true },
     }),
     tx.salePayment.groupBy({
       by: ["method"],
-      where: { sale: { shiftId } },
+      where: { sale: { shiftId, status: "COMPLETADA" } },
       _sum: { amount: true },
     }),
     tx.cashMovement.aggregate({
@@ -180,7 +180,7 @@ export const closeShift = safeAction(async function closeShift(input: CloseShift
     const openTabsCount = await tx.sale.count({ where: { shiftId: input.shiftId, status: "ABIERTA" } });
     if (openTabsCount > 0) {
       throw new Error(
-        `Hay ${openTabsCount} cuenta(s) abierta(s) sin cobrar en este turno — ciérralas antes de cerrar el turno.`
+        `Hay ${openTabsCount} cuenta(s) abierta(s) sin cobrar en este turno — cóbralas o anúlalas (Caja → Ventas del turno) antes de cerrar el turno.`
       );
     }
 

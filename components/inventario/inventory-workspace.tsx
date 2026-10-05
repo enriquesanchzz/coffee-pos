@@ -84,7 +84,7 @@ export function InventoryWorkspace({
         {categoryItems.length === 0 ? (
           <p className="text-sm text-muted-foreground">Sin insumos en esta categoría.</p>
         ) : (
-          <div className="grid auto-rows-min grid-cols-2 gap-4 pr-1 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="grid auto-rows-min grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-3 pr-1 sm:gap-4">
             {categoryItems.map(renderIngredientCard)}
           </div>
         )}
@@ -99,7 +99,7 @@ export function InventoryWorkspace({
       return <p className="text-sm text-muted-foreground">Sin resultados para &quot;{trimmedQuery}&quot;.</p>;
     }
     return (
-      <div className="grid auto-rows-min grid-cols-2 gap-4 pr-1 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="grid auto-rows-min grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-3 pr-1 sm:gap-4">
         {matches.map(renderIngredientCard)}
       </div>
     );

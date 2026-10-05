@@ -60,14 +60,19 @@ export default async function ReportesPage({
     redirect("/pos");
   }
 
-  const { from, to, fromStr, toStr } = resolveDateRange(params.from, params.to);
+  const { from, to, fromStr, toStr, swapped } = resolveDateRange(params.from, params.to);
 
   return (
     <AuthenticatedShell isAdmin employeeName={employee.name}>
-      <div className="mx-auto flex max-w-4xl gap-6 p-6">
+      <div className="mx-auto flex max-w-4xl flex-col gap-4 p-4 sm:p-6 md:flex-row md:gap-6">
         <ReportesNav active={requestedView} visible={visible} />
 
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
+          {swapped && (
+            <p className="mb-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+              La fecha "Desde" era posterior a "Hasta" — se intercambiaron para mostrar el rango.
+            </p>
+          )}
           {requestedView === "utilidad" && (
             <UtilidadReport report={await getProfitReport(from, to)} fromStr={fromStr} toStr={toStr} />
           )}

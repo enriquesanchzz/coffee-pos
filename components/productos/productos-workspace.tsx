@@ -123,7 +123,7 @@ export function ProductosWorkspace({
       return <p className="text-sm text-muted-foreground">{emptyText}</p>;
     }
     return (
-      <div className="grid auto-rows-min grid-cols-2 gap-4 pr-1 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="grid auto-rows-min grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-3 pr-1 sm:gap-4">
         {list.map((product) => (
           <ProductCard key={product.id} product={product} onSelect={openProduct} />
         ))}
@@ -203,7 +203,7 @@ export function ProductosWorkspace({
                 <p className="text-sm text-muted-foreground">{selectedProduct.categoryName}</p>
               </div>
 
-              <div className="grid auto-rows-min grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              <div className="grid auto-rows-min grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-3 sm:gap-4">
                 {selectedProduct.variants.map((variant) => (
                   <VariantCard key={variant.id} variant={variant} onSelect={openVariant} />
                 ))}

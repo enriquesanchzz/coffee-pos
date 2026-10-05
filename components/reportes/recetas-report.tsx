@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RecipeReportFilters } from "./recipe-report-filters";
 import { temperatureLabels } from "@/components/productos/enum-labels";
 import { formatCurrency } from "@/lib/utils";
+import { formatDateTime } from "@/lib/time";
 
 export function RecetasReport({
   items,
@@ -42,7 +43,7 @@ export function RecetasReport({
             </p>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
-            <div className="grid grid-cols-4 gap-4 text-sm">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 text-sm">
               <div>
                 <p className="text-muted-foreground">Precio</p>
                 <p className="font-medium">{formatCurrency(item.price)}</p>
@@ -66,7 +67,7 @@ export function RecetasReport({
                 <p className="text-xs font-medium text-muted-foreground">Historial de costo</p>
                 {item.history.map((entry) => (
                   <div key={entry.id} className="flex items-center justify-between text-xs">
-                    <span>{new Date(entry.recordedAt).toLocaleString("es-MX")}</span>
+                    <span>{formatDateTime(entry.recordedAt)}</span>
                     <span className="text-muted-foreground">{entry.reason}</span>
                     <span>{formatCurrency(entry.totalCost)}</span>
                   </div>

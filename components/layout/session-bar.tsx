@@ -40,11 +40,12 @@ export function SessionBar({
     // Franja fija oscura a propósito, independiente del acento/modo elegido
     // en Administración → Apariencia: es un ancla visual constante para
     // identificar quién opera el sistema, no debe cambiar con el tema.
-    <div className="flex h-12 shrink-0 items-center justify-between bg-neutral-900 px-4 text-neutral-50">
-      <p className="text-sm">
-        Atendiendo: <span className="font-semibold">{employeeName}</span>
+    <div className="flex h-12 shrink-0 items-center justify-between gap-2 bg-neutral-900 px-3 text-neutral-50 sm:px-4">
+      <p className="min-w-0 truncate text-sm">
+        <span className="hidden sm:inline">Atendiendo: </span>
+        <span className="font-semibold">{employeeName}</span>
       </p>
-      <div className="flex items-center gap-4">
+      <div className="flex flex-shrink-0 items-center gap-2 sm:gap-4">
         <select
           aria-label="Cambiar de zona"
           value={currentZone?.href ?? ""}
@@ -60,8 +61,12 @@ export function SessionBar({
           ))}
         </select>
         <form action={logoutAction}>
-          <button type="submit" className="text-sm text-neutral-300 hover:text-neutral-50 hover:underline">
-            Cambiar de empleado
+          <button
+            type="submit"
+            className="whitespace-nowrap text-sm text-neutral-300 hover:text-neutral-50 hover:underline"
+          >
+            <span className="sm:hidden">Salir</span>
+            <span className="hidden sm:inline">Cambiar de empleado</span>
           </button>
         </form>
       </div>

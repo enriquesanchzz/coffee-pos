@@ -4,6 +4,7 @@ import type { DiscountCodeListItem } from "@/lib/discounts";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { discountTypeLabels, discountCategoryLabels } from "./enum-labels";
+import { formatDate } from "@/lib/time";
 
 // Misma tarjeta que ProductCard/VariantCard (rounded-2xl, clic para abrir)
 // pero horizontal — aquí no hay una imagen/ícono que centrar, es
@@ -31,7 +32,7 @@ export function DiscountCodeCard({
       </p>
       <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
         <span>{discountCode.category ? discountCategoryLabels[discountCode.category] : "sin categoría"}</span>
-        {discountCode.expiresAt && <span>expira {new Date(discountCode.expiresAt).toLocaleDateString("es-MX")}</span>}
+        {discountCode.expiresAt && <span>expira {formatDate(discountCode.expiresAt)}</span>}
       </div>
     </Card>
   );

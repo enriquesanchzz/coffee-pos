@@ -13,9 +13,10 @@ import {
   type VariantTemperature,
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { DEFAULT_STOCK_LOCATION_ID } from "@/lib/constants";
+import { DEFAULT_BRANCH_ID, DEFAULT_STOCK_LOCATION_ID } from "@/lib/constants";
 import { getSessionEmployeeId, findEmployeeByPin } from "@/lib/session";
 import { requirePermission } from "@/lib/permissions";
+import { zonedClock } from "@/lib/time";
 
 export type CreateSaleExtraIngredientInput = {
   ingredientId: string;
@@ -181,13 +182,15 @@ function isPromotionActiveNow(
   endTime: string | null,
   now: Date
 ): boolean {
-  if (daysOfWeek.length > 0 && !daysOfWeek.includes(now.getDay())) return false;
+  // Día y hora de la sucursal, no del servidor (ver lib/time.ts).
+  const clock = zonedClock(now);
+  if (daysOfWeek.length > 0 && !daysOfWeek.includes(clock.weekday)) return false;
   if (startTime || endTime) {
     const toMinutes = (t: string) => {
       const [h, m] = t.split(":").map(Number);
       return h * 60 + m;
     };
-    const minutesNow = now.getHours() * 60 + now.getMinutes();
+    const minutesNow = clock.hour * 60 + clock.minute;
     const start = startTime ? toMinutes(startTime) : 0;
     const end = endTime ? toMinutes(endTime) : 23 * 60 + 59;
     if (minutesNow < start || minutesNow > end) return false;
@@ -360,6 +363,35 @@ async function resolveSaleItems(
     return quantity.mul(conversion.factor);
   }
 
+  // Precio al cliente de un extra libre:
+  //   - Ingredient.extraUnitPrice si está definido (por unidad de
+  //     standardDoseUnit, o de baseUnit si no tiene dosis estándar);
+  //   - si no, costo cotizado ÷ % de food cost objetivo — el mismo margen
+  //     que el precio sugerido de las recetas. Antes se cobraba el costo
+  //     tal cual (ej. un shot extra a $5.40, sin ninguna ganancia).
+  let targetFoodCostPercent: number | null = null;
+  async function extraPriceDelta(ingredientId: string, baseQty: Prisma.Decimal) {
+    const ingredient = await tx.ingredient.findUniqueOrThrow({ where: { id: ingredientId } });
+    let price: Prisma.Decimal;
+    if (ingredient.extraUnitPrice) {
+      const pricingUnit = ingredient.standardDoseUnit ?? ingredient.baseUnit;
+      const basePerPricingUnit = await toBaseUnit(ingredientId, new Prisma.Decimal(1), pricingUnit);
+      price = baseQty.div(basePerPricingUnit).mul(ingredient.extraUnitPrice);
+    } else {
+      const supplierCost = await tx.ingredientSupplier.findFirst({
+        where: { ingredientId, isSelected: true },
+      });
+      if (targetFoodCostPercent === null) {
+        const branch = await tx.branch.findUnique({ where: { id: DEFAULT_BRANCH_ID } });
+        targetFoodCostPercent = branch?.targetFoodCostPercent?.toNumber() ?? 30;
+      }
+      price = baseQty
+        .mul(supplierCost?.cost ?? new Prisma.Decimal(0))
+        .div(new Prisma.Decimal(targetFoodCostPercent).div(100));
+    }
+    return price.toDecimalPlaces(2);
+  }
+
   function addConsumption(ingredientId: string, quantity: Prisma.Decimal) {
     consumption.set(ingredientId, (consumption.get(ingredientId) ?? new Prisma.Decimal(0)).add(quantity));
   }
@@ -438,9 +470,9 @@ async function resolveSaleItems(
 
     const modifierTotal = modifierOptions.reduce((sum, opt) => sum.add(opt.priceDelta), new Prisma.Decimal(0));
 
-    // Extras libres: precio SIEMPRE calculado aquí desde el costo
-    // cotizado, nunca confiado del cliente. Cantidad convertida a
-    // baseUnit antes de costear/descontar (ver nota arriba).
+    // Extras libres: precio SIEMPRE calculado aquí, nunca confiado del
+    // cliente (ver extraPriceDelta). Cantidad convertida a baseUnit antes
+    // de costear/descontar (ver nota arriba).
     const resolvedExtras: ResolvedSaleItem["extraIngredients"] = [];
     let extrasTotal = new Prisma.Decimal(0);
 
@@ -450,10 +482,7 @@ async function resolveSaleItems(
       }
       const { baseUnit } = await getIngredientInfo(extra.ingredientId);
       const baseQty = await toBaseUnit(extra.ingredientId, new Prisma.Decimal(extra.quantity), extra.unit);
-      const supplierCost = await tx.ingredientSupplier.findFirst({
-        where: { ingredientId: extra.ingredientId, isSelected: true },
-      });
-      const priceDelta = baseQty.mul(supplierCost?.cost ?? new Prisma.Decimal(0));
+      const priceDelta = await extraPriceDelta(extra.ingredientId, baseQty);
       extrasTotal = extrasTotal.add(priceDelta);
       resolvedExtras.push({ ingredientId: extra.ingredientId, quantity: baseQty, baseUnit, priceDelta });
     }
@@ -801,6 +830,22 @@ export const openTab = safeAction(async function openTab(input: OpenTabInput) {
       throw new Error("No hay un turno abierto válido para esta cuenta.");
     }
 
+    // Dos cuentas abiertas con el mismo número de mesa son ambiguas al
+    // retomarlas/cobrarlas — si la mesa ya tiene cuenta, se le agrega ahí.
+    const tableNumber = input.tableNumber.trim();
+    const existingTab = await tx.sale.findFirst({
+      where: {
+        branchId: input.branchId,
+        status: "ABIERTA",
+        tableNumber: { equals: tableNumber, mode: "insensitive" },
+      },
+    });
+    if (existingTab) {
+      throw new Error(
+        `La mesa ${tableNumber} ya tiene una cuenta abierta. Retómala desde "Cuentas abiertas" para agregarle productos.`
+      );
+    }
+
     const { saleItemsData, consumption, subtotal } = await resolveSaleItems(tx, input.items);
 
     const createdSale = await tx.sale.create({
@@ -810,7 +855,7 @@ export const openTab = safeAction(async function openTab(input: OpenTabInput) {
         employeeId: input.employeeId,
         status: "ABIERTA",
         orderType: "CONSUMO_LOCAL",
-        tableNumber: input.tableNumber.trim(),
+        tableNumber,
         customerId: input.customerId || null,
         subtotal,
         discountTotal: 0,
@@ -1333,3 +1378,128 @@ export const updateTabItemQuantity = safeAction(async function updateTabItemQuan
   revalidatePath("/pos");
   return serializeSale(sale);
 });
+
+export type CancelSaleInput = {
+  saleId: string;
+  branchId: string;
+  shiftId: string;
+  employeeId: string;
+  authorizingPin: string;
+  reason: string;
+};
+
+// Anular una venta cobrada o una cuenta abierta del turno actual. Exige el
+// PIN de alguien con VENTA_CANCELAR (como el descuento manual) y un
+// motivo. Revierte exactamente lo que la venta movió:
+//   - Inventario: suma los InventoryMovement que la venta generó (notas
+//     "Venta <id>" de applyConsumption y "Corrección cuenta <id>" de las
+//     correcciones de cuentas abiertas) y registra el movimiento inverso.
+//   - Cupón de un solo uso: vuelve a quedar disponible.
+//   - Lealtad: quita el sello que dio la venta.
+// La venta queda CANCELADA (no se borra): reportes, corte de caja y
+// lealtad ya filtran por COMPLETADA, así que deja de contar en todos.
+export const cancelSale = safeAction(async function cancelSale(input: CancelSaleInput) {
+  if (input.employeeId !== (await getSessionEmployeeId())) {
+    throw new Error("El empleado no coincide con la sesión activa.");
+  }
+  const reason = input.reason.trim();
+  if (!reason) {
+    throw new Error("Captura el motivo de la anulación.");
+  }
+  const authorizer = await findEmployeeByPin(input.authorizingPin.trim());
+  if (!authorizer) {
+    throw new Error("PIN de autorización incorrecto.");
+  }
+  await requirePermission(authorizer.id, input.branchId, "VENTA_CANCELAR");
+
+  await prisma.$transaction(async (tx) => {
+    const sale = await tx.sale.findUnique({ where: { id: input.saleId }, include: { shift: true } });
+    if (!sale || sale.branchId !== input.branchId) {
+      throw new Error("La venta no existe.");
+    }
+    if (sale.status === "CANCELADA") {
+      throw new Error("Esta venta ya estaba anulada.");
+    }
+    if (sale.shiftId !== input.shiftId || sale.shift.status !== "ABIERTO") {
+      throw new Error("Solo se pueden anular ventas del turno abierto.");
+    }
+
+    const movements = await tx.inventoryMovement.groupBy({
+      by: ["ingredientId", "stockLocationId", "unit"],
+      where: { notes: { in: [`Venta ${sale.id}`, `Corrección cuenta ${sale.id}`] } },
+      _sum: { quantity: true },
+    });
+    for (const movement of movements) {
+      const consumed = movement._sum.quantity ?? new Prisma.Decimal(0);
+      if (consumed.isZero()) continue;
+      const restock = consumed.negated();
+      await tx.inventoryStock.update({
+        where: {
+          ingredientId_stockLocationId: {
+            ingredientId: movement.ingredientId,
+            stockLocationId: movement.stockLocationId,
+          },
+        },
+        data: { quantity: { increment: restock } },
+      });
+      await tx.inventoryMovement.create({
+        data: {
+          type: "VENTA",
+          ingredientId: movement.ingredientId,
+          stockLocationId: movement.stockLocationId,
+          quantity: restock,
+          unit: movement.unit,
+          branchId: sale.branchId,
+          employeeId: input.employeeId,
+          shiftId: sale.shiftId,
+          notes: `Anulación venta ${sale.id}`,
+        },
+      });
+    }
+
+    if (sale.discountCodeId) {
+      const code = await tx.discountCode.findUnique({ where: { id: sale.discountCodeId } });
+      if (code?.customerId && code.usedAt) {
+        await tx.discountCode.update({ where: { id: code.id }, data: { usedAt: null } });
+      }
+    }
+
+    await tx.sale.update({
+      where: { id: sale.id },
+      data: {
+        status: "CANCELADA",
+        cancelledAt: new Date(),
+        cancelledById: authorizer.id,
+        cancelReason: reason,
+      },
+    });
+
+    if (sale.status === "COMPLETADA" && sale.customerId) {
+      await removeLoyaltyStamp(tx, sale.customerId);
+    }
+  });
+
+  revalidatePath("/pos");
+  revalidatePath("/caja");
+});
+
+// Inverso de applyLoyaltyStamp: los sellos se reinician a 0 al llegar a 5,
+// así que quitar uno desde 0 regresa a 4 (la venta anulada fue la que
+// completó la tarjeta). El nivel se recalcula con las ventas COMPLETADA
+// restantes.
+async function removeLoyaltyStamp(tx: Prisma.TransactionClient, customerId: string) {
+  const card = await tx.loyaltyCard.findUnique({ where: { customerId } });
+  if (!card) return;
+
+  const lifetimeStamps = await tx.sale.count({ where: { customerId, status: "COMPLETADA" } });
+  const newStamps = card.stamps > 0 ? card.stamps - 1 : lifetimeStamps > 0 ? 4 : 0;
+  const eligibleTier = await tx.loyaltyTier.findFirst({
+    where: { minLifetimeStamps: { lte: lifetimeStamps } },
+    orderBy: { minLifetimeStamps: "desc" },
+  });
+
+  await tx.loyaltyCard.update({
+    where: { customerId },
+    data: { stamps: newStamps, tierId: eligibleTier?.id ?? null },
+  });
+}

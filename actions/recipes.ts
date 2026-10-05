@@ -16,6 +16,9 @@ export type CreateIngredientInput = {
   categoryId: string;
   baseUnit: UnitOfMeasure;
   purchaseUnit: UnitOfMeasure;
+  // Precio al cliente como extra libre; vacío/undefined = costo ÷ % de
+  // food cost objetivo (ver extraPriceDelta en actions/pos.ts).
+  extraUnitPrice?: number | null;
 };
 
 export const createIngredient = safeAction(async function createIngredient(input: CreateIngredientInput) {
@@ -36,6 +39,10 @@ export const createIngredient = safeAction(async function createIngredient(input
       categoryId: input.categoryId,
       baseUnit: input.baseUnit,
       purchaseUnit: input.purchaseUnit,
+      extraUnitPrice:
+        input.extraUnitPrice === undefined || input.extraUnitPrice === null || input.extraUnitPrice < 0
+          ? null
+          : input.extraUnitPrice,
     },
   });
 

@@ -95,7 +95,18 @@ export type UpdateIngredientInput = {
   baseUnit: UnitOfMeasure;
   purchaseUnit: UnitOfMeasure;
   tracksExpiration: boolean;
+  // Precio al cliente como extra libre; vacío/undefined = costo ÷ % de
+  // food cost objetivo (ver extraPriceDelta en actions/pos.ts).
+  extraUnitPrice?: number | null;
 };
+
+function validExtraPrice(value: number | null) {
+  if (value === null || Number.isNaN(value)) return null;
+  if (value < 0) {
+    throw new Error("El precio como extra no puede ser negativo.");
+  }
+  return value;
+}
 
 export const updateIngredient = safeAction(async function updateIngredient(input: UpdateIngredientInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
@@ -117,6 +128,9 @@ export const updateIngredient = safeAction(async function updateIngredient(input
       baseUnit: input.baseUnit,
       purchaseUnit: input.purchaseUnit,
       tracksExpiration: input.tracksExpiration,
+      ...(input.extraUnitPrice !== undefined
+        ? { extraUnitPrice: validExtraPrice(input.extraUnitPrice) }
+        : {}),
     },
   });
 

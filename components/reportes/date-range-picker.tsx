@@ -19,7 +19,7 @@ export function DateRangePicker({ from, to, view }: { from: string; to: string; 
   }
 
   return (
-    <div className="flex items-end gap-2">
+    <div className="flex flex-wrap items-end gap-2">
       <div className="flex flex-col gap-1">
         <Label htmlFor="from">Desde</Label>
         <Input id="from" type="date" value={fromValue} onChange={(e) => setFromValue(e.target.value)} />

@@ -11,6 +11,7 @@ import { Select } from "@/components/ui/select";
 import { createDiscountCode as createDiscountCodeAction, updateDiscountCode as updateDiscountCodeAction } from "@/actions/discounts";
 import { discountTypeLabels, discountCategoryLabels } from "./enum-labels";
 import { withActionErrors } from "@/lib/action-result";
+import { zonedDateKey } from "@/lib/time";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const createDiscountCode = withActionErrors(createDiscountCodeAction);
@@ -40,7 +41,7 @@ export function DiscountCodeFormDialog({
   const [value, setValue] = useState(discountCode ? String(discountCode.value) : "10");
   const [category, setCategory] = useState<DiscountCodeCategory | "">(discountCode?.category ?? "");
   const [expiresAt, setExpiresAt] = useState(
-    discountCode?.expiresAt ? discountCode.expiresAt.slice(0, 10) : ""
+    discountCode?.expiresAt ? zonedDateKey(discountCode.expiresAt) : ""
   );
   const [isActive, setIsActive] = useState(discountCode?.isActive ?? true);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +53,7 @@ export function DiscountCodeFormDialog({
     setType((discountCode?.type as DiscountType) ?? "PORCENTAJE");
     setValue(discountCode ? String(discountCode.value) : "10");
     setCategory(discountCode?.category ?? "");
-    setExpiresAt(discountCode?.expiresAt ? discountCode.expiresAt.slice(0, 10) : "");
+    setExpiresAt(discountCode?.expiresAt ? zonedDateKey(discountCode.expiresAt) : "");
     setIsActive(discountCode?.isActive ?? true);
     setError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps

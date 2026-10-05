@@ -1,5 +1,6 @@
 import QRCode from "qrcode";
 import { getPublicLoyaltyCard } from "@/lib/loyalty";
+import { orNotFound } from "@/lib/not-found";
 
 // Página pública (sin sesión — la única de la app) de la tarjeta de
 // lealtad de un cliente. El link se manda por WhatsApp al registrar al
@@ -15,17 +16,8 @@ export default async function TarjetaLealtadPage({
   params: Promise<{ code: string }>;
 }) {
   const { code } = await params;
-  const card = await getPublicLoyaltyCard(code);
-
-  if (!card) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-muted/30 p-6">
-        <p className="text-center text-sm text-muted-foreground">
-          No encontramos esta tarjeta de lealtad. Verifica el link.
-        </p>
-      </div>
-    );
-  }
+  // Tarjeta inexistente -> 404 real (ver not-found.tsx de esta ruta).
+  const card = await orNotFound(getPublicLoyaltyCard(code));
 
   const qrSvg = await QRCode.toString(card.code, { type: "svg", width: 180, margin: 1 });
   const firstName = card.customerName.trim().split(" ")[0];

@@ -361,9 +361,11 @@ async function main() {
   // ingrediente" en el POS (ver actions/pos.ts, AGREGAR_EXTRA) cobre
   // exactamente el precio del menú al agregar 1 pieza, el costo cotizado
   // de estos ingredientes se fija IGUAL al precio de venta del extra, no a
-  // un costo real de insumo — simplificación explícita, documentada en
-  // docs/CONTINUE.md, porque el sistema no modela un margen aparte para
-  // extras libres.
+  // un costo real de insumo (no se tienen los costos reales). El precio al
+  // cliente se fija aparte en Ingredient.extraUnitPrice — así, cuando se
+  // capture el costo real en Compras, el precio del menú no cambia. Los
+  // ingredientes sin extraUnitPrice (café, leche...) se cobran como extra a
+  // costo ÷ % de food cost objetivo, ya no a costo.
   const extrasMenu: { id: string; name: string; categoryId: "INSUMOS" | "LECHE" | "TOPPINGS"; cost: number }[] = [
     { id: "ing-extra-aderezo", name: "Aderezo", categoryId: "TOPPINGS", cost: 5 },
     { id: "ing-crema-batida", name: "Crema batida", categoryId: "TOPPINGS", cost: 10 },
@@ -380,7 +382,7 @@ async function main() {
   for (const extra of extrasMenu) {
     const ingredient = await prisma.ingredient.upsert({
       where: { id: extra.id },
-      update: {},
+      update: { extraUnitPrice: extra.cost },
       create: {
         id: extra.id,
         name: extra.name,
@@ -389,6 +391,7 @@ async function main() {
         baseUnit: "PIEZA",
         purchaseUnit: "PIEZA",
         tracksExpiration: false,
+        extraUnitPrice: extra.cost,
       },
     });
     extraIngredients.set(extra.id, { id: ingredient.id, cost: extra.cost });

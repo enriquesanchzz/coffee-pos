@@ -35,7 +35,7 @@ export function Dialog({
           role="dialog"
           aria-modal="true"
           className={cn(
-            "fixed bottom-0 right-[360px] top-0 flex w-[420px] flex-col overflow-y-auto border-l border-border bg-background p-6 shadow-lg",
+            "fixed bottom-0 right-0 top-0 flex w-full max-w-[420px] flex-col overflow-y-auto border-l border-border bg-background p-6 shadow-lg md:right-[320px] lg:right-[360px]",
             className
           )}
           onClick={(e) => e.stopPropagation()}

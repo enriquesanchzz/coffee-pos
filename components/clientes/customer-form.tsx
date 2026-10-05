@@ -36,6 +36,7 @@ export function CustomerForm({
   const [name, setName] = useState(customer?.name ?? "");
   const [phone, setPhone] = useState(customer?.phone ?? "");
   const [email, setEmail] = useState(customer?.email ?? "");
+  const [address, setAddress] = useState(customer?.address ?? "");
   const [birthDate, setBirthDate] = useState(customer?.birthDate?.slice(0, 10) ?? "");
   const [gender, setGender] = useState<CustomerGender | "">((customer?.gender as CustomerGender) ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -59,8 +60,10 @@ export function CustomerForm({
             name,
             phone,
             email,
-            birthDate: birthDate || undefined,
-            gender: gender || undefined,
+            address,
+            // "" borra la fecha/género (updateCustomer es parcial).
+            birthDate,
+            gender: gender || null,
           });
           router.refresh();
         } else {
@@ -69,6 +72,7 @@ export function CustomerForm({
             name,
             phone,
             email,
+            address: address || undefined,
             birthDate: birthDate || undefined,
             gender: gender || undefined,
           });
@@ -134,11 +138,15 @@ export function CustomerForm({
         </div>
         <div className="flex flex-col gap-1">
           <Label htmlFor="phone">Teléfono</Label>
-          <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          <Input id="phone" type="tel" inputMode="tel" placeholder="10 dígitos" value={phone} onChange={(e) => setPhone(e.target.value)} />
         </div>
         <div className="flex flex-col gap-1">
           <Label htmlFor="email">Email</Label>
           <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="address">Domicilio (opcional, para pedidos a domicilio)</Label>
+          <Input id="address" value={address} onChange={(e) => setAddress(e.target.value)} />
         </div>
         <div className="flex flex-col gap-1">
           <Label htmlFor="birthDate">Fecha de nacimiento (opcional)</Label>
