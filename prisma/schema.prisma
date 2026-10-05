@@ -1188,6 +1188,9 @@ model Sale {
   subtotal   Decimal    @db.Decimal(10, 2)
   discountTotal Decimal @default(0) @db.Decimal(10, 2)
   total      Decimal    @db.Decimal(10, 2) // IVA incluido
+  // Propina: se cobra junto con la venta (los pagos suman total + tipAmount)
+  // pero NO es ingreso por ventas — reportes siguen usando `total`.
+  tipAmount  Decimal    @default(0) @db.Decimal(10, 2)
   createdAt  DateTime   @default(now())
   cancelledAt DateTime?
   cancelledById String?

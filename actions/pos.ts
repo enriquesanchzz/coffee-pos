@@ -44,6 +44,8 @@ export type CreateSaleInput = {
   employeeId: string;
   items: CreateSaleItemInput[];
   payments: { method: PaymentMethod; amount: number; note?: string }[];
+  // Propina en pesos — se cobra con los pagos pero no cuenta como venta.
+  tipAmount?: number;
   orderType: SaleOrderType;
   // Solo aplica cuando orderType = CONSUMO_LOCAL ("Mesa").
   tableNumber?: string;
@@ -53,6 +55,16 @@ export type CreateSaleInput = {
   discountCodeId?: string;
   manualDiscount?: ManualDiscountInput;
 };
+
+// Propina: valor libre capturado por el cajero (monto ya calculado en el
+// cliente a partir de $ o %). Redondeado a centavos y nunca negativo.
+function validateTipAmount(tip: number | undefined): Prisma.Decimal {
+  if (tip === undefined) return new Prisma.Decimal(0);
+  if (!Number.isFinite(tip) || tip < 0) {
+    throw new Error("La propina no puede ser negativa.");
+  }
+  return new Prisma.Decimal(tip).toDecimalPlaces(2);
+}
 
 // PORCENTAJE -> % del subtotal; MONTO_FIJO -> monto directo; PRECIO_FINAL
 // -> el total resultante ES `value` (el descuento es la diferencia).
@@ -706,9 +718,10 @@ export async function createSale(input: CreateSaleInput) {
 
     const total = subtotal.sub(discountTotal);
 
+    const tipAmount = validateTipAmount(input.tipAmount);
     const paymentsTotal = input.payments.reduce((sum, p) => sum + p.amount, 0);
-    if (Math.abs(paymentsTotal - total.toNumber()) > 0.01) {
-      throw new Error("El total pagado no coincide con el total de la venta.");
+    if (Math.abs(paymentsTotal - total.add(tipAmount).toNumber()) > 0.01) {
+      throw new Error("El total pagado no coincide con el total de la venta más la propina.");
     }
 
     const createdSale = await tx.sale.create({
@@ -724,6 +737,7 @@ export async function createSale(input: CreateSaleInput) {
         subtotal,
         discountTotal,
         total,
+        tipAmount,
         ...(manualDiscountData ? { manualDiscount: { create: manualDiscountData } } : {}),
         payments: {
           create: input.payments.map((p) => ({ method: p.method, amount: p.amount, note: p.note?.trim() || null })),
@@ -898,6 +912,7 @@ export type CloseTabInput = {
   // Última ronda de productos, si se agrega justo al cobrar.
   items?: CreateSaleItemInput[];
   payments: { method: PaymentMethod; amount: number; note?: string }[];
+  tipAmount?: number;
   customerId?: string;
   discountCodeId?: string;
   manualDiscount?: ManualDiscountInput;
@@ -982,9 +997,10 @@ export async function closeTab(input: CloseTabInput) {
 
     const total = subtotal.sub(discountTotal);
 
+    const tipAmount = validateTipAmount(input.tipAmount);
     const paymentsTotal = input.payments.reduce((sum, p) => sum + p.amount, 0);
-    if (Math.abs(paymentsTotal - total.toNumber()) > 0.01) {
-      throw new Error("El total pagado no coincide con el total de la cuenta.");
+    if (Math.abs(paymentsTotal - total.add(tipAmount).toNumber()) > 0.01) {
+      throw new Error("El total pagado no coincide con el total de la cuenta más la propina.");
     }
 
     const customerId = input.customerId || existing.customerId || null;
@@ -995,6 +1011,7 @@ export async function closeTab(input: CloseTabInput) {
         status: "COMPLETADA",
         discountTotal,
         total,
+        tipAmount,
         customerId,
         discountCodeId: input.discountCodeId || null,
         ...(manualDiscountData ? { manualDiscount: { create: manualDiscountData } } : {}),
