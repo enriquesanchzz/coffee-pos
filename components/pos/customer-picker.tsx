@@ -53,7 +53,6 @@ export function CustomerPicker({
   const [showNewCustomerForm, setShowNewCustomerForm] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState("");
   const [newCustomerPhone, setNewCustomerPhone] = useState("");
-  const [newCustomerAddress, setNewCustomerAddress] = useState("");
   const [newCustomerError, setNewCustomerError] = useState<string | null>(null);
   const [isCreatingCustomer, startCreatingCustomer] = useTransition();
 
@@ -87,7 +86,6 @@ export function CustomerPicker({
   function handleOpenNewCustomerForm() {
     setNewCustomerName(customerQuery.trim());
     setNewCustomerPhone("");
-    setNewCustomerAddress("");
     setNewCustomerError(null);
     setShowNewCustomerForm(true);
     setCustomerListOpen(false);
@@ -100,19 +98,25 @@ export function CustomerPicker({
       setNewCustomerError("El nombre del cliente es obligatorio.");
       return;
     }
+    // Domicilio necesita teléfono para coordinar la entrega. La dirección
+    // se captura después, en el bloque de domicilio del cliente ya
+    // seleccionado — así el alta rápida queda en dos campos.
+    if (orderType === "DOMICILIO" && !newCustomerPhone.trim()) {
+      setNewCustomerError("Para domicilio, el teléfono es obligatorio.");
+      return;
+    }
     startCreatingCustomer(async () => {
       try {
         const created = await createCustomer({
           employeeId,
           name,
           phone: newCustomerPhone.trim() || undefined,
-          address: orderType === "DOMICILIO" ? newCustomerAddress.trim() || undefined : undefined,
         });
         const option: CustomerOption = {
           id: created.id,
           name,
           phone: newCustomerPhone.trim() || null,
-          address: orderType === "DOMICILIO" ? newCustomerAddress.trim() || null : null,
+          address: null,
           loyaltyCode: created.loyaltyCardCode,
           birthDate: null,
           gender: null,
@@ -146,6 +150,7 @@ export function CustomerPicker({
           onBlur={() => setTimeout(() => setCustomerListOpen(false), 150)}
           placeholder="Buscar por nombre, teléfono o código de tarjeta…"
           autoComplete="off"
+          className={cn(orderType === "DOMICILIO" && !selectedCustomer && "border-destructive")}
         />
         {customerListOpen && (filteredCustomers.length > 0 || customerQuery.trim()) && (
           <ul className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-md border border-border bg-background shadow-md">
@@ -201,15 +206,8 @@ export function CustomerPicker({
           <Input
             value={newCustomerPhone}
             onChange={(e) => setNewCustomerPhone(e.target.value)}
-            placeholder="Teléfono (opcional)"
+            placeholder={orderType === "DOMICILIO" ? "Teléfono (obligatorio)" : "Teléfono (opcional)"}
           />
-          {orderType === "DOMICILIO" && (
-            <Input
-              value={newCustomerAddress}
-              onChange={(e) => setNewCustomerAddress(e.target.value)}
-              placeholder="Domicilio de entrega"
-            />
-          )}
           {newCustomerError && <p className="text-sm text-destructive">{newCustomerError}</p>}
           <div className="flex gap-2">
             <Button type="button" size="sm" onClick={handleCreateCustomer} disabled={isCreatingCustomer}>
@@ -260,11 +258,6 @@ export function CustomerPicker({
             </div>
           </div>
         </div>
-      )}
-      {orderType === "DOMICILIO" && !selectedCustomer && (
-        <p className="text-xs text-destructive">
-          Busca o crea un cliente arriba — a domicilio necesita saber a quién entregarle.
-        </p>
       )}
     </div>
   );

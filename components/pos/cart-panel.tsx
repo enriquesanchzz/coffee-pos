@@ -7,6 +7,7 @@ import { useCartStore, lineUnitPrice, cartLineToSaleItemInput } from "./cart-sto
 import { openTab, addItemsToTab, removeTabItem, updateTabItemQuantity, type OpenTabDetail } from "@/actions/pos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { cn, formatCurrency, posAccentClass } from "@/lib/utils";
 import { CustomerPicker } from "./customer-picker";
 import { CheckoutForm } from "./checkout-form";
@@ -180,13 +181,17 @@ export function CartPanel({
           ))}
         </div>
         {orderType === "CONSUMO_LOCAL" && (
+          <div className="flex flex-col gap-1">
+          <Label htmlFor="table-number">Número de mesa</Label>
           <Input
+            id="table-number"
             value={tableNumber}
             onChange={(e) => setTableNumber(e.target.value)}
             placeholder="Número de mesa"
             className="h-9"
             disabled={Boolean(activeTabId)}
           />
+          </div>
         )}
         <CustomerPicker
           customers={customers}
@@ -351,9 +356,9 @@ export function CartPanel({
       </div>
 
       <div className="border-t border-border p-4">
-        <div className="mb-3 flex items-center justify-between text-sm font-medium">
-          <span>Total{activeTabSummary && " (esta ronda)"}</span>
-          <span>{formatCurrency(subtotal())}</span>
+        <div className="mb-3 flex items-end justify-between">
+          <span className="text-sm font-medium">Total{activeTabSummary && " (esta ronda)"}</span>
+          <span className="text-2xl font-bold">{formatCurrency(subtotal())}</span>
         </div>
         {tabError && <p className="mb-2 text-xs text-destructive">{tabError}</p>}
         <div className="flex gap-2">

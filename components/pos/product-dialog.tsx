@@ -197,7 +197,7 @@ export function ProductDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title={product.name}>
+    <Dialog open={open} onOpenChange={onOpenChange} title={product.name} placement="drawer">
       <div className="flex flex-col gap-4">
         {sizes.length > 1 && (
           <div>
@@ -368,18 +368,20 @@ export function ProductDialog({
           />
         </div>
 
-        <div className="flex items-center justify-between border-t border-border pt-4">
-          <span className="text-sm font-medium">Total</span>
-          <span className="text-lg font-semibold">{formatCurrency(total)}</span>
-        </div>
+        <div className="sticky bottom-0 -mx-6 -mb-6 mt-2 flex flex-col gap-3 border-t border-border bg-background p-6">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium">Total</span>
+            <span className="text-2xl font-bold">{formatCurrency(total)}</span>
+          </div>
 
-        <Button
-          className={posAccentClass}
-          onClick={handleAdd}
-          disabled={!variant || missingRequired.length > 0}
-        >
-          Agregar al carrito
-        </Button>
+          <Button
+            className={posAccentClass}
+            onClick={handleAdd}
+            disabled={!variant || missingRequired.length > 0}
+          >
+            Agregar al carrito
+          </Button>
+        </div>
       </div>
     </Dialog>
   );
