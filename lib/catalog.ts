@@ -1,6 +1,6 @@
 import type { VariantTemperature } from "@prisma/client";
 import { prisma } from "./prisma";
-import { DEFAULT_BRANCH_ID } from "./constants";
+import { DEFAULT_BRANCH_ID, DEFAULT_STOCK_LOCATION_ID } from "./constants";
 
 export type { VariantTemperature };
 
@@ -40,6 +40,10 @@ export type CatalogProduct = {
   name: string;
   imageUrl: string | null;
   variants: CatalogVariant[];
+  // True cuando algún insumo directo de la receta de TODAS las variantes
+  // tiene existencia registrada en 0 o menos. Solo informativo: el POS no
+  // bloquea la venta, porque el conteo puede estar desfasado.
+  outOfStock: boolean;
 };
 
 // parentId/parentName: árbol de 2 niveles (ver ProductCategory en el
@@ -114,6 +118,35 @@ export async function getCatalog(
     },
   });
 
+  const variantIds = categories.flatMap((c) => c.products.flatMap((p) => p.variants.map((v) => v.id)));
+  const [recipes, stocks] = await Promise.all([
+    prisma.recipe.findMany({
+      where: { productVariantId: { in: variantIds }, kind: "PRODUCTO_VENDIBLE" },
+      include: {
+        versions: {
+          where: { isActive: true },
+          take: 1,
+          include: { ingredients: { select: { ingredientId: true } } },
+        },
+      },
+    }),
+    prisma.inventoryStock.findMany({
+      where: { stockLocationId: DEFAULT_STOCK_LOCATION_ID },
+      select: { ingredientId: true, quantity: true },
+    }),
+  ]);
+
+  const stockByIngredient = new Map(stocks.map((s) => [s.ingredientId, Number(s.quantity)]));
+  const unavailableVariantIds = new Set<string>();
+  for (const recipe of recipes) {
+    if (!recipe.productVariantId) continue;
+    const ingredients = recipe.versions[0]?.ingredients ?? [];
+    const depleted = ingredients.some(
+      (line) => line.ingredientId !== null && (stockByIngredient.get(line.ingredientId) ?? 1) <= 0
+    );
+    if (depleted) unavailableVariantIds.add(recipe.productVariantId);
+  }
+
   return categories
     .filter((category) => category.products.length > 0)
     .map((category) => ({
@@ -126,6 +159,8 @@ export async function getCatalog(
         id: product.id,
         name: product.name,
         imageUrl: product.imageUrl,
+        outOfStock:
+          product.variants.length > 0 && product.variants.every((v) => unavailableVariantIds.has(v.id)),
         variants: product.variants.map((variant) => {
           return {
             id: variant.id,
@@ -213,4 +248,41 @@ export async function getOpenShift(branchId: string = DEFAULT_BRANCH_ID) {
     where: { branchId, status: "ABIERTO" },
     orderBy: { openedAt: "desc" },
   });
+}
+
+// Productos más vendidos de la sucursal en los últimos `days` días — base
+// de la barra de favoritos del POS (accesos con las teclas 1–8).
+export async function getTopSellingProductIds(
+  branchId: string = DEFAULT_BRANCH_ID,
+  limit = 8,
+  days = 30
+): Promise<string[]> {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const grouped = await prisma.saleItem.groupBy({
+    by: ["productVariantId"],
+    where: {
+      productVariantId: { not: null },
+      sale: { branchId, status: "COMPLETADA", createdAt: { gte: since } },
+    },
+    _sum: { quantity: true },
+    orderBy: { _sum: { quantity: "desc" } },
+    take: 40,
+  });
+  const variantIds = grouped.map((g) => g.productVariantId).filter((id): id is string => id !== null);
+  if (variantIds.length === 0) return [];
+  const variants = await prisma.productVariant.findMany({
+    where: { id: { in: variantIds } },
+    select: { id: true, productId: true },
+  });
+  const productByVariant = new Map(variants.map((v) => [v.id, v.productId]));
+  const seen = new Set<string>();
+  const productIds: string[] = [];
+  for (const id of variantIds) {
+    const productId = productByVariant.get(id);
+    if (!productId || seen.has(productId)) continue;
+    seen.add(productId);
+    productIds.push(productId);
+    if (productIds.length === limit) break;
+  }
+  return productIds;
 }

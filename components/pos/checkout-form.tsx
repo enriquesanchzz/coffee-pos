@@ -147,6 +147,7 @@ export function CheckoutForm({
   const [tipMode, setTipMode] = useState<"NINGUNA" | "PORCENTAJE" | "MONTO">("NINGUNA");
   const [tipPercent, setTipPercent] = useState(10);
   const [tipCustom, setTipCustom] = useState("");
+  const [cashReceived, setCashReceived] = useState("");
 
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -289,6 +290,7 @@ export function CheckoutForm({
         setTransferNote("");
         setTipMode("NINGUNA");
         setTipCustom("");
+        setCashReceived("");
         onConfirmed();
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo registrar la venta.");
@@ -439,9 +441,9 @@ export function CheckoutForm({
             <span>+{formatCurrency(tipValue)}</span>
           </div>
         )}
-        <div className="flex items-center justify-between text-lg font-semibold">
-          <span>Total</span>
-          <span>{formatCurrency(totalToCollect)}</span>
+        <div className="flex items-center justify-between pt-1">
+          <span className="text-base font-semibold">Total</span>
+          <span className="text-3xl font-bold">{formatCurrency(totalToCollect)}</span>
         </div>
       </div>
 
@@ -526,6 +528,52 @@ export function CheckoutForm({
         )}
       </div>
 
+      {method === "EFECTIVO" && (
+        <div className="flex flex-col gap-2 rounded-md border border-border p-3">
+          <div className="flex items-end gap-2">
+            <div className="flex flex-1 flex-col gap-1">
+              <Label htmlFor="cash-received">Recibido</Label>
+              <Input
+                id="cash-received"
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={cashReceived}
+                onChange={(e) => setCashReceived(e.target.value)}
+              />
+            </div>
+            <Button type="button" variant="outline" onClick={() => setCashReceived(totalToCollect.toFixed(2))}>
+              Exacto
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setCashReceived("")}>
+              Limpiar
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {[20, 50, 100, 200, 500, 1000].map((bill) => (
+              <button
+                key={bill}
+                type="button"
+                onClick={() => setCashReceived(String((Number(cashReceived) || 0) + bill))}
+                className="rounded-md border border-border px-2.5 py-1 text-sm hover:bg-muted"
+              >
+                +${bill}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Cambio a entregar</span>
+            <span className="text-lg font-semibold">
+              {Number(cashReceived) >= totalToCollect && cashReceived !== ""
+                ? formatCurrency(Math.round((Number(cashReceived) - totalToCollect) * 100) / 100)
+                : "—"}
+            </span>
+          </div>
+        </div>
+      )}
+
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <Button
@@ -537,7 +585,8 @@ export function CheckoutForm({
           verifiedSubtotal === null ||
           (lines.length === 0 && !activeTabId) ||
           (discountMode === "CODIGO" && !resolvedCode) ||
-          (discountMode === "MANUAL" && !authorizingPin)
+          (discountMode === "MANUAL" && !authorizingPin) ||
+          (method === "EFECTIVO" && (cashReceived === "" || Number(cashReceived) < totalToCollect))
         }
       >
         {isPending ? "Procesando..." : isPreviewLoading ? "Calculando total..." : "Confirmar venta"}
