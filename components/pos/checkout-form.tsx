@@ -144,6 +144,10 @@ export function CheckoutForm({
   const [manualReason, setManualReason] = useState<ManualDiscountReason>("CORTESIA");
   const [authorizingPin, setAuthorizingPin] = useState("");
 
+  const [tipMode, setTipMode] = useState<"NINGUNA" | "PORCENTAJE" | "MONTO">("NINGUNA");
+  const [tipPercent, setTipPercent] = useState(10);
+  const [tipCustom, setTipCustom] = useState("");
+
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -161,6 +165,13 @@ export function CheckoutForm({
         ? previewDiscountAmount(manualType, Number(manualValue) || 0, discountableBase)
         : 0;
   const total = Math.max(0, rawSubtotal - discountPreview);
+  const tipValue =
+    tipMode === "PORCENTAJE"
+      ? Math.round(total * tipPercent) / 100
+      : tipMode === "MONTO"
+        ? Math.max(0, Math.round((Number(tipCustom) || 0) * 100) / 100)
+        : 0;
+  const totalToCollect = total + tipValue;
 
   function resetDiscountState() {
     setCodeInput("");
@@ -223,7 +234,7 @@ export function CheckoutForm({
         const payments = [
           {
             method,
-            amount: total,
+            amount: totalToCollect,
             note: method === "TRANSFERENCIA" ? transferNote.trim() || undefined : undefined,
           },
         ];
@@ -249,6 +260,7 @@ export function CheckoutForm({
             employeeId,
             items: lines.length > 0 ? lines.map(cartLineToSaleItemInput) : undefined,
             payments,
+            tipAmount: tipValue,
             customerId: selectedCustomer?.id,
             discountCodeId,
             manualDiscount,
@@ -262,6 +274,7 @@ export function CheckoutForm({
             // El checkout hoy solo soporta un método por venta. El modelo
             // (SalePayment) ya permite pagos divididos — falta la UI.
             payments,
+            tipAmount: tipValue,
             orderType,
             tableNumber: orderType === "CONSUMO_LOCAL" ? tableNumber.trim() || undefined : undefined,
             domicilioOrigen: orderType === "DOMICILIO" ? domicilioOrigen : undefined,
@@ -274,6 +287,8 @@ export function CheckoutForm({
         setDiscountMode("NINGUNO");
         resetDiscountState();
         setTransferNote("");
+        setTipMode("NINGUNA");
+        setTipCustom("");
         onConfirmed();
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo registrar la venta.");
@@ -418,10 +433,70 @@ export function CheckoutForm({
             <span>-{formatCurrency(discountPreview)}</span>
           </div>
         )}
+        {tipValue > 0 && (
+          <div className="flex items-center justify-between text-muted-foreground">
+            <span>Propina</span>
+            <span>+{formatCurrency(tipValue)}</span>
+          </div>
+        )}
         <div className="flex items-center justify-between text-lg font-semibold">
           <span>Total</span>
-          <span>{formatCurrency(total)}</span>
+          <span>{formatCurrency(totalToCollect)}</span>
         </div>
+      </div>
+
+      <div>
+        <p className="mb-2 text-sm font-medium">Propina</p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setTipMode("NINGUNA")}
+            className={cn(
+              "rounded-md border border-border px-3 py-2 text-sm",
+              tipMode === "NINGUNA" ? posAccentBorderClass : "hover:bg-muted"
+            )}
+          >
+            Sin propina
+          </button>
+          {[10, 15, 20].map((pct) => (
+            <button
+              key={pct}
+              type="button"
+              onClick={() => {
+                setTipMode("PORCENTAJE");
+                setTipPercent(pct);
+              }}
+              className={cn(
+                "rounded-md border border-border px-3 py-2 text-sm",
+                tipMode === "PORCENTAJE" && tipPercent === pct ? posAccentBorderClass : "hover:bg-muted"
+              )}
+            >
+              {pct}%
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setTipMode("MONTO")}
+            className={cn(
+              "rounded-md border border-border px-3 py-2 text-sm",
+              tipMode === "MONTO" ? posAccentBorderClass : "hover:bg-muted"
+            )}
+          >
+            Monto
+          </button>
+        </div>
+        {tipMode === "MONTO" && (
+          <Input
+            className="mt-2"
+            type="number"
+            min="0"
+            step="0.01"
+            inputMode="decimal"
+            placeholder="Monto de la propina"
+            value={tipCustom}
+            onChange={(e) => setTipCustom(e.target.value)}
+          />
+        )}
       </div>
 
       <div>
