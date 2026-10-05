@@ -10,6 +10,8 @@ import { closeShift, previewShiftClose } from "@/actions/shift";
 
 type Preview = {
   openingCash: number;
+  salesTotal: number;
+  tipsTotal: number;
   cashSalesTotal: number;
   paymentsByMethod: Record<"EFECTIVO" | "TARJETA" | "TRANSFERENCIA", number>;
   retirosTotal: number;
@@ -77,18 +79,28 @@ export function CloseShiftDialog({
               <span className="text-muted-foreground">Fondo inicial</span>
               <span>{formatCurrency(preview.openingCash)}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Ventas en efectivo</span>
-              <span>{formatCurrency(preview.cashSalesTotal)}</span>
+            <div className="flex justify-between font-medium">
+              <span>Total de ventas</span>
+              <span>{formatCurrency(preview.salesTotal)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Ventas con tarjeta</span>
+              <span className="text-muted-foreground">Propinas</span>
+              <span>{formatCurrency(preview.tipsTotal)}</span>
+            </div>
+            <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cobrado por tipo</p>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Efectivo</span>
+              <span>{formatCurrency(preview.paymentsByMethod.EFECTIVO)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Tarjeta</span>
               <span>{formatCurrency(preview.paymentsByMethod.TARJETA)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Ventas por transferencia</span>
+              <span className="text-muted-foreground">Transferencia</span>
               <span>{formatCurrency(preview.paymentsByMethod.TRANSFERENCIA)}</span>
             </div>
+            <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Efectivo en caja</p>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Retiros</span>
               <span>-{formatCurrency(preview.retirosTotal)}</span>

@@ -81,7 +81,11 @@ async function computeExpectedCash(
   shiftId: string,
   openingCash: number
 ) {
-  const [cashSales, paymentsByMethodRows, retiros, ingresos] = await Promise.all([
+  const [sales, cashSales, paymentsByMethodRows, retiros, ingresos] = await Promise.all([
+    tx.sale.aggregate({
+      where: { shiftId, status: "COMPLETADA" },
+      _sum: { total: true, tipAmount: true },
+    }),
     tx.salePayment.aggregate({
       where: { method: "EFECTIVO", sale: { shiftId } },
       _sum: { amount: true },
@@ -111,6 +115,8 @@ async function computeExpectedCash(
   }
 
   return {
+    salesTotal: sales._sum.total?.toNumber() ?? 0,
+    tipsTotal: sales._sum.tipAmount?.toNumber() ?? 0,
     cashSalesTotal,
     paymentsByMethod,
     retirosTotal,
@@ -122,10 +128,26 @@ async function computeExpectedCash(
 export async function previewShiftClose(shiftId: string) {
   const shift = await prisma.shift.findUniqueOrThrow({ where: { id: shiftId } });
   const openingCash = shift.openingCash.toNumber();
-  const { cashSalesTotal, paymentsByMethod, retirosTotal, ingresosTotal, expectedCash } =
-    await computeExpectedCash(prisma, shiftId, openingCash);
+  const {
+    salesTotal,
+    tipsTotal,
+    cashSalesTotal,
+    paymentsByMethod,
+    retirosTotal,
+    ingresosTotal,
+    expectedCash,
+  } = await computeExpectedCash(prisma, shiftId, openingCash);
 
-  return { openingCash, cashSalesTotal, paymentsByMethod, retirosTotal, ingresosTotal, expectedCash };
+  return {
+    openingCash,
+    salesTotal,
+    tipsTotal,
+    cashSalesTotal,
+    paymentsByMethod,
+    retirosTotal,
+    ingresosTotal,
+    expectedCash,
+  };
 }
 
 export type CloseShiftInput = {
