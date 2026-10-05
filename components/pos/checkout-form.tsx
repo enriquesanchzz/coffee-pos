@@ -165,14 +165,16 @@ export function CheckoutForm({
       : discountMode === "MANUAL"
         ? previewDiscountAmount(manualType, Number(manualValue) || 0, discountableBase)
         : 0;
-  const total = Math.max(0, rawSubtotal - discountPreview);
+  const total = Math.max(0, Math.round((rawSubtotal - discountPreview) * 100) / 100);
   const tipValue =
     tipMode === "PORCENTAJE"
       ? Math.round(total * tipPercent) / 100
       : tipMode === "MONTO"
         ? Math.max(0, Math.round((Number(tipCustom) || 0) * 100) / 100)
         : 0;
-  const totalToCollect = total + tipValue;
+  const totalToCollect = Math.round((total + tipValue) * 100) / 100;
+  const cashReceivedCents = Math.round((Number(cashReceived) || 0) * 100);
+  const totalToCollectCents = Math.round(totalToCollect * 100);
 
   function resetDiscountState() {
     setCodeInput("");
@@ -566,8 +568,8 @@ export function CheckoutForm({
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Cambio a entregar</span>
             <span className="text-lg font-semibold">
-              {Number(cashReceived) >= totalToCollect && cashReceived !== ""
-                ? formatCurrency(Math.round((Number(cashReceived) - totalToCollect) * 100) / 100)
+              {cashReceived !== "" && cashReceivedCents >= totalToCollectCents
+                ? formatCurrency((cashReceivedCents - totalToCollectCents) / 100)
                 : "—"}
             </span>
           </div>
@@ -586,7 +588,7 @@ export function CheckoutForm({
           (lines.length === 0 && !activeTabId) ||
           (discountMode === "CODIGO" && !resolvedCode) ||
           (discountMode === "MANUAL" && !authorizingPin) ||
-          (method === "EFECTIVO" && (cashReceived === "" || Number(cashReceived) < totalToCollect))
+          (method === "EFECTIVO" && (cashReceived === "" || cashReceivedCents < totalToCollectCents))
         }
       >
         {isPending ? "Procesando..." : isPreviewLoading ? "Calculando total..." : "Confirmar venta"}

@@ -42,27 +42,6 @@ export function PosWorkspace({
     return favoriteProductIds.map((id) => byId.get(id)).filter((p): p is CatalogProduct => Boolean(p));
   }, [catalog, favoriteProductIds]);
 
-  // Teclas 1–8 abren un favorito sin usar el mouse. Se ignoran mientras el
-  // foco está en un campo de texto o hay un diálogo abierto, para no
-  // interferir al teclear un número en búsqueda, cantidad o pago.
-  useEffect(() => {
-    function handleKey(event: KeyboardEvent) {
-      if (productDialogOpen || event.ctrlKey || event.metaKey || event.altKey) return;
-      const target = event.target as HTMLElement | null;
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT")) {
-        return;
-      }
-      if (!/^[1-8]$/.test(event.key)) return;
-      const product = favoriteProducts[Number(event.key) - 1];
-      if (!product) return;
-      event.preventDefault();
-      setSelectedProduct(product);
-      setProductDialogOpen(true);
-    }
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [favoriteProducts, productDialogOpen]);
-
   // Cuenta abierta retomada (ver open-tabs-dialog.tsx) — se recarga su
   // resumen cada vez que cambia el id activo, o después de agregarle una
   // ronda (onTabChanged en CartPanel llama refreshActiveTab de nuevo).
