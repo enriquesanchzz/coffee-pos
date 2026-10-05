@@ -11,3 +11,7 @@ next-env.d.ts
 # build
 dist/
 *.tsbuildinfo
+
+# Playwright
+test-results/
+playwright-report/
