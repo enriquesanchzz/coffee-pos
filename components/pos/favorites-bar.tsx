@@ -3,8 +3,7 @@
 import type { CatalogProduct } from "@/lib/catalog";
 import { formatCurrency } from "@/lib/utils";
 
-// Más vendidos de la sucursal (últimos 30 días). Cada tarjeta muestra la
-// tecla 1–8 que la abre desde el teclado, si el foco no está en un campo.
+// Más vendidos de la sucursal (últimos 30 días).
 export function FavoritesBar({
   products,
   onSelectProduct,
@@ -16,7 +15,7 @@ export function FavoritesBar({
 
   return (
     <div className="flex gap-2 overflow-x-auto border-b border-border px-5 py-3">
-      {products.map((product, index) => {
+      {products.map((product) => {
         const prices = product.variants.map((v) => v.price);
         const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
         return (
@@ -26,9 +25,6 @@ export function FavoritesBar({
             onClick={() => onSelectProduct(product)}
             className="flex min-w-[120px] flex-shrink-0 items-center gap-2 rounded-xl border border-border px-3 py-2 text-left hover:bg-muted"
           >
-            <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-muted text-xs font-semibold">
-              {index + 1}
-            </span>
             <span className="min-w-0">
               <span className="block truncate text-sm font-medium">{product.name}</span>
               <span className="block text-xs text-muted-foreground">{formatCurrency(minPrice)}</span>
