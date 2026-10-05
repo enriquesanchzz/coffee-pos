@@ -2,6 +2,7 @@
 
 import { useRouter, usePathname } from "next/navigation";
 import { logoutAction } from "@/actions/session";
+import { CART_STORAGE_KEY } from "@/components/pos/cart-store";
 
 // Mismos módulos que components/layout/sidebar.tsx (sin el ícono, aquí solo
 // hace falta el label para el selector de "zona" — navegar entre secciones
@@ -60,7 +61,18 @@ export function SessionBar({
             </option>
           ))}
         </select>
-        <form action={logoutAction}>
+        <form
+          action={logoutAction}
+          onSubmit={() => {
+            // La orden en curso no debe quedar visible para el siguiente
+            // empleado que use este navegador (ver cart-store.ts).
+            try {
+              sessionStorage.removeItem(CART_STORAGE_KEY);
+            } catch {
+              // sessionStorage no disponible: no hay nada guardado.
+            }
+          }}
+        >
           <button
             type="submit"
             className="whitespace-nowrap text-sm text-neutral-300 hover:text-neutral-50 hover:underline"

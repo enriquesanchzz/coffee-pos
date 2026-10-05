@@ -5,13 +5,11 @@ import { revalidatePath } from "next/cache";
 import type { PromotionCategory, DiscountType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
-import { getSessionEmployeeId } from "@/lib/session";
+import { getSessionEmployeeId, assertSessionEmployee } from "@/lib/session";
 import { requirePermission, requireAdminRole } from "@/lib/permissions";
 
 async function assertActor(employeeId: string) {
-  if (employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(employeeId);
   await requirePermission(employeeId, DEFAULT_BRANCH_ID, "PROMOCION_GESTIONAR");
   await requireAdminRole(employeeId, DEFAULT_BRANCH_ID);
 }

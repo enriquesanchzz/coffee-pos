@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import type { CustomerGender } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
-import { getSessionEmployeeId } from "@/lib/session";
+import { getSessionEmployeeId, assertSessionEmployee } from "@/lib/session";
 import { requirePermission } from "@/lib/permissions";
 import { isValidEmail } from "@/lib/utils";
 
@@ -50,9 +50,7 @@ function generateWelcomeCouponCode(): string {
 }
 
 export const createCustomer = safeAction(async function createCustomer(input: CreateCustomerInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   const name = input.name.trim();
   if (!name) {
     throw new Error("El nombre del cliente es obligatorio.");
@@ -127,9 +125,7 @@ function optionalText(value: string | undefined) {
 }
 
 export const updateCustomer = safeAction(async function updateCustomer(input: UpdateCustomerInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   const name = input.name.trim();
   if (!name) {
     throw new Error("El nombre del cliente es obligatorio.");

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { PaymentMethod, DiscountType, ManualDiscountReason } from "@prisma/client";
 import type { DomicilioOrigen } from "@prisma/client";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import {
   closeTab as closeTabAction,
   previewSaleTotal as previewSaleTotalAction,
   type AppliedPromotion,
+  type StockShortage,
 } from "@/actions/pos";
 import { findDiscountCodeByCode as findDiscountCodeByCodeAction, type FoundDiscountCode } from "@/actions/discounts";
 import { updateCustomer as updateCustomerAction } from "@/actions/customers";
@@ -125,6 +126,17 @@ export function CheckoutForm({
   // valida el monto exacto al cobrar y rechaza un desajuste con seguridad.
   const [verifiedDiscountableSubtotal, setVerifiedDiscountableSubtotal] = useState<number | null>(null);
   const [appliedPromotions, setAppliedPromotions] = useState<AppliedPromotion[]>([]);
+  // Insumos que no alcanzan para esta ronda — se advierte y solo se cobra
+  // si el cajero confirma "vender de todos modos" (QA-003).
+  const [shortages, setShortages] = useState<StockShortage[]>([]);
+  // Id del intento de cobro: se reutiliza en reintentos (p. ej. tras un
+  // corte de red) para que el servidor nunca registre la venta dos veces;
+  // se renueva si cambia la cuenta o después de cobrar.
+  const requestIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    requestIdRef.current = null;
+  }, [lines]);
+  const [allowShortage, setAllowShortage] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
   useEffect(() => {
@@ -132,16 +144,18 @@ export function CheckoutForm({
       setVerifiedSubtotal(0);
       setVerifiedDiscountableSubtotal(0);
       setAppliedPromotions([]);
+      setShortages([]);
       return;
     }
     let cancelled = false;
     setIsPreviewLoading(true);
     previewSaleTotal(employeeId, lines.map(cartLineToSaleItemInput))
-      .then(({ subtotal: serverSubtotal, discountableSubtotal, appliedPromotions: promos }) => {
+      .then(({ subtotal: serverSubtotal, discountableSubtotal, appliedPromotions: promos, shortages: missing }) => {
         if (!cancelled) {
           setVerifiedSubtotal(serverSubtotal);
           setVerifiedDiscountableSubtotal(discountableSubtotal);
           setAppliedPromotions(promos);
+          setShortages(missing);
         }
       })
       .catch(() => {
@@ -254,6 +268,9 @@ export function CheckoutForm({
       return;
     }
 
+    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID();
+    const clientRequestId = requestIdRef.current;
+
     startTransition(async () => {
       try {
         // Domicilio (punto 10): si el cliente ya existía pero cambió el
@@ -308,6 +325,8 @@ export function CheckoutForm({
             customerId: selectedCustomer?.id,
             discountCodeId,
             manualDiscount,
+            allowShortage,
+            clientRequestId,
           });
         } else {
           const created = await createSale({
@@ -325,6 +344,8 @@ export function CheckoutForm({
             customerId: selectedCustomer?.id,
             discountCodeId,
             manualDiscount,
+            allowShortage,
+            clientRequestId,
           });
           saleId = created.id;
         }
@@ -335,7 +356,9 @@ export function CheckoutForm({
           cashReceived: method === "EFECTIVO" ? cashReceivedCents / 100 : null,
           change: method === "EFECTIVO" ? (cashReceivedCents - totalToCollectCents) / 100 : null,
         };
+        requestIdRef.current = null;
         clear();
+        setAllowShortage(false);
         setDiscountMode("NINGUNO");
         resetDiscountState();
         setTransferNote("");
@@ -634,12 +657,34 @@ export function CheckoutForm({
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
+      {shortages.length > 0 && (
+        <div className="flex flex-col gap-2 rounded-md border border-destructive/50 bg-destructive/5 p-3 text-sm">
+          <p className="font-medium text-destructive">Insumos insuficientes según el inventario</p>
+          <ul className="list-disc pl-5 text-muted-foreground">
+            {shortages.map((s) => (
+              <li key={s.ingredientId}>
+                {s.name}: faltan {s.missing} {s.unit}
+              </li>
+            ))}
+          </ul>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={allowShortage}
+              onChange={(e) => setAllowShortage(e.target.checked)}
+            />
+            Vender de todos modos (el inventario quedará en negativo)
+          </label>
+        </div>
+      )}
+
       <Button
         className={posAccentClass}
         onClick={handleConfirm}
         disabled={
           isPending ||
           isPreviewLoading ||
+          (shortages.length > 0 && !allowShortage) ||
           verifiedSubtotal === null ||
           (lines.length === 0 && !activeTabId) ||
           (discountMode === "CODIGO" && !resolvedCode) ||

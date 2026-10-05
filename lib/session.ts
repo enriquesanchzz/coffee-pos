@@ -26,6 +26,34 @@ import { TOO_MANY_ATTEMPTS_MESSAGE, clearFailures, isLockedOut, recordFailure } 
 
 export type AuthLevel = "pin" | "password";
 
+// Sesión vencida, cerrada en otra pestaña o reemplazada por otro empleado:
+// safeAction (lib/safe-action.ts) la regresa con `redirectTo` y el cliente
+// manda al login con un mensaje claro, en vez de mostrar "El empleado no
+// coincide con la sesión activa" sin explicar qué hacer (QA-011).
+export class SessionExpiredError extends Error {
+  constructor(
+    message: string,
+    public redirectTo: string = "/?error=sesion"
+  ) {
+    super(message);
+    this.name = "SessionExpiredError";
+  }
+}
+
+// Valida que el employeeId que manda el cliente sea el de la sesión activa.
+export async function assertSessionEmployee(employeeId: string) {
+  const sessionEmployeeId = await getSessionEmployeeId();
+  if (!sessionEmployeeId) {
+    throw new SessionExpiredError("Tu sesión expiró. Vuelve a ingresar tu PIN.");
+  }
+  if (sessionEmployeeId !== employeeId) {
+    throw new SessionExpiredError(
+      "Otro empleado inició sesión en este navegador. La pantalla se actualizará.",
+      "/pos"
+    );
+  }
+}
+
 type SessionData = {
   employeeId?: string;
   authLevel?: AuthLevel;

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
 import type { SaleOrderType, UnitOfMeasure } from "@prisma/client";
 import type { CreateSaleItemInput } from "@/actions/pos";
 
@@ -103,9 +104,21 @@ type CartState = {
   removeLine: (lineId: string) => void;
   clear: () => void;
   subtotal: () => number;
+  // Dueño del carrito guardado ("empleado:turno") — si cambia el empleado o
+  // el turno, lo guardado de otra persona/turno se descarta (ver claimCart).
+  ownerKey: string | null;
+  claimCart: (ownerKey: string) => void;
 };
 
-export const useCartStore = create<CartState>((set, get) => ({
+export const CART_STORAGE_KEY = "nomada-pos-cart";
+
+// El carrito se guarda en sessionStorage para que una recarga accidental,
+// un cuelgue del navegador o volver a entrar no hagan perder la orden en
+// curso (QA-004). skipHydration: se rehidrata en PosWorkspace al montar,
+// para que el HTML del servidor (carrito vacío) coincida al hidratar.
+export const useCartStore = create<CartState>()(
+  persist(
+    (set, get) => ({
   lines: [],
   orderType: "PARA_LLEVAR",
   setOrderType: (orderType) => set({ orderType }),
@@ -180,7 +193,27 @@ export const useCartStore = create<CartState>((set, get) => ({
       (sum, line) => sum + lineUnitPrice(line) * line.quantity,
       0
     ),
-}));
+
+  ownerKey: null,
+  claimCart: (ownerKey) => {
+    if (get().ownerKey === ownerKey) return;
+    set({ ownerKey, lines: [], orderType: "PARA_LLEVAR", tableNumber: "", activeTabId: null });
+  },
+    }),
+    {
+      name: CART_STORAGE_KEY,
+      storage: createJSONStorage(() => sessionStorage),
+      skipHydration: true,
+      partialize: (state) => ({
+        lines: state.lines,
+        orderType: state.orderType,
+        tableNumber: state.tableNumber,
+        activeTabId: state.activeTabId,
+        ownerKey: state.ownerKey,
+      }),
+    }
+  )
+);
 
 export { lineUnitPrice };
 

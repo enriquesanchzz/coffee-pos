@@ -40,6 +40,26 @@ export function PosWorkspace({
   const [activeTabSummary, setActiveTabSummary] = useState<OpenTabDetail | null>(null);
   const addLine = useCartStore((s) => s.addLine);
   const activeTabId = useCartStore((s) => s.activeTabId);
+  const hasLines = useCartStore((s) => s.lines.length > 0);
+
+  // Recupera el carrito guardado (ver cart-store.ts) y lo descarta si era
+  // de otro empleado o de otro turno.
+  useEffect(() => {
+    const ownerKey = `${employee.id}:${shiftId}`;
+    Promise.resolve(useCartStore.persist.rehydrate()).then(() => {
+      useCartStore.getState().claimCart(ownerKey);
+    });
+  }, [employee.id, shiftId]);
+
+  // Aviso del navegador antes de cerrar/recargar con una orden a medias.
+  useEffect(() => {
+    if (!hasLines) return;
+    function warn(e: BeforeUnloadEvent) {
+      e.preventDefault();
+    }
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [hasLines]);
 
   const favoriteProducts = useMemo(() => {
     const byId = new Map(catalog.flatMap((c) => c.products).map((p) => [p.id, p]));
@@ -56,7 +76,12 @@ export function PosWorkspace({
     }
     getTabDetail(activeTabId)
       .then(setActiveTabSummary)
-      .catch(() => setActiveTabSummary(null));
+      .catch(() => {
+        // La cuenta ya no existe o se cobró en otra caja (p. ej. al
+        // recuperar un carrito guardado): se vuelve a una venta normal.
+        setActiveTabSummary(null);
+        useCartStore.getState().setActiveTabId(null);
+      });
   }, [activeTabId]);
 
   return (

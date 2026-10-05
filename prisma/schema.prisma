@@ -1199,6 +1199,11 @@ model Sale {
   // Motivo capturado al anular (cancelSale en actions/pos.ts) — obligatorio
   // para auditoría; la anulación exige PIN de alguien con VENTA_CANCELAR.
   cancelReason String?
+  // Id que genera el POS por cada intento de cobro y reutiliza en los
+  // reintentos: si la red se cae DESPUÉS de que el servidor registró la
+  // venta, reintentar con el mismo id regresa la venta existente en vez de
+  // cobrar dos veces (QA-015).
+  clientRequestId String? @unique
 
   items       SaleItem[]
   payments    SalePayment[]

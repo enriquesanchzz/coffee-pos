@@ -2,6 +2,7 @@ import "server-only";
 import { unstable_rethrow } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import type { ActionError } from "./action-result";
+import { SessionExpiredError } from "./session";
 
 // Ver lib/action-result.ts. Los errores de negocio (throw new Error("...")
 // en español) se regresan con su mensaje; los de Prisma u otros inesperados
@@ -15,6 +16,9 @@ export function safeAction<A extends unknown[], R>(
       return await action(...args);
     } catch (err) {
       unstable_rethrow(err);
+      if (err instanceof SessionExpiredError) {
+        return { __actionError: err.message, redirectTo: err.redirectTo };
+      }
       return { __actionError: toUserMessage(err) };
     }
   };

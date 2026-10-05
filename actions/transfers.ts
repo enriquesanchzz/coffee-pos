@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import type { UnitOfMeasure } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
-import { getSessionEmployeeId } from "@/lib/session";
+import { getSessionEmployeeId, assertSessionEmployee } from "@/lib/session";
 import { requirePermission, requireAdminRole } from "@/lib/permissions";
 
 // No existe un permiso específico de "transferencias" en el catálogo — se
@@ -29,9 +29,7 @@ export type CreateTransferManifestInput = {
 // Solo crea el manifiesto (status ENVIADO) — el inventario todavía no se
 // mueve, eso pasa en markTransferInTransit.
 export const createTransferManifest = safeAction(async function createTransferManifest(input: CreateTransferManifestInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   if (input.fromStockLocationId === input.toStockLocationId) {
     throw new Error("El origen y el destino deben ser distintos.");
   }
@@ -82,9 +80,7 @@ export type MarkTransferInTransitInput = {
 // El inventario sale de origen aquí, no al crear el manifiesto (ver
 // comentario en TransferManifest del schema).
 export const markTransferInTransit = safeAction(async function markTransferInTransit(input: MarkTransferInTransitInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "INVENTARIO_AJUSTAR");
   await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
@@ -171,9 +167,7 @@ export type ReceiveTransferInput = {
 // diferencia se registra como MERMA en destino — ver comentario en
 // TransferLine del schema.
 export const receiveTransfer = safeAction(async function receiveTransfer(input: ReceiveTransferInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "INVENTARIO_AJUSTAR");
   await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
@@ -283,9 +277,7 @@ export type CancelTransferManifestInput = {
 // salió de origen (EN_TRANSITO) cancelar requeriría lógica de reversión que
 // queda fuera de alcance.
 export const cancelTransferManifest = safeAction(async function cancelTransferManifest(input: CancelTransferManifestInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "INVENTARIO_AJUSTAR");
   await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);

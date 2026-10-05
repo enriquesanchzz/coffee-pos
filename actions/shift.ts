@@ -4,7 +4,7 @@ import { safeAction } from "@/lib/safe-action";
 import { revalidatePath } from "next/cache";
 import { Permission, PaymentMethod, Prisma, ShiftType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { findEmployeeByPin, getSessionEmployeeId } from "@/lib/session";
+import { findEmployeeByPin, getSessionEmployeeId, assertSessionEmployee, SessionExpiredError } from "@/lib/session";
 import { requirePermission } from "@/lib/permissions";
 
 // -----------------------------------------------------------------------
@@ -42,9 +42,7 @@ export type OpenShiftInput = {
 };
 
 export const openShift = safeAction(async function openShift(input: OpenShiftInput) {
-  if (input.cashierId !== (await getSessionEmployeeId())) {
-    throw new Error("El cajero no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.cashierId);
 
   const existing = await prisma.shift.findFirst({
     where: { branchId: input.branchId, status: "ABIERTO" },
@@ -129,7 +127,7 @@ async function computeExpectedCash(
 export const previewShiftClose = safeAction(async function previewShiftClose(shiftId: string) {
   // Expone los totales de caja del turno — solo para una sesión activa.
   if (!(await getSessionEmployeeId())) {
-    throw new Error("Necesitas iniciar sesión para ver el corte de caja.");
+    throw new SessionExpiredError("Necesitas iniciar sesión para ver el corte de caja.");
   }
   const shift = await prisma.shift.findUniqueOrThrow({ where: { id: shiftId } });
   const openingCash = shift.openingCash.toNumber();
@@ -164,9 +162,7 @@ export type CloseShiftInput = {
 };
 
 export const closeShift = safeAction(async function closeShift(input: CloseShiftInput) {
-  if (input.cashierId !== (await getSessionEmployeeId())) {
-    throw new Error("El cajero no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.cashierId);
 
   await prisma.$transaction(async (tx) => {
     const shift = await tx.shift.findUnique({ where: { id: input.shiftId } });

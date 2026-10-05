@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { Prisma, type UnitOfMeasure } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID, DEFAULT_STOCK_LOCATION_ID } from "@/lib/constants";
-import { getSessionEmployeeId } from "@/lib/session";
+import { getSessionEmployeeId, assertSessionEmployee } from "@/lib/session";
 import { requirePermission, requireAdminRole } from "@/lib/permissions";
 
 export type AdjustInventoryStockInput = {
@@ -20,9 +20,7 @@ export type AdjustInventoryStockInput = {
 // como InventoryMovement tipo AJUSTE_MANUAL (quantity = delta, puede ser
 // negativo), igual que el resto de movimientos de inventario en el sistema.
 export const adjustInventoryStock = safeAction(async function adjustInventoryStock(input: AdjustInventoryStockInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   if (input.newQuantity < 0) {
     throw new Error("La cantidad no puede ser negativa.");
   }
@@ -109,9 +107,7 @@ function validExtraPrice(value: number | null) {
 }
 
 export const updateIngredient = safeAction(async function updateIngredient(input: UpdateIngredientInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   const name = input.name.trim();
   if (!name) {
     throw new Error("El nombre del insumo es obligatorio.");
@@ -154,9 +150,7 @@ export type DeleteIngredientInput = {
 // obligatoria — el RESTRICT de Postgres ya lo bloquea, se traduce el error
 // a un mensaje legible.
 export const deleteIngredient = safeAction(async function deleteIngredient(input: DeleteIngredientInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "INVENTARIO_CREAR_ITEM");
   await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
@@ -191,9 +185,7 @@ export type CreateIngredientCategoryInput = {
 };
 
 export const createIngredientCategory = safeAction(async function createIngredientCategory(input: CreateIngredientCategoryInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   const name = input.name.trim();
   if (!name) {
     throw new Error("El nombre de la categoría es obligatorio.");
@@ -219,9 +211,7 @@ export type UpdateIngredientCategoryInput = {
 };
 
 export const updateIngredientCategory = safeAction(async function updateIngredientCategory(input: UpdateIngredientCategoryInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   const name = input.name.trim();
   if (!name) {
     throw new Error("El nombre de la categoría es obligatorio.");
@@ -244,9 +234,7 @@ export type DeleteIngredientCategoryInput = {
 };
 
 export const deleteIngredientCategory = safeAction(async function deleteIngredientCategory(input: DeleteIngredientCategoryInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "INVENTARIO_CREAR_ITEM");
   await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);

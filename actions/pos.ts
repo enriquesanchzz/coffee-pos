@@ -14,9 +14,11 @@ import {
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID, DEFAULT_STOCK_LOCATION_ID } from "@/lib/constants";
-import { getSessionEmployeeId, findEmployeeByPin } from "@/lib/session";
+import { getSessionEmployeeId, findEmployeeByPin, assertSessionEmployee, SessionExpiredError } from "@/lib/session";
 import { requirePermission } from "@/lib/permissions";
 import { zonedClock } from "@/lib/time";
+import { unitLabel } from "@/lib/utils";
+import { SHORTAGE_ERROR_PREFIX } from "@/lib/stock";
 
 export type CreateSaleExtraIngredientInput = {
   ingredientId: string;
@@ -41,6 +43,12 @@ export type ManualDiscountInput = {
 };
 
 export type CreateSaleInput = {
+  // Id del intento de cobro (ver Sale.clientRequestId): un reintento con
+  // el mismo id regresa la venta ya registrada en vez de duplicarla.
+  clientRequestId?: string;
+  // El cajero ya vio la advertencia de insumos insuficientes y decidió
+  // vender de todos modos (ver findShortages).
+  allowShortage?: boolean;
   branchId: string;
   shiftId: string;
   employeeId: string;
@@ -569,6 +577,57 @@ async function resolveSaleItems(
   return { saleItemsData, consumption, subtotal, discountableSubtotal, appliedPromotions };
 }
 
+// Insumos que no alcanzan para una ronda: consumo (en baseUnit) contra el
+// stock actual de la ubicación por defecto. Antes se vendía sin revisar y
+// el stock quedaba en negativo sin que nadie lo notara (QA-003). Política
+// acordada: advertir y permitir solo si el cajero lo confirma.
+export type StockShortage = { ingredientId: string; name: string; unit: string; missing: number };
+
+async function findShortages(
+  tx: Prisma.TransactionClient,
+  consumption: Map<string, Prisma.Decimal>
+): Promise<StockShortage[]> {
+  const ids = [...consumption.keys()];
+  if (ids.length === 0) return [];
+  const [ingredients, stocks] = await Promise.all([
+    tx.ingredient.findMany({ where: { id: { in: ids } } }),
+    tx.inventoryStock.findMany({
+      where: { ingredientId: { in: ids }, stockLocationId: DEFAULT_STOCK_LOCATION_ID },
+    }),
+  ]);
+  const stockById = new Map(stocks.map((s) => [s.ingredientId, s.quantity]));
+  const shortages: StockShortage[] = [];
+  for (const ingredient of ingredients) {
+    const required = consumption.get(ingredient.id) ?? new Prisma.Decimal(0);
+    const available = stockById.get(ingredient.id) ?? new Prisma.Decimal(0);
+    if (required.greaterThan(available)) {
+      shortages.push({
+        ingredientId: ingredient.id,
+        name: ingredient.name,
+        unit: unitLabel(ingredient.baseUnit),
+        missing: required.sub(Prisma.Decimal.max(available, 0)).toDecimalPlaces(2).toNumber(),
+      });
+    }
+  }
+  return shortages;
+}
+
+function describeShortages(shortages: StockShortage[]) {
+  return shortages.map((s) => `${s.name} (faltan ${s.missing} ${s.unit})`).join(", ");
+}
+
+async function assertStockOrAllowed(
+  tx: Prisma.TransactionClient,
+  consumption: Map<string, Prisma.Decimal>,
+  allowShortage: boolean | undefined
+) {
+  if (allowShortage) return;
+  const shortages = await findShortages(tx, consumption);
+  if (shortages.length > 0) {
+    throw new Error(`${SHORTAGE_ERROR_PREFIX} ${describeShortages(shortages)}.`);
+  }
+}
+
 // Crea los SaleItem (+ modificadores + extras libres) de una ronda de
 // items ya resueltos — reusado por createSale, openTab, addItemsToTab y
 // closeTab (última ronda antes de cobrar).
@@ -666,6 +725,11 @@ async function applyLoyaltyStamp(tx: Prisma.TransactionClient, customerId: strin
   });
 }
 
+async function findSaleByClientRequestId(clientRequestId: string | undefined) {
+  if (!clientRequestId) return null;
+  return prisma.sale.findUnique({ where: { clientRequestId } });
+}
+
 function serializeSale(sale: {
   id: string;
   subtotal: Prisma.Decimal;
@@ -703,31 +767,36 @@ function serializeSale(sale: {
 export const previewSaleTotal = safeAction(async function previewSaleTotal(
   employeeId: string,
   items: CreateSaleItemInput[]
-): Promise<{ subtotal: number; discountableSubtotal: number; appliedPromotions: AppliedPromotion[] }> {
-  if (employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+): Promise<{
+  subtotal: number;
+  discountableSubtotal: number;
+  appliedPromotions: AppliedPromotion[];
+  shortages: StockShortage[];
+}> {
+  await assertSessionEmployee(employeeId);
   if (items.length === 0) {
-    return { subtotal: 0, discountableSubtotal: 0, appliedPromotions: [] };
+    return { subtotal: 0, discountableSubtotal: 0, appliedPromotions: [], shortages: [] };
   }
 
-  const { subtotal, discountableSubtotal, appliedPromotions } = await resolveSaleItems(prisma, items);
+  const { subtotal, discountableSubtotal, appliedPromotions, consumption } = await resolveSaleItems(prisma, items);
   return {
     subtotal: subtotal.toNumber(),
     discountableSubtotal: discountableSubtotal.toNumber(),
     appliedPromotions,
+    shortages: await findShortages(prisma, consumption),
   };
 });
 
 export const createSale = safeAction(async function createSale(input: CreateSaleInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   if (input.items.length === 0) {
     throw new Error("La venta no tiene productos.");
   }
 
   await requirePermission(input.employeeId, input.branchId, "VENTA_REALIZAR");
+
+  const alreadyRegistered = await findSaleByClientRequestId(input.clientRequestId);
+  if (alreadyRegistered) return serializeSale(alreadyRegistered);
 
   const sale = await prisma.$transaction(async (tx) => {
     const shift = await tx.shift.findUnique({ where: { id: input.shiftId } });
@@ -736,6 +805,7 @@ export const createSale = safeAction(async function createSale(input: CreateSale
     }
 
     const { saleItemsData, consumption, subtotal, discountableSubtotal } = await resolveSaleItems(tx, input.items);
+    await assertStockOrAllowed(tx, consumption, input.allowShortage);
 
     // Descuento: código o manual, nunca ambos a la vez.
     if (input.discountCodeId && input.manualDiscount) {
@@ -806,6 +876,7 @@ export const createSale = safeAction(async function createSale(input: CreateSale
         discountTotal,
         total,
         tipAmount,
+        clientRequestId: input.clientRequestId || null,
         ...(manualDiscountData ? { manualDiscount: { create: manualDiscountData } } : {}),
         payments: {
           create: input.payments.map((p) => ({ method: p.method, amount: p.amount, note: p.note?.trim() || null })),
@@ -841,6 +912,9 @@ export const createSale = safeAction(async function createSale(input: CreateSale
 // -----------------------------------------------------------------------
 
 export type OpenTabInput = {
+  // El cajero ya vio la advertencia de insumos insuficientes y decidió
+  // vender de todos modos (ver findShortages).
+  allowShortage?: boolean;
   branchId: string;
   shiftId: string;
   employeeId: string;
@@ -850,9 +924,7 @@ export type OpenTabInput = {
 };
 
 export const openTab = safeAction(async function openTab(input: OpenTabInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   if (input.items.length === 0) {
     throw new Error("La cuenta no tiene productos.");
   }
@@ -885,6 +957,7 @@ export const openTab = safeAction(async function openTab(input: OpenTabInput) {
     }
 
     const { saleItemsData, consumption, subtotal } = await resolveSaleItems(tx, input.items);
+    await assertStockOrAllowed(tx, consumption, input.allowShortage);
 
     const createdSale = await tx.sale.create({
       data: {
@@ -946,6 +1019,9 @@ async function loadOpenTab(tx: Prisma.TransactionClient, saleId: string, branchI
 }
 
 export type AddItemsToTabInput = {
+  // El cajero ya vio la advertencia de insumos insuficientes y decidió
+  // vender de todos modos (ver findShortages).
+  allowShortage?: boolean;
   saleId: string;
   branchId: string;
   shiftId: string;
@@ -954,9 +1030,7 @@ export type AddItemsToTabInput = {
 };
 
 export const addItemsToTab = safeAction(async function addItemsToTab(input: AddItemsToTabInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   if (input.items.length === 0) {
     throw new Error("La ronda no tiene productos.");
   }
@@ -966,6 +1040,7 @@ export const addItemsToTab = safeAction(async function addItemsToTab(input: AddI
   const sale = await prisma.$transaction(async (tx) => {
     const existing = await loadOpenTab(tx, input.saleId, input.branchId, input.shiftId);
     const { saleItemsData, consumption, subtotal } = await resolveSaleItems(tx, input.items);
+    await assertStockOrAllowed(tx, consumption, input.allowShortage);
 
     await persistSaleItems(tx, existing.id, saleItemsData);
     await applyConsumption(tx, consumption, {
@@ -989,6 +1064,12 @@ export const addItemsToTab = safeAction(async function addItemsToTab(input: AddI
 });
 
 export type CloseTabInput = {
+  // Id del intento de cobro (ver Sale.clientRequestId): un reintento con
+  // el mismo id regresa la venta ya registrada en vez de duplicarla.
+  clientRequestId?: string;
+  // El cajero ya vio la advertencia de insumos insuficientes y decidió
+  // vender de todos modos (ver findShortages).
+  allowShortage?: boolean;
   saleId: string;
   branchId: string;
   shiftId: string;
@@ -1003,17 +1084,21 @@ export type CloseTabInput = {
 };
 
 export const closeTab = safeAction(async function closeTab(input: CloseTabInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
 
   await requirePermission(input.employeeId, input.branchId, "VENTA_REALIZAR");
+
+  // Reintento de un cobro que sí se registró (la respuesta se perdió): la
+  // cuenta ya está COMPLETADA con este mismo id — se regresa tal cual.
+  const alreadyClosed = await findSaleByClientRequestId(input.clientRequestId);
+  if (alreadyClosed && alreadyClosed.id === input.saleId) return serializeSale(alreadyClosed);
 
   const sale = await prisma.$transaction(async (tx) => {
     let existing = await loadOpenTab(tx, input.saleId, input.branchId, input.shiftId);
 
     if (input.items && input.items.length > 0) {
       const { saleItemsData, consumption, subtotal: roundSubtotal } = await resolveSaleItems(tx, input.items);
+      await assertStockOrAllowed(tx, consumption, input.allowShortage);
       await persistSaleItems(tx, existing.id, saleItemsData);
       await applyConsumption(tx, consumption, {
         branchId: input.branchId,
@@ -1093,6 +1178,7 @@ export const closeTab = safeAction(async function closeTab(input: CloseTabInput)
       where: { id: existing.id },
       data: {
         status: "COMPLETADA",
+        clientRequestId: input.clientRequestId || null,
         discountTotal,
         total,
         tipAmount,
@@ -1127,7 +1213,7 @@ export type OpenTabSummary = {
 export const listOpenTabs = safeAction(async function listOpenTabs(branchId: string): Promise<OpenTabSummary[]> {
   const employeeId = await getSessionEmployeeId();
   if (!employeeId) {
-    throw new Error("Necesitas iniciar sesión para ver las cuentas abiertas.");
+    throw new SessionExpiredError("Necesitas iniciar sesión para ver las cuentas abiertas.");
   }
 
   const sales = await prisma.sale.findMany({
@@ -1170,7 +1256,7 @@ export type OpenTabDetail = {
 // cliente que todo esté bien.
 export const getTabDetail = safeAction(async function getTabDetail(saleId: string): Promise<OpenTabDetail> {
   if (!(await getSessionEmployeeId())) {
-    throw new Error("Necesitas iniciar sesión para ver la cuenta.");
+    throw new SessionExpiredError("Necesitas iniciar sesión para ver la cuenta.");
   }
   const sale = await prisma.sale.findUniqueOrThrow({
     where: { id: saleId },
@@ -1306,9 +1392,7 @@ export type RemoveTabItemInput = {
 // mientras la cuenta sigue ABIERTA; una venta ya cobrada no se corrige
 // aquí (existe VENTA_CANCELAR para eso).
 export const removeTabItem = safeAction(async function removeTabItem(input: RemoveTabItemInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   await requirePermission(input.employeeId, input.branchId, "VENTA_REALIZAR");
 
   const sale = await prisma.$transaction(async (tx) => {
@@ -1364,9 +1448,7 @@ export type UpdateTabItemQuantityInput = {
 // confusa). Solo se ajusta el inventario por la diferencia exacta entre
 // la cantidad vieja y la nueva.
 export const updateTabItemQuantity = safeAction(async function updateTabItemQuantity(input: UpdateTabItemQuantityInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   if (input.quantity <= 0) {
     throw new Error("La cantidad debe ser mayor a cero — para quitar el producto, usa \"Quitar\".");
   }
@@ -1437,9 +1519,7 @@ export type CancelSaleInput = {
 // La venta queda CANCELADA (no se borra): reportes, corte de caja y
 // lealtad ya filtran por COMPLETADA, así que deja de contar en todos.
 export const cancelSale = safeAction(async function cancelSale(input: CancelSaleInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   const reason = input.reason.trim();
   if (!reason) {
     throw new Error("Captura el motivo de la anulación.");

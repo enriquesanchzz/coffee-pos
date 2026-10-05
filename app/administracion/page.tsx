@@ -102,7 +102,7 @@ export default async function AdministracionPage() {
               <p className="text-xs text-muted-foreground">
                 {lowStockItems.length === 0
                   ? "Todo el inventario está en orden."
-                  : "insumo" + (lowStockItems.length === 1 ? "" : "s") + " por debajo del mínimo"}
+                  : "insumo" + (lowStockItems.length === 1 ? "" : "s") + " sin stock o por debajo del mínimo"}
               </p>
             </CardContent>
           </Card>

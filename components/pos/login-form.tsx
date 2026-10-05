@@ -27,6 +27,9 @@ export function LoginForm({ error }: { error?: string }) {
           {error === "pin" && (
             <p className="text-sm text-destructive">PIN incorrecto. Intenta de nuevo.</p>
           )}
+          {error === "sesion" && (
+            <p className="text-sm text-destructive">Tu sesión expiró. Vuelve a ingresar tu PIN.</p>
+          )}
           {error === "bloqueado" && (
             <p className="text-sm text-destructive">
               Demasiados intentos fallidos. Espera 5 minutos antes de volver a intentar.

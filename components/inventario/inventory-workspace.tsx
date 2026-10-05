@@ -55,11 +55,11 @@ export function InventoryWorkspace({
           <p className="text-sm font-medium leading-tight">{item.name}</p>
           {item.isLow && (
             <Badge variant="destructive" className="text-[10px]">
-              stock bajo
+              {item.quantity < 0 ? "negativo" : item.quantity === 0 ? "sin stock" : "stock bajo"}
             </Badge>
           )}
         </div>
-        <p className="text-sm text-muted-foreground">
+        <p className={item.quantity < 0 ? "text-sm font-medium text-destructive" : "text-sm text-muted-foreground"}>
           {new Intl.NumberFormat("es-MX").format(item.quantity)} {unitLabels[item.baseUnit] ?? item.baseUnit}
         </p>
         <div className="mt-1 flex items-center gap-2">

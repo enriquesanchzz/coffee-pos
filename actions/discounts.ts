@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import type { DiscountType, DiscountCodeCategory } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
-import { getSessionEmployeeId } from "@/lib/session";
+import { getSessionEmployeeId, assertSessionEmployee } from "@/lib/session";
 import { requirePermission, requireAdminRole } from "@/lib/permissions";
 
 export type CreateDiscountCodeInput = {
@@ -20,9 +20,7 @@ export type CreateDiscountCodeInput = {
 };
 
 export const createDiscountCode = safeAction(async function createDiscountCode(input: CreateDiscountCodeInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   const code = input.code.trim().toUpperCase();
   if (!code) {
     throw new Error("El código es obligatorio.");
@@ -59,9 +57,7 @@ export type UpdateDiscountCodeInput = {
 };
 
 export const updateDiscountCode = safeAction(async function updateDiscountCode(input: UpdateDiscountCodeInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   const code = input.code.trim().toUpperCase();
   if (!code) {
     throw new Error("El código es obligatorio.");
@@ -109,9 +105,7 @@ export type FoundDiscountCode = {
 export const findDiscountCodeByCode = safeAction(async function findDiscountCodeByCode(
   input: FindDiscountCodeByCodeInput
 ): Promise<FoundDiscountCode> {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "DESCUENTO_APLICAR_CODIGO");
 

@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import type { UnitOfMeasure } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID, DEFAULT_STOCK_LOCATION_ID } from "@/lib/constants";
-import { getSessionEmployeeId } from "@/lib/session";
+import { getSessionEmployeeId, assertSessionEmployee } from "@/lib/session";
 import { requirePermission, requireAdminRole } from "@/lib/permissions";
 
 // No existe un permiso específico de "proveedores" en el catálogo — se usa
@@ -22,9 +22,7 @@ export type CreateSupplierInput = {
 };
 
 export const createSupplier = safeAction(async function createSupplier(input: CreateSupplierInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   const name = input.name.trim();
   if (!name) {
     throw new Error("El nombre del proveedor es obligatorio.");
@@ -61,9 +59,7 @@ export type UpdateSupplierInput = {
 };
 
 export const updateSupplier = safeAction(async function updateSupplier(input: UpdateSupplierInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   const name = input.name.trim();
   if (!name) {
     throw new Error("El nombre del proveedor es obligatorio.");
@@ -103,9 +99,7 @@ export type UpsertIngredientSupplierInput = {
 // costo de receta (ver comentario en IngredientSupplier del schema) — solo
 // un proveedor puede estar seleccionado a la vez por ingrediente.
 export const upsertIngredientSupplier = safeAction(async function upsertIngredientSupplier(input: UpsertIngredientSupplierInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   if (input.cost <= 0) {
     throw new Error("El costo debe ser mayor a cero.");
   }
@@ -164,9 +158,7 @@ export type CreatePurchaseOrderInput = {
 };
 
 export const createPurchaseOrder = safeAction(async function createPurchaseOrder(input: CreatePurchaseOrderInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   if (!input.supplierId) {
     throw new Error("Elige un proveedor.");
   }
@@ -240,9 +232,7 @@ export type ReceivePurchaseOrderInput = {
 // proveedor, actualiza IngredientSupplier.cost dejando rastro en
 // IngredientCostHistory.
 export const receivePurchaseOrder = safeAction(async function receivePurchaseOrder(input: ReceivePurchaseOrderInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "COMPRA_REGISTRAR");
   await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
@@ -394,9 +384,7 @@ export type UpdatePurchaseOrderInput = {
 // está contemplado; para corregir algo ya recibido, la vía es una nueva
 // orden.
 export const updatePurchaseOrder = safeAction(async function updatePurchaseOrder(input: UpdatePurchaseOrderInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   if (!input.supplierId) {
     throw new Error("Elige un proveedor.");
   }
@@ -460,9 +448,7 @@ export type CancelPurchaseOrderInput = {
 // recibido (ni que sea parcial) dejaría el inventario ya aplicado
 // inconsistente con el estado de la orden.
 export const cancelPurchaseOrder = safeAction(async function cancelPurchaseOrder(input: CancelPurchaseOrderInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "ORDEN_COMPRA_CREAR");
   await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);

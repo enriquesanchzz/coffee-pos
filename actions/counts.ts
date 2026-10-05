@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID, DEFAULT_STOCK_LOCATION_ID } from "@/lib/constants";
-import { findEmployeeByPin, getSessionEmployeeId } from "@/lib/session";
+import { findEmployeeByPin, getSessionEmployeeId, assertSessionEmployee, SessionExpiredError } from "@/lib/session";
 import { requirePermission, requireAdminRole } from "@/lib/permissions";
 
 // No existe un permiso específico de "conteos" en el catálogo — se usa
@@ -26,9 +26,7 @@ export type CreatePhysicalCountInput = {
 // se congela del InventoryStock actual en el momento del submit. No toca
 // inventario todavía: eso pasa solo si se aprueba (approvePhysicalCount).
 export const createPhysicalCount = safeAction(async function createPhysicalCount(input: CreatePhysicalCountInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   if (input.lines.length === 0) {
     throw new Error("Captura al menos un ingrediente.");
   }
@@ -95,7 +93,7 @@ export const approvePhysicalCount = safeAction(async function approvePhysicalCou
   // bastaba con conocer un PIN para aprobar desde fuera de la app.
   const sessionEmployeeId = await getSessionEmployeeId();
   if (!sessionEmployeeId) {
-    throw new Error("Necesitas iniciar sesión para aprobar un conteo.");
+    throw new SessionExpiredError("Necesitas iniciar sesión para aprobar un conteo.");
   }
   await requireAdminRole(sessionEmployeeId, DEFAULT_BRANCH_ID);
 

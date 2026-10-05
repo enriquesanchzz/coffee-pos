@@ -61,7 +61,10 @@ export async function getInventoryOverview(
       extraPriceUnit: ingredient.standardDoseUnit ?? ingredient.baseUnit,
       quantity,
       reorderThreshold,
-      isLow: reorderThreshold !== null && quantity <= reorderThreshold,
+      // Sin stock (o en negativo, posible si se vendió confirmando la
+      // advertencia de insumos insuficientes) siempre cuenta como alerta,
+      // aunque no haya ReorderPoint configurado (QA-003).
+      isLow: quantity <= 0 || (reorderThreshold !== null && quantity <= reorderThreshold),
     };
   });
 }

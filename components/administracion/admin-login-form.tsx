@@ -28,6 +28,9 @@ export function AdminLoginForm({ error }: { error?: string }) {
               Tu cuenta no tiene el rol ADMINISTRADOR, necesario para entrar a Administración.
             </p>
           )}
+          {error === "sesion" && (
+            <p className="text-sm text-destructive">Tu sesión de Administración expiró. Vuelve a entrar.</p>
+          )}
           {error === "bloqueado" && (
             <p className="text-sm text-destructive">
               Demasiados intentos fallidos. Espera 5 minutos antes de volver a intentar.

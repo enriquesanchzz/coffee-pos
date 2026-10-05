@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { hashSecret } from "@/lib/password";
-import { isPinTaken, requirePasswordSession, resolveRoleName } from "@/lib/session";
+import { isPinTaken, requirePasswordSession, resolveRoleName, SessionExpiredError } from "@/lib/session";
 import { isValidEmail } from "@/lib/utils";
 import { requirePermission } from "@/lib/permissions";
 
@@ -22,7 +22,7 @@ const PIN_TAKEN_MESSAGE = "Ese PIN ya lo usa otro empleado activo. Elige uno dis
 async function requireEmployeeManager(permission: "EMPLEADO_CREAR" | "EMPLEADO_MODIFICAR") {
   const actor = await requirePasswordSession();
   if (!actor) {
-    throw new Error("Necesitas iniciar sesión de Administración para hacer esto.");
+    throw new SessionExpiredError("Necesitas iniciar sesión de Administración para hacer esto.", "/administracion/login?error=sesion");
   }
   if (resolveRoleName(actor, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") {
     throw new Error("Esta acción es exclusiva del rol ADMINISTRADOR.");

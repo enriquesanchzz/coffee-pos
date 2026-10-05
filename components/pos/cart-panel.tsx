@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label";
 import { cn, formatCurrency, posAccentClass, unitLabel } from "@/lib/utils";
 import { CustomerPicker } from "./customer-picker";
 import { CheckoutForm, type SaleReceipt } from "./checkout-form";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { isShortageError } from "@/lib/stock";
 import type { CustomerOption } from "@/lib/customers";
 import { withActionErrors } from "@/lib/action-result";
 
@@ -102,28 +104,39 @@ export function CartPanel({
     setActiveTabId(null);
   }
 
-  function handleLeaveOpen() {
+  // Advertencia de insumos insuficientes al dejar/agregar a una cuenta
+  // abierta: el servidor la rechaza con un mensaje que empieza con
+  // SHORTAGE_ERROR_PREFIX y aquí se ofrece reintentar confirmando.
+  const [shortageMessage, setShortageMessage] = useState<string | null>(null);
+
+  function handleLeaveOpen(allowShortage = false) {
     setTabError(null);
+    setShortageMessage(null);
     if (lines.length === 0) return;
 
     startSavingTab(async () => {
       try {
         const items = lines.map(cartLineToSaleItemInput);
         if (activeTabId) {
-          await addItemsToTab({ saleId: activeTabId, branchId, shiftId, employeeId, items });
+          await addItemsToTab({ saleId: activeTabId, branchId, shiftId, employeeId, items, allowShortage });
         } else {
           if (!tableNumber.trim()) {
             setTabError("Captura el número de mesa.");
             return;
           }
-          await openTab({ branchId, shiftId, employeeId, tableNumber, items });
+          await openTab({ branchId, shiftId, employeeId, tableNumber, items, allowShortage });
         }
         useCartStore.getState().clear();
         setActiveTabId(null);
         setTableNumber("");
         onTabChanged();
       } catch (err) {
-        setTabError(err instanceof Error ? err.message : "No se pudo dejar la cuenta abierta.");
+        const message = err instanceof Error ? err.message : "No se pudo dejar la cuenta abierta.";
+        if (isShortageError(message)) {
+          setShortageMessage(message);
+        } else {
+          setTabError(message);
+        }
       }
     });
   }
@@ -410,7 +423,7 @@ export function CartPanel({
               variant="outline"
               className="flex-1"
               disabled={lines.length === 0 || isSavingTab}
-              onClick={handleLeaveOpen}
+              onClick={() => handleLeaveOpen()}
             >
               {isSavingTab ? "Guardando..." : activeTabId ? "Agregar a la cuenta" : "Dejar cuenta abierta"}
             </Button>
@@ -427,6 +440,19 @@ export function CartPanel({
           </Button>
         </div>
       </div>
+      <ConfirmDialog
+        open={shortageMessage !== null}
+        title="Insumos insuficientes"
+        message={
+          <>
+            <p>{shortageMessage}</p>
+            <p className="mt-2">Si continúas, el inventario de esos insumos quedará en negativo.</p>
+          </>
+        }
+        confirmLabel="Registrar de todos modos"
+        onConfirm={() => handleLeaveOpen(true)}
+        onCancel={() => setShortageMessage(null)}
+      />
     </div>
   );
 }
