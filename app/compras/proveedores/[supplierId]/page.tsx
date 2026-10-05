@@ -5,6 +5,7 @@ import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getSupplierDetail, getIngredientOptions } from "@/lib/purchases";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { SupplierForm } from "@/components/compras/supplier-form";
+import { orNotFound } from "@/lib/not-found";
 
 export default async function EditarProveedorPage({
   params,
@@ -20,7 +21,7 @@ export default async function EditarProveedorPage({
 
   const { supplierId } = await params;
   const [supplier, ingredientOptions] = await Promise.all([
-    getSupplierDetail(supplierId),
+    orNotFound(getSupplierDetail(supplierId)),
     getIngredientOptions(),
   ]);
 

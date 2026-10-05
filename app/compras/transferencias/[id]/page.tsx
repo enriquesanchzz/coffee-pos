@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TransferStatusActions } from "@/components/compras/transfer-status-actions";
 import { ReceiveTransferForm } from "@/components/compras/receive-transfer-form";
 import { transferStatusLabels, unitLabels } from "@/components/compras/enum-labels";
+import { formatDateTime } from "@/lib/time";
+import { orNotFound } from "@/lib/not-found";
 
 export default async function DetalleTransferenciaPage({
   params,
@@ -24,7 +26,7 @@ export default async function DetalleTransferenciaPage({
   if (!canManage) redirect("/pos");
 
   const { id } = await params;
-  const manifest = await getTransferManifestDetail(id);
+  const manifest = await orNotFound(getTransferManifestDetail(id));
   const statusLabel =
     transferStatusLabels[manifest.status as keyof typeof transferStatusLabels] ?? manifest.status;
 
@@ -37,7 +39,7 @@ export default async function DetalleTransferenciaPage({
             </h1>
             <p className="text-sm text-muted-foreground">
               {statusLabel} · iniciada por {manifest.initiatedByName} ·{" "}
-              {new Date(manifest.sentAt).toLocaleString("es-MX")}
+              {formatDateTime(manifest.sentAt)}
             </p>
           </div>
 

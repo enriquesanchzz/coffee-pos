@@ -1,5 +1,6 @@
 "use server";
 
+import { safeAction } from "@/lib/safe-action";
 import { revalidatePath } from "next/cache";
 import type { PromotionCategory, DiscountType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -53,7 +54,7 @@ function validateComboInput(input: { name: string; price: number; items: ComboIt
   }
 }
 
-export async function createCombo(input: CreateComboInput) {
+export const createCombo = safeAction(async function createCombo(input: CreateComboInput) {
   await assertActor(input.employeeId);
   validateComboInput(input);
 
@@ -82,11 +83,11 @@ export async function createCombo(input: CreateComboInput) {
   });
 
   revalidatePath("/promociones");
-}
+});
 
 export type UpdateComboInput = CreateComboInput & { comboId: string; isActive: boolean };
 
-export async function updateCombo(input: UpdateComboInput) {
+export const updateCombo = safeAction(async function updateCombo(input: UpdateComboInput) {
   await assertActor(input.employeeId);
   validateComboInput(input);
 
@@ -118,7 +119,7 @@ export async function updateCombo(input: UpdateComboInput) {
   });
 
   revalidatePath("/promociones");
-}
+});
 
 // -----------------------------------------------------------------------
 // 2x1 y Día temático — Promotion/PromotionVariant (nuevos).
@@ -160,7 +161,7 @@ function validatePromotionInput(input: {
   }
 }
 
-export async function createPromotion(input: CreatePromotionInput) {
+export const createPromotion = safeAction(async function createPromotion(input: CreatePromotionInput) {
   await assertActor(input.employeeId);
   validatePromotionInput(input);
 
@@ -178,11 +179,11 @@ export async function createPromotion(input: CreatePromotionInput) {
   });
 
   revalidatePath("/promociones");
-}
+});
 
 export type UpdatePromotionInput = CreatePromotionInput & { promotionId: string; isActive: boolean };
 
-export async function updatePromotion(input: UpdatePromotionInput) {
+export const updatePromotion = safeAction(async function updatePromotion(input: UpdatePromotionInput) {
   await assertActor(input.employeeId);
   validatePromotionInput(input);
 
@@ -208,4 +209,4 @@ export async function updatePromotion(input: UpdatePromotionInput) {
   });
 
   revalidatePath("/promociones");
-}
+});

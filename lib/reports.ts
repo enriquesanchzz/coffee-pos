@@ -3,25 +3,34 @@ import { Prisma, type VariantTemperature } from "@prisma/client";
 import { prisma } from "./prisma";
 import { DEFAULT_BRANCH_ID, DEFAULT_STOCK_LOCATION_ID } from "./constants";
 import { calculateRecipeVersionCost } from "./recipe-cost";
+import { addDaysToKey, zonedClock, zonedDateKey, zonedEndOfDay, zonedStartOfDay } from "./time";
 
 // Resuelve el rango de fechas de ?from=&to= en la URL, con default de los
 // últimos 30 días. `to` se extiende al final del día para incluir todas las
 // ventas/movimientos de esa fecha.
-export function resolveDateRange(fromParam?: string, toParam?: string) {
-  const now = new Date();
-  const defaultTo = now.toISOString().slice(0, 10);
-  const defaultFromDate = new Date(now);
-  defaultFromDate.setDate(defaultFromDate.getDate() - 30);
-  const defaultFrom = defaultFromDate.toISOString().slice(0, 10);
+//
+// Los días se interpretan en la zona horaria de la sucursal (lib/time.ts),
+// no la del servidor. Si el rango viene invertido (desde > hasta) se
+// intercambia y se avisa con `swapped` para que la UI lo muestre.
+const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-  const fromStr = fromParam || defaultFrom;
-  const toStr = toParam || defaultTo;
+export function resolveDateRange(fromParam?: string, toParam?: string) {
+  const defaultTo = zonedDateKey(new Date());
+  const defaultFrom = addDaysToKey(defaultTo, -30);
+
+  let fromStr = fromParam && DATE_KEY_PATTERN.test(fromParam) ? fromParam : defaultFrom;
+  let toStr = toParam && DATE_KEY_PATTERN.test(toParam) ? toParam : defaultTo;
+  const swapped = fromStr > toStr;
+  if (swapped) {
+    [fromStr, toStr] = [toStr, fromStr];
+  }
 
   return {
-    from: new Date(`${fromStr}T00:00:00`),
-    to: new Date(`${toStr}T23:59:59.999`),
+    from: zonedStartOfDay(fromStr),
+    to: zonedEndOfDay(toStr),
     fromStr,
     toStr,
+    swapped,
   };
 }
 
@@ -325,10 +334,8 @@ export type DailySalesStat = {
   revenue: number;
 };
 
-// Hora del día en UTC (0-23), no hora local de la sucursal — mismo criterio
-// que dailySales ya usa para el día (`toISOString().slice(0,10)`, también
-// UTC): se mantiene consistente con esa simplificación ya aceptada en el
-// archivo en vez de introducir una segunda convención de huso horario.
+// Hora del día (0-23) en la zona horaria de la sucursal (lib/time.ts) —
+// mismo criterio que dailySales para el día.
 export type HourlySalesStat = {
   hour: number;
   salesCount: number;
@@ -376,13 +383,13 @@ export async function getStatsReport(from: Date, to: Date): Promise<StatsReport>
   const byChannel = new Map<string, { salesCount: number; revenue: number }>();
 
   for (const sale of sales) {
-    const day = sale.createdAt.toISOString().slice(0, 10);
+    const day = zonedDateKey(sale.createdAt);
     const dayEntry = byDay.get(day) ?? { salesCount: 0, revenue: 0 };
     dayEntry.salesCount += 1;
     dayEntry.revenue += sale.total.toNumber();
     byDay.set(day, dayEntry);
 
-    const hour = sale.createdAt.getUTCHours();
+    const hour = zonedClock(sale.createdAt).hour;
     const hourEntry = byHour.get(hour) ?? { salesCount: 0, revenue: 0 };
     hourEntry.salesCount += 1;
     hourEntry.revenue += sale.total.toNumber();

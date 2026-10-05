@@ -1,5 +1,6 @@
 "use server";
 
+import { safeAction } from "@/lib/safe-action";
 import { revalidatePath } from "next/cache";
 import type { UnitOfMeasure } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -27,7 +28,7 @@ export type CreateTransferManifestInput = {
 
 // Solo crea el manifiesto (status ENVIADO) — el inventario todavía no se
 // mueve, eso pasa en markTransferInTransit.
-export async function createTransferManifest(input: CreateTransferManifestInput) {
+export const createTransferManifest = safeAction(async function createTransferManifest(input: CreateTransferManifestInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -71,7 +72,7 @@ export async function createTransferManifest(input: CreateTransferManifestInput)
   revalidatePath("/compras/transferencias");
 
   return { id: manifest.id };
-}
+});
 
 export type MarkTransferInTransitInput = {
   employeeId: string;
@@ -80,7 +81,7 @@ export type MarkTransferInTransitInput = {
 
 // El inventario sale de origen aquí, no al crear el manifiesto (ver
 // comentario en TransferManifest del schema).
-export async function markTransferInTransit(input: MarkTransferInTransitInput) {
+export const markTransferInTransit = safeAction(async function markTransferInTransit(input: MarkTransferInTransitInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -152,7 +153,7 @@ export async function markTransferInTransit(input: MarkTransferInTransitInput) {
   revalidatePath("/compras/transferencias");
   revalidatePath(`/compras/transferencias/${input.transferManifestId}`);
   revalidatePath("/inventario");
-}
+});
 
 export type ReceiveTransferLineInput = {
   transferLineId: string;
@@ -169,7 +170,7 @@ export type ReceiveTransferInput = {
 // Recepción de una sola vez. Si lo recibido es menor a lo enviado, la
 // diferencia se registra como MERMA en destino — ver comentario en
 // TransferLine del schema.
-export async function receiveTransfer(input: ReceiveTransferInput) {
+export const receiveTransfer = safeAction(async function receiveTransfer(input: ReceiveTransferInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -271,7 +272,7 @@ export async function receiveTransfer(input: ReceiveTransferInput) {
   revalidatePath("/compras/transferencias");
   revalidatePath(`/compras/transferencias/${input.transferManifestId}`);
   revalidatePath("/inventario");
-}
+});
 
 export type CancelTransferManifestInput = {
   employeeId: string;
@@ -281,7 +282,7 @@ export type CancelTransferManifestInput = {
 // Solo se puede cancelar mientras sigue ENVIADO — una vez que el inventario
 // salió de origen (EN_TRANSITO) cancelar requeriría lógica de reversión que
 // queda fuera de alcance.
-export async function cancelTransferManifest(input: CancelTransferManifestInput) {
+export const cancelTransferManifest = safeAction(async function cancelTransferManifest(input: CancelTransferManifestInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -306,4 +307,4 @@ export async function cancelTransferManifest(input: CancelTransferManifestInput)
 
   revalidatePath("/compras/transferencias");
   revalidatePath(`/compras/transferencias/${input.transferManifestId}`);
-}
+});

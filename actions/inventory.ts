@@ -1,5 +1,6 @@
 "use server";
 
+import { safeAction } from "@/lib/safe-action";
 import { revalidatePath } from "next/cache";
 import { Prisma, type UnitOfMeasure } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -18,7 +19,7 @@ export type AdjustInventoryStockInput = {
 // delta) y aquí se calcula la diferencia contra InventoryStock — se registra
 // como InventoryMovement tipo AJUSTE_MANUAL (quantity = delta, puede ser
 // negativo), igual que el resto de movimientos de inventario en el sistema.
-export async function adjustInventoryStock(input: AdjustInventoryStockInput) {
+export const adjustInventoryStock = safeAction(async function adjustInventoryStock(input: AdjustInventoryStockInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -84,7 +85,7 @@ export async function adjustInventoryStock(input: AdjustInventoryStockInput) {
   });
 
   revalidatePath("/inventario");
-}
+});
 
 export type UpdateIngredientInput = {
   employeeId: string;
@@ -94,9 +95,20 @@ export type UpdateIngredientInput = {
   baseUnit: UnitOfMeasure;
   purchaseUnit: UnitOfMeasure;
   tracksExpiration: boolean;
+  // Precio al cliente como extra libre; vacío/undefined = costo ÷ % de
+  // food cost objetivo (ver extraPriceDelta en actions/pos.ts).
+  extraUnitPrice?: number | null;
 };
 
-export async function updateIngredient(input: UpdateIngredientInput) {
+function validExtraPrice(value: number | null) {
+  if (value === null || Number.isNaN(value)) return null;
+  if (value < 0) {
+    throw new Error("El precio como extra no puede ser negativo.");
+  }
+  return value;
+}
+
+export const updateIngredient = safeAction(async function updateIngredient(input: UpdateIngredientInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -116,12 +128,15 @@ export async function updateIngredient(input: UpdateIngredientInput) {
       baseUnit: input.baseUnit,
       purchaseUnit: input.purchaseUnit,
       tracksExpiration: input.tracksExpiration,
+      ...(input.extraUnitPrice !== undefined
+        ? { extraUnitPrice: validExtraPrice(input.extraUnitPrice) }
+        : {}),
     },
   });
 
   revalidatePath("/inventario");
   revalidatePath("/productos");
-}
+});
 
 export type DeleteIngredientInput = {
   employeeId: string;
@@ -138,7 +153,7 @@ export type DeleteIngredientInput = {
 // transferencias, historial de costo, punto de reorden) tiene FK
 // obligatoria — el RESTRICT de Postgres ya lo bloquea, se traduce el error
 // a un mensaje legible.
-export async function deleteIngredient(input: DeleteIngredientInput) {
+export const deleteIngredient = safeAction(async function deleteIngredient(input: DeleteIngredientInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -167,7 +182,7 @@ export async function deleteIngredient(input: DeleteIngredientInput) {
 
   revalidatePath("/inventario");
   revalidatePath("/productos");
-}
+});
 
 export type CreateIngredientCategoryInput = {
   employeeId: string;
@@ -175,7 +190,7 @@ export type CreateIngredientCategoryInput = {
   icon?: string;
 };
 
-export async function createIngredientCategory(input: CreateIngredientCategoryInput) {
+export const createIngredientCategory = safeAction(async function createIngredientCategory(input: CreateIngredientCategoryInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -194,7 +209,7 @@ export async function createIngredientCategory(input: CreateIngredientCategoryIn
   revalidatePath("/inventario");
 
   return { id: category.id, name: category.name, icon: category.icon };
-}
+});
 
 export type UpdateIngredientCategoryInput = {
   employeeId: string;
@@ -203,7 +218,7 @@ export type UpdateIngredientCategoryInput = {
   icon?: string;
 };
 
-export async function updateIngredientCategory(input: UpdateIngredientCategoryInput) {
+export const updateIngredientCategory = safeAction(async function updateIngredientCategory(input: UpdateIngredientCategoryInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -221,14 +236,14 @@ export async function updateIngredientCategory(input: UpdateIngredientCategoryIn
   });
 
   revalidatePath("/inventario");
-}
+});
 
 export type DeleteIngredientCategoryInput = {
   employeeId: string;
   categoryId: string;
 };
 
-export async function deleteIngredientCategory(input: DeleteIngredientCategoryInput) {
+export const deleteIngredientCategory = safeAction(async function deleteIngredientCategory(input: DeleteIngredientCategoryInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -247,4 +262,4 @@ export async function deleteIngredientCategory(input: DeleteIngredientCategoryIn
   await prisma.ingredientCategory.delete({ where: { id: input.categoryId } });
 
   revalidatePath("/inventario");
-}
+});

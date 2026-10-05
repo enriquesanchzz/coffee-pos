@@ -8,9 +8,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { createIngredient } from "@/actions/recipes";
-import { updateIngredient, deleteIngredient } from "@/actions/inventory";
+import { createIngredient as createIngredientAction } from "@/actions/recipes";
+import { updateIngredient as updateIngredientAction, deleteIngredient as deleteIngredientAction } from "@/actions/inventory";
 import { unitLabels } from "./unit-labels";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const createIngredient = withActionErrors(createIngredientAction);
+const updateIngredient = withActionErrors(updateIngredientAction);
+const deleteIngredient = withActionErrors(deleteIngredientAction);
 
 const units = Object.keys(unitLabels) as UnitOfMeasure[];
 
@@ -43,6 +49,7 @@ export function IngredientFormDialog({
     (ingredient?.purchaseUnit as UnitOfMeasure) ?? units[0]
   );
   const [tracksExpiration, setTracksExpiration] = useState(ingredient?.tracksExpiration ?? true);
+  const [extraUnitPrice, setExtraUnitPrice] = useState(ingredient?.extraUnitPrice?.toString() ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -62,6 +69,7 @@ export function IngredientFormDialog({
     setBaseUnit((ingredient?.baseUnit as UnitOfMeasure) ?? units[0]);
     setPurchaseUnit((ingredient?.purchaseUnit as UnitOfMeasure) ?? units[0]);
     setTracksExpiration(ingredient?.tracksExpiration ?? true);
+    setExtraUnitPrice(ingredient?.extraUnitPrice?.toString() ?? "");
     setError(null);
     setConfirmingDelete(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -70,6 +78,11 @@ export function IngredientFormDialog({
   function handleOpenChange(next: boolean) {
     onOpenChange(next);
   }
+
+  const parsedExtraPrice = extraUnitPrice.trim() === "" ? null : Number(extraUnitPrice);
+  // Al crear, el precio se expresa por baseUnit (la dosis estándar se
+  // configura después desde Productos); al editar, por la unidad ya fijada.
+  const extraPriceUnitLabel = unitLabels[(ingredient?.extraPriceUnit as UnitOfMeasure) ?? baseUnit] ?? baseUnit;
 
   function handleSave() {
     setError(null);
@@ -84,9 +97,17 @@ export function IngredientFormDialog({
             baseUnit,
             purchaseUnit,
             tracksExpiration,
+            extraUnitPrice: parsedExtraPrice,
           });
         } else {
-          await createIngredient({ employeeId, name, categoryId, baseUnit, purchaseUnit });
+          await createIngredient({
+            employeeId,
+            name,
+            categoryId,
+            baseUnit,
+            purchaseUnit,
+            extraUnitPrice: parsedExtraPrice,
+          });
         }
         onSaved();
         handleOpenChange(false);
@@ -163,6 +184,21 @@ export function IngredientFormDialog({
               </option>
             ))}
           </Select>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="ingredient-extra-price">
+            Precio al cliente como extra (por {extraPriceUnitLabel}, opcional)
+          </Label>
+          <Input
+            id="ingredient-extra-price"
+            type="number"
+            min="0"
+            step="0.01"
+            value={extraUnitPrice}
+            onChange={(e) => setExtraUnitPrice(e.target.value)}
+            placeholder="Vacío = costo ÷ % de food cost objetivo"
+          />
         </div>
 
         <label className="flex items-center gap-2 text-sm">

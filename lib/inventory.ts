@@ -19,6 +19,10 @@ export type InventoryOverviewItem = {
   baseUnit: string;
   purchaseUnit: string;
   tracksExpiration: boolean;
+  // Precio al cliente como extra libre en el POS, por unidad de dosis
+  // estándar (o baseUnit) — ver Ingredient.extraUnitPrice.
+  extraUnitPrice: number | null;
+  extraPriceUnit: string;
   quantity: number;
   reorderThreshold: number | null;
   isLow: boolean;
@@ -53,6 +57,8 @@ export async function getInventoryOverview(
       baseUnit: ingredient.baseUnit,
       purchaseUnit: ingredient.purchaseUnit,
       tracksExpiration: ingredient.tracksExpiration,
+      extraUnitPrice: ingredient.extraUnitPrice?.toNumber() ?? null,
+      extraPriceUnit: ingredient.standardDoseUnit ?? ingredient.baseUnit,
       quantity,
       reorderThreshold,
       isLow: reorderThreshold !== null && quantity <= reorderThreshold,

@@ -1,5 +1,6 @@
 "use server";
 
+import { safeAction } from "@/lib/safe-action";
 import { revalidatePath } from "next/cache";
 import { CashMovementType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -14,7 +15,7 @@ export type CreateCashMovementInput = {
   reason: string;
 };
 
-export async function createCashMovement(input: CreateCashMovementInput) {
+export const createCashMovement = safeAction(async function createCashMovement(input: CreateCashMovementInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -44,4 +45,4 @@ export async function createCashMovement(input: CreateCashMovementInput) {
 
   revalidatePath("/pos");
   revalidatePath("/caja");
-}
+});

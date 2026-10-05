@@ -3,7 +3,11 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { cancelPurchaseOrder } from "@/actions/purchases";
+import { cancelPurchaseOrder as cancelPurchaseOrderAction } from "@/actions/purchases";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const cancelPurchaseOrder = withActionErrors(cancelPurchaseOrderAction);
 
 export function CancelOrderButton({
   employeeId,

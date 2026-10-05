@@ -1,17 +1,24 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Coffee, Minus, Plus, Trash2 } from "lucide-react";
+import { CheckCircle2, Coffee, Minus, Plus, Trash2, X } from "lucide-react";
 import type { SaleOrderType, DomicilioOrigen } from "@prisma/client";
 import { useCartStore, lineUnitPrice, cartLineToSaleItemInput } from "./cart-store";
-import { openTab, addItemsToTab, removeTabItem, updateTabItemQuantity, type OpenTabDetail } from "@/actions/pos";
+import { openTab as openTabAction, addItemsToTab as addItemsToTabAction, removeTabItem as removeTabItemAction, updateTabItemQuantity as updateTabItemQuantityAction, type OpenTabDetail } from "@/actions/pos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { cn, formatCurrency, posAccentClass } from "@/lib/utils";
+import { cn, formatCurrency, posAccentClass, unitLabel } from "@/lib/utils";
 import { CustomerPicker } from "./customer-picker";
-import { CheckoutForm } from "./checkout-form";
+import { CheckoutForm, type SaleReceipt } from "./checkout-form";
 import type { CustomerOption } from "@/lib/customers";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const openTab = withActionErrors(openTabAction);
+const addItemsToTab = withActionErrors(addItemsToTabAction);
+const removeTabItem = withActionErrors(removeTabItemAction);
+const updateTabItemQuantity = withActionErrors(updateTabItemQuantityAction);
 
 const temperatureLabels: Record<string, string> = {
   CALIENTE: "Caliente",
@@ -80,7 +87,12 @@ export function CartPanel({
     setSelectedCustomer(customer);
   }
 
-  function handleConfirmed() {
+  // Resumen de la última venta cobrada — se queda visible (sobre todo el
+  // cambio a entregar) hasta que el cajero lo cierra o cobra otra venta.
+  const [lastReceipt, setLastReceipt] = useState<SaleReceipt | null>(null);
+
+  function handleConfirmed(receipt: SaleReceipt) {
+    setLastReceipt(receipt);
     setView("cart");
     setSelectedCustomer(null);
     setDomicilioAddress("");
@@ -145,7 +157,7 @@ export function CartPanel({
 
   if (view === "checkout") {
     return (
-      <div className="flex h-full flex-col overflow-y-auto border-l border-border">
+      <div className="flex h-full flex-col overflow-y-auto border-t border-border md:border-l md:border-t-0">
         <CheckoutForm
           branchId={branchId}
           shiftId={shiftId}
@@ -162,7 +174,7 @@ export function CartPanel({
   }
 
   return (
-    <div className="flex h-full flex-col border-l border-border">
+    <div className="flex h-full min-h-0 flex-col border-t border-border md:border-l md:border-t-0">
       <div className="flex flex-col gap-3 border-b border-border p-4">
         <p className="font-semibold">Cuenta actual</p>
         <div className="flex gap-1.5">
@@ -207,6 +219,37 @@ export function CartPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto p-3">
+        {lastReceipt && (
+          <div
+            role="status"
+            className="mb-3 flex items-start gap-3 rounded-xl border border-emerald-600/40 bg-emerald-600/10 p-3"
+          >
+            <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-emerald-700" />
+            <div className="flex flex-1 flex-col gap-0.5 text-sm">
+              <p className="font-semibold">Venta registrada · {formatCurrency(lastReceipt.total)}</p>
+              {lastReceipt.change !== null ? (
+                <>
+                  <p className="text-muted-foreground">
+                    Recibido {formatCurrency(lastReceipt.cashReceived ?? 0)}
+                  </p>
+                  <p className="text-lg font-bold">Cambio a entregar: {formatCurrency(lastReceipt.change)}</p>
+                </>
+              ) : (
+                <p className="text-muted-foreground">
+                  Pagado con {lastReceipt.method === "TARJETA" ? "tarjeta" : "transferencia"}.
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setLastReceipt(null)}
+              className="text-muted-foreground hover:text-foreground"
+              aria-label="Cerrar resumen de venta"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
         {activeTabSummary && (
           <div className="mb-4 flex flex-col gap-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -308,7 +351,7 @@ export function CartPanel({
                       <p className="text-xs text-muted-foreground">
                         {[
                           ...line.modifiers.map((m) => m.name),
-                          ...line.extraIngredients.map((e) => `+ ${e.name} (${e.quantity}${e.unit})`),
+                          ...line.extraIngredients.map((e) => `+ ${e.name} (${e.quantity} ${unitLabel(e.unit)})`),
                         ].join(", ")}
                       </p>
                     )}
@@ -375,7 +418,10 @@ export function CartPanel({
           <Button
             className={cn("flex-1", posAccentClass)}
             disabled={lines.length === 0 && !activeTabId}
-            onClick={() => setView("checkout")}
+            onClick={() => {
+              setLastReceipt(null);
+              setView("checkout");
+            }}
           >
             Cobrar
           </Button>

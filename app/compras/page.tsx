@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 import { purchaseOrderStatusLabels } from "@/components/compras/enum-labels";
+import { formatDate } from "@/lib/time";
 
 export default async function ComprasPage() {
   const employee = await getCurrentEmployee();
@@ -94,7 +95,7 @@ export default async function ComprasPage() {
                     <p>{order.supplierName}</p>
                     <p className="text-xs text-muted-foreground">
                       {statusLabel} · {order.itemCount} línea{order.itemCount === 1 ? "" : "s"} ·{" "}
-                      {new Date(order.createdAt).toLocaleDateString("es-MX")}
+                      {formatDate(order.createdAt)}
                     </p>
                   </div>
                   <span>{formatCurrency(order.estimatedTotal)}</span>

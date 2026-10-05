@@ -1,5 +1,6 @@
 "use server";
 
+import { safeAction } from "@/lib/safe-action";
 import { revalidatePath } from "next/cache";
 import { Prisma, ProductType, UnitOfMeasure, VariantTemperature } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -15,9 +16,12 @@ export type CreateIngredientInput = {
   categoryId: string;
   baseUnit: UnitOfMeasure;
   purchaseUnit: UnitOfMeasure;
+  // Precio al cliente como extra libre; vacío/undefined = costo ÷ % de
+  // food cost objetivo (ver extraPriceDelta en actions/pos.ts).
+  extraUnitPrice?: number | null;
 };
 
-export async function createIngredient(input: CreateIngredientInput) {
+export const createIngredient = safeAction(async function createIngredient(input: CreateIngredientInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -35,6 +39,10 @@ export async function createIngredient(input: CreateIngredientInput) {
       categoryId: input.categoryId,
       baseUnit: input.baseUnit,
       purchaseUnit: input.purchaseUnit,
+      extraUnitPrice:
+        input.extraUnitPrice === undefined || input.extraUnitPrice === null || input.extraUnitPrice < 0
+          ? null
+          : input.extraUnitPrice,
     },
   });
 
@@ -52,7 +60,7 @@ export async function createIngredient(input: CreateIngredientInput) {
     standardDoseQuantity: null,
     standardDoseUnit: null,
   };
-}
+});
 
 export type RecipeLineInput = {
   ingredientId?: string;
@@ -246,7 +254,7 @@ export type CreateProductWithRecipeInput = {
 // producto es RECETA, su Recipe (PRODUCTO_VENDIBLE) + RecipeVersion v1
 // activa + líneas + grupos de modificador opcionales. Si es
 // REVENTA_DIRECTA, la variante se crea sin receta, con talla/color/nota.
-export async function createProductWithRecipe(input: CreateProductWithRecipeInput) {
+export const createProductWithRecipe = safeAction(async function createProductWithRecipe(input: CreateProductWithRecipeInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -341,7 +349,7 @@ export async function createProductWithRecipe(input: CreateProductWithRecipeInpu
   revalidatePath("/pos");
 
   return { id: productId };
-}
+});
 
 export type AddVariantToProductInput = {
   employeeId: string;
@@ -352,7 +360,7 @@ export type AddVariantToProductInput = {
 // Agrega una variante nueva a un producto YA EXISTENTE (punto 2, "Módulo
 // Productos") — mismo cuerpo que la parte "por variante" de
 // createProductWithRecipe, pero sin crear el producto.
-export async function addVariantToProduct(input: AddVariantToProductInput) {
+export const addVariantToProduct = safeAction(async function addVariantToProduct(input: AddVariantToProductInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -415,7 +423,7 @@ export async function addVariantToProduct(input: AddVariantToProductInput) {
   revalidatePath("/pos");
 
   return { variantId };
-}
+});
 
 export type UpdateVariantRecipeInput = {
   employeeId: string;
@@ -442,7 +450,7 @@ export type UpdateVariantRecipeInput = {
 // contra la versión anterior (ver comentario en RecipeVersion del schema).
 // Si el producto es REVENTA_DIRECTA (sin receta), solo actualiza los
 // campos de la variante — no hay líneas ni grupos que tocar.
-export async function updateVariantRecipe(input: UpdateVariantRecipeInput) {
+export const updateVariantRecipe = safeAction(async function updateVariantRecipe(input: UpdateVariantRecipeInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -528,15 +536,21 @@ export async function updateVariantRecipe(input: UpdateVariantRecipeInput) {
   revalidatePath("/pos");
 
   return { variantId: input.variantId };
-}
+});
 
 // Envoltura delgada de lib/recipes.ts (lectura pura) como Server Action —
 // el workspace de /productos (client) la llama al abrir una variante
 // desde el menú de variantes, en vez de precargar el detalle completo
 // (recetas, modificadores) de todo el catálogo de una vez.
-export async function fetchVariantRecipeDetail(variantId: string) {
+export const fetchVariantRecipeDetail = safeAction(async function fetchVariantRecipeDetail(variantId: string) {
+  // Costos de receta: misma regla que la página /productos que lo usa.
+  const employeeId = await getSessionEmployeeId();
+  if (!employeeId) {
+    throw new Error("Necesitas iniciar sesión para ver la receta.");
+  }
+  await requireAdminRole(employeeId, DEFAULT_BRANCH_ID);
   return getVariantRecipeDetail(variantId);
-}
+});
 
 export type UpdateProductCategoryInput = {
   employeeId: string;
@@ -550,7 +564,7 @@ export type UpdateProductCategoryInput = {
 // creaban, vía "+ Nueva categoría" dentro de Nuevo producto) — nombre,
 // ícono (components/productos/category-icon-picker.tsx) y categoría
 // padre.
-export async function updateProductCategory(input: UpdateProductCategoryInput) {
+export const updateProductCategory = safeAction(async function updateProductCategory(input: UpdateProductCategoryInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -572,4 +586,4 @@ export async function updateProductCategory(input: UpdateProductCategoryInput) {
 
   revalidatePath("/productos");
   revalidatePath("/pos");
-}
+});

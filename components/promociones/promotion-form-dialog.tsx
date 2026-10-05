@@ -8,9 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { createPromotion, updatePromotion } from "@/actions/promotions";
+import { createPromotion as createPromotionAction, updatePromotion as updatePromotionAction } from "@/actions/promotions";
 import { DaysOfWeekPicker } from "./days-of-week-picker";
 import { VariantMultiPicker } from "./variant-multi-picker";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const createPromotion = withActionErrors(createPromotionAction);
+const updatePromotion = withActionErrors(updatePromotionAction);
 
 const CATEGORY_TITLES: Record<PromotionCategory, string> = {
   DOS_POR_UNO: "2x1",

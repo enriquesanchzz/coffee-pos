@@ -7,8 +7,13 @@ import type { ActiveSupplierOption, IngredientOption, PurchaseOrderDetail } from
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
-import { createPurchaseOrder, updatePurchaseOrder } from "@/actions/purchases";
+import { createPurchaseOrder as createPurchaseOrderAction, updatePurchaseOrder as updatePurchaseOrderAction } from "@/actions/purchases";
 import { OrderLinesEditor, initialOrderLine, type OrderLineDraft } from "./order-lines-editor";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const createPurchaseOrder = withActionErrors(createPurchaseOrderAction);
+const updatePurchaseOrder = withActionErrors(updatePurchaseOrderAction);
 
 // `existingOrder` la vuelve un formulario de edición (solo tiene sentido
 // para una orden en CREADA, ver updatePurchaseOrder) en vez de creación —

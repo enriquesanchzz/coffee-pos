@@ -7,6 +7,7 @@ import { getTransferManifests } from "@/lib/transfers";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { transferStatusLabels } from "@/components/compras/enum-labels";
+import { formatDate } from "@/lib/time";
 
 export default async function TransferenciasPage() {
   const employee = await getCurrentEmployee();
@@ -60,7 +61,7 @@ export default async function TransferenciasPage() {
                       {transferStatusLabels[manifest.status as keyof typeof transferStatusLabels] ??
                         manifest.status}{" "}
                       · {manifest.itemCount} línea{manifest.itemCount === 1 ? "" : "s"} ·{" "}
-                      {new Date(manifest.sentAt).toLocaleDateString("es-MX")}
+                      {formatDate(manifest.sentAt)}
                     </p>
                   </div>
                 </Link>

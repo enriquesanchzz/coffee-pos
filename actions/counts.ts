@@ -1,5 +1,6 @@
 "use server";
 
+import { safeAction } from "@/lib/safe-action";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -24,7 +25,7 @@ export type CreatePhysicalCountInput = {
 // pase (mismo criterio que la recepción de órdenes de compra). theoreticalQty
 // se congela del InventoryStock actual en el momento del submit. No toca
 // inventario todavía: eso pasa solo si se aprueba (approvePhysicalCount).
-export async function createPhysicalCount(input: CreatePhysicalCountInput) {
+export const createPhysicalCount = safeAction(async function createPhysicalCount(input: CreatePhysicalCountInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -74,7 +75,7 @@ export async function createPhysicalCount(input: CreatePhysicalCountInput) {
   revalidatePath("/compras/conteos");
 
   return { id: count.id };
-}
+});
 
 export type ApprovePhysicalCountInput = {
   physicalCountId: string;
@@ -88,7 +89,16 @@ export type ApprovePhysicalCountInput = {
 // ajusta InventoryStock al valor físico donde hubo diferencia y registra
 // InventoryMovement tipo CONTEO_FISICO_AJUSTE. Si se rechaza, no toca
 // inventario — el conteo se descarta.
-export async function approvePhysicalCount(input: ApprovePhysicalCountInput) {
+export const approvePhysicalCount = safeAction(async function approvePhysicalCount(input: ApprovePhysicalCountInput) {
+  // Además del PIN del aprobador, exige una sesión de ADMINISTRADOR activa
+  // (como la página /compras/conteos/[id] desde la que se llama) — antes
+  // bastaba con conocer un PIN para aprobar desde fuera de la app.
+  const sessionEmployeeId = await getSessionEmployeeId();
+  if (!sessionEmployeeId) {
+    throw new Error("Necesitas iniciar sesión para aprobar un conteo.");
+  }
+  await requireAdminRole(sessionEmployeeId, DEFAULT_BRANCH_ID);
+
   await prisma.$transaction(async (tx) => {
     const count = await tx.physicalCount.findUnique({
       where: { id: input.physicalCountId },
@@ -155,4 +165,4 @@ export async function approvePhysicalCount(input: ApprovePhysicalCountInput) {
   revalidatePath("/compras/conteos");
   revalidatePath(`/compras/conteos/${input.physicalCountId}`);
   revalidatePath("/inventario");
-}
+});

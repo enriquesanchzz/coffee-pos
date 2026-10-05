@@ -7,6 +7,8 @@ import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApproveCountForm } from "@/components/compras/approve-count-form";
 import { physicalCountStatusLabels, unitLabels } from "@/components/compras/enum-labels";
+import { formatDateTime } from "@/lib/time";
+import { orNotFound } from "@/lib/not-found";
 
 export default async function DetalleConteoPage({
   params,
@@ -23,7 +25,7 @@ export default async function DetalleConteoPage({
   if (!canManage) redirect("/pos");
 
   const { id } = await params;
-  const count = await getPhysicalCountDetail(id);
+  const count = await orNotFound(getPhysicalCountDetail(id));
   const statusLabel =
     physicalCountStatusLabels[count.status as keyof typeof physicalCountStatusLabels] ?? count.status;
 
@@ -33,7 +35,7 @@ export default async function DetalleConteoPage({
           <div>
             <h1 className="text-lg font-semibold">Conteo — {count.performedByName}</h1>
             <p className="text-sm text-muted-foreground">
-              {statusLabel} · {new Date(count.startedAt).toLocaleString("es-MX")}
+              {statusLabel} · {formatDateTime(count.startedAt)}
               {count.approvedByName && ` · resuelto por ${count.approvedByName}`}
             </p>
           </div>

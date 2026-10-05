@@ -9,14 +9,30 @@ export type ShiftCashMovement = {
   createdAt: string;
 };
 
+// Ventas del turno para la lista de Caja (desde donde se anulan) — las
+// cobradas y las cuentas de Mesa todavía abiertas.
+export type ShiftSaleRow = {
+  id: string;
+  status: "COMPLETADA" | "ABIERTA";
+  createdAt: string;
+  orderType: string;
+  tableNumber: string | null;
+  total: number;
+  tipAmount: number;
+  employeeName: string;
+  paymentMethods: string[];
+};
+
 export type ShiftDetail = {
   id: string;
+  branchId: string;
   type: string;
   openingCash: number;
   openedAt: string;
   cashierName: string;
   salesCount: number;
   salesTotal: number;
+  sales: ShiftSaleRow[];
   cashMovements: ShiftCashMovement[];
 };
 
@@ -29,7 +45,11 @@ export async function getShiftDetail(shiftId: string): Promise<ShiftDetail> {
     where: { id: shiftId },
     include: {
       cashier: true,
-      sales: { where: { status: "COMPLETADA" } },
+      sales: {
+        where: { status: { in: ["COMPLETADA", "ABIERTA"] } },
+        include: { employee: true, payments: true },
+        orderBy: { createdAt: "desc" },
+      },
       cashMovements: {
         include: { employee: true },
         orderBy: { createdAt: "desc" },
@@ -37,14 +57,28 @@ export async function getShiftDetail(shiftId: string): Promise<ShiftDetail> {
     },
   });
 
+  const completed = shift.sales.filter((sale) => sale.status === "COMPLETADA");
+
   return {
     id: shift.id,
+    branchId: shift.branchId,
     type: shift.type,
     openingCash: shift.openingCash.toNumber(),
     openedAt: shift.openedAt.toISOString(),
     cashierName: shift.cashier.name,
-    salesCount: shift.sales.length,
-    salesTotal: shift.sales.reduce((sum, sale) => sum + sale.total.toNumber(), 0),
+    salesCount: completed.length,
+    salesTotal: completed.reduce((sum, sale) => sum + sale.total.toNumber(), 0),
+    sales: shift.sales.map((sale) => ({
+      id: sale.id,
+      status: sale.status as "COMPLETADA" | "ABIERTA",
+      createdAt: sale.createdAt.toISOString(),
+      orderType: sale.orderType,
+      tableNumber: sale.tableNumber,
+      total: sale.total.toNumber(),
+      tipAmount: sale.tipAmount.toNumber(),
+      employeeName: sale.employee.name,
+      paymentMethods: [...new Set(sale.payments.map((p) => p.method))],
+    })),
     cashMovements: shift.cashMovements.map((movement) => ({
       id: movement.id,
       type: movement.type,

@@ -5,10 +5,14 @@ import type { VariantTemperature } from "@prisma/client";
 import type { ProductBasicInfo, IngredientOption, ComposedRecipeOption, IngredientCategoryOption } from "@/lib/recipes";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { addVariantToProduct, type RecipeLineInput } from "@/actions/recipes";
+import { addVariantToProduct as addVariantToProductAction, type RecipeLineInput } from "@/actions/recipes";
 import { emptyLine, type LineDraft } from "./recipe-lines-editor";
 import { modifierOptionsToInput, type ModifierOptionDraft } from "./modifier-options-editor";
 import { VariantFields } from "./variant-fields";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const addVariantToProduct = withActionErrors(addVariantToProductAction);
 
 // "+ Agregar variante" (punto 2, "Módulo Productos") — agrega una
 // variante a un producto YA EXISTENTE, sin crear un producto nuevo. Usa

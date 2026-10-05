@@ -6,7 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/utils";
-import { closeShift, previewShiftClose } from "@/actions/shift";
+import { closeShift as closeShiftAction, previewShiftClose as previewShiftCloseAction } from "@/actions/shift";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const closeShift = withActionErrors(closeShiftAction);
+const previewShiftClose = withActionErrors(previewShiftCloseAction);
 
 type Preview = {
   openingCash: number;
@@ -40,15 +45,20 @@ export function CloseShiftDialog({
   useEffect(() => {
     if (!open) return;
     setPreview(null);
-    setClosingCash("0");
+    setClosingCash("");
     setDifferenceReason("");
     setConfirmingPin("");
     setError(null);
-    previewShiftClose(shiftId).then(setPreview);
+    previewShiftClose(shiftId)
+      .then(setPreview)
+      .catch((err) => setError(err instanceof Error ? err.message : "No se pudo calcular el corte."));
   }, [open, shiftId]);
 
-  const difference = preview ? (Number(closingCash) || 0) - preview.expectedCash : 0;
-  const hasDifference = Math.abs(difference) > 0.01;
+  // La diferencia solo se evalúa una vez capturado el conteo — antes salía
+  // "Diferencia de -$581.70" en cuanto se abría el diálogo.
+  const hasCount = closingCash.trim() !== "";
+  const difference = preview && hasCount ? (Number(closingCash) || 0) - preview.expectedCash : 0;
+  const hasDifference = hasCount && Math.abs(difference) > 0.01;
 
   function handleConfirm() {
     setError(null);
@@ -71,7 +81,11 @@ export function CloseShiftDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange} title="Cerrar turno">
       {!preview ? (
-        <p className="text-sm text-muted-foreground">Calculando efectivo esperado...</p>
+        error ? (
+          <p className="text-sm text-destructive">{error}</p>
+        ) : (
+          <p className="text-sm text-muted-foreground">Calculando efectivo esperado...</p>
+        )
       ) : (
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1 text-sm">
@@ -87,7 +101,7 @@ export function CloseShiftDialog({
               <span className="text-muted-foreground">Propinas</span>
               <span>{formatCurrency(preview.tipsTotal)}</span>
             </div>
-            <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cobrado por tipo</p>
+            <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cobrado por tipo (incluye propinas)</p>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Efectivo</span>
               <span>{formatCurrency(preview.paymentsByMethod.EFECTIVO)}</span>
@@ -103,7 +117,10 @@ export function CloseShiftDialog({
             <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Efectivo en caja</p>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Retiros</span>
-              <span>-{formatCurrency(preview.retirosTotal)}</span>
+              <span>
+                {preview.retirosTotal > 0 ? "-" : ""}
+                {formatCurrency(preview.retirosTotal)}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Ingresos</span>
@@ -122,6 +139,7 @@ export function CloseShiftDialog({
               type="number"
               min="0"
               step="0.01"
+              placeholder="0.00"
               value={closingCash}
               onChange={(e) => setClosingCash(e.target.value)}
             />
@@ -156,7 +174,7 @@ export function CloseShiftDialog({
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
-          <Button onClick={handleConfirm} disabled={isPending}>
+          <Button onClick={handleConfirm} disabled={isPending || !hasCount}>
             {isPending ? "Cerrando..." : "Confirmar cierre"}
           </Button>
         </div>

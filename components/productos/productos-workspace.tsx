@@ -19,12 +19,17 @@ import { NewProductForm } from "./new-product-form";
 import { AddVariantForm } from "./add-variant-form";
 import { EditRecipeForm } from "./edit-recipe-form";
 import { CategoryIconPicker } from "./category-icon-picker";
-import { fetchVariantRecipeDetail, updateProductCategory } from "@/actions/recipes";
+import { fetchVariantRecipeDetail as fetchVariantRecipeDetailAction, updateProductCategory as updateProductCategoryAction } from "@/actions/recipes";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const fetchVariantRecipeDetail = withActionErrors(fetchVariantRecipeDetailAction);
+const updateProductCategory = withActionErrors(updateProductCategoryAction);
 
 type MainView = "browse" | "product-variants" | "new-product" | "add-variant" | "edit-variant";
 
@@ -54,11 +59,11 @@ export function ProductosWorkspace({
   const [query, setQuery] = useState("");
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [mainView, setMainView] = useState<MainView>("browse");
-  const [editingVariantId, setEditingVariantId] = useState<string | null>(null);
+  const [, setEditingVariantId] = useState<string | null>(null);
   const [editingDetail, setEditingDetail] = useState<VariantRecipeDetail | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
-  const [ingredients, setIngredients] = useState(ingredientOptions.ingredients);
+  const [ingredients] = useState(ingredientOptions.ingredients);
   const [editingCategory, setEditingCategory] = useState<DrilldownCategory | null>(null);
   const [, startTransition] = useTransition();
 
@@ -118,7 +123,7 @@ export function ProductosWorkspace({
       return <p className="text-sm text-muted-foreground">{emptyText}</p>;
     }
     return (
-      <div className="grid auto-rows-min grid-cols-2 gap-4 pr-1 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="grid auto-rows-min grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-3 pr-1 sm:gap-4">
         {list.map((product) => (
           <ProductCard key={product.id} product={product} onSelect={openProduct} />
         ))}
@@ -198,7 +203,7 @@ export function ProductosWorkspace({
                 <p className="text-sm text-muted-foreground">{selectedProduct.categoryName}</p>
               </div>
 
-              <div className="grid auto-rows-min grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              <div className="grid auto-rows-min grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-3 sm:gap-4">
                 {selectedProduct.variants.map((variant) => (
                   <VariantCard key={variant.id} variant={variant} onSelect={openVariant} />
                 ))}

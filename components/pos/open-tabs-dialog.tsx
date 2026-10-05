@@ -3,9 +3,13 @@
 import { useEffect, useState, useTransition } from "react";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { formatCurrency } from "@/lib/utils";
-import { listOpenTabs, type OpenTabSummary } from "@/actions/pos";
+import { formatCurrency, pluralize } from "@/lib/utils";
+import { listOpenTabs as listOpenTabsAction, type OpenTabSummary } from "@/actions/pos";
 import { useCartStore } from "./cart-store";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const listOpenTabs = withActionErrors(listOpenTabsAction);
 
 // Lista de cuentas de Mesa dejadas abiertas (ver "cambios para la
 // sección de punto de venta") — retomar una carga su mesa/tipo de orden
@@ -57,7 +61,7 @@ export function OpenTabsDialog({
               <div>
                 <p className="text-sm font-medium">Mesa {tab.tableNumber}</p>
                 <p className="text-xs text-muted-foreground">
-                  {tab.itemCount} productos · {formatCurrency(tab.total)}
+                  {pluralize(tab.itemCount, "producto")} · {formatCurrency(tab.total)}
                 </p>
               </div>
               <Button size="sm" onClick={() => handleResume(tab)}>

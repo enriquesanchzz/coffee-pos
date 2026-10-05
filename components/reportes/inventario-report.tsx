@@ -1,7 +1,7 @@
 import type { InventoryReport } from "@/lib/reports";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateRangePicker } from "./date-range-picker";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatUnitCost } from "@/lib/utils";
 
 const movementTypeLabels: Record<string, string> = {
   VENTA: "Venta",
@@ -25,7 +25,7 @@ export function InventarioReport({
 }) {
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">Inventario</h2>
         <DateRangePicker from={fromStr} to={toStr} view="inventario" />
       </div>
@@ -39,7 +39,7 @@ export function InventarioReport({
             <div key={item.ingredientId} className="flex items-center justify-between text-sm">
               <p>{item.name}</p>
               <p className="text-xs text-muted-foreground">
-                {item.quantity} × {formatCurrency(item.unitCost)} ={" "}
+                {item.quantity} × {formatUnitCost(item.unitCost)} ={" "}
                 <span className="font-medium text-foreground">{formatCurrency(item.value)}</span>
               </p>
             </div>

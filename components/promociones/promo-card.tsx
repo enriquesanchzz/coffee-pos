@@ -3,7 +3,7 @@
 import type { ComboListItem, PromotionListItem } from "@/lib/promotions";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, pluralize } from "@/lib/utils";
 
 const DAY_LABELS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
@@ -28,7 +28,7 @@ export function PromoCard({ item, onSelect }: { item: PromoCardItem; onSelect: (
             {combo.isActive ? "activo" : "inactivo"}
           </Badge>
         </div>
-        <p className="text-sm text-muted-foreground">{formatCurrency(combo.price)} · {combo.items.length} productos</p>
+        <p className="text-sm text-muted-foreground">{formatCurrency(combo.price)} · {pluralize(combo.items.length, "producto")}</p>
         <p className="text-xs text-muted-foreground">Paquete · {vigenciaText(combo.daysOfWeek, combo.startTime, combo.endTime)}</p>
       </Card>
     );

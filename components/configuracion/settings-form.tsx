@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { updateTargetFoodCostPercent } from "@/actions/settings";
+import { updateTargetFoodCostPercent as updateTargetFoodCostPercentAction } from "@/actions/settings";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const updateTargetFoodCostPercent = withActionErrors(updateTargetFoodCostPercentAction);
 
 export function SettingsForm({ targetFoodCostPercent }: { targetFoodCostPercent: number }) {
   const router = useRouter();

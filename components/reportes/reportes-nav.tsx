@@ -25,7 +25,7 @@ export function ReportesNav({
   visible: ReportesView[];
 }) {
   return (
-    <nav className="flex w-44 shrink-0 flex-col gap-1">
+    <nav className="flex shrink-0 gap-1 overflow-x-auto md:w-44 md:flex-col">
       {VIEWS.filter((v) => visible.includes(v.value)).map((v) => (
         <Link
           key={v.value}

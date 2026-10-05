@@ -7,8 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { receiveTransfer } from "@/actions/transfers";
+import { receiveTransfer as receiveTransferAction } from "@/actions/transfers";
 import { unitLabels } from "./enum-labels";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const receiveTransfer = withActionErrors(receiveTransferAction);
 
 type LineState = {
   transferLineId: string;

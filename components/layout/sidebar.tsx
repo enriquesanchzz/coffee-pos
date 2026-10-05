@@ -44,7 +44,10 @@ export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
   const visibleModules = modules.filter((mod) => !mod.adminOnly || isAdmin);
 
   return (
-    <aside className="flex h-full w-56 flex-col border-r border-border bg-muted/40 p-3">
+    // Por debajo de xl (tablets/celulares) se oculta: ocupa 224px que el POS
+    // necesita para el catálogo, y el selector de zona de SessionBar ya
+    // permite navegar entre módulos.
+    <aside className="hidden h-full w-56 flex-shrink-0 flex-col overflow-y-auto border-r border-border bg-muted/40 p-3 xl:flex">
       <div className="mb-4 px-3 py-1">
         <p className="text-sm font-semibold">Nomada Café</p>
         <p className="text-xs text-muted-foreground">POS</p>

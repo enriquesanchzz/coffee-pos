@@ -6,8 +6,12 @@ import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { adjustInventoryStock } from "@/actions/inventory";
+import { adjustInventoryStock as adjustInventoryStockAction } from "@/actions/inventory";
 import { unitLabels } from "./unit-labels";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const adjustInventoryStock = withActionErrors(adjustInventoryStockAction);
 
 export function AdjustStockDialog({
   item,

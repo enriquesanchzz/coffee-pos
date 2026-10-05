@@ -5,7 +5,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { formatCurrency, cn, posAccentClass, posAccentBorderClass, unitStep } from "@/lib/utils";
+import { formatCurrency, cn, posAccentClass, posAccentBorderClass, unitStep, unitLabel } from "@/lib/utils";
 import {
   resolveProductVariant,
   type CatalogModifierOption,
@@ -153,8 +153,8 @@ export function ProductDialog({
         quantity,
         unit: option.standardDoseUnit ?? option.baseUnit,
         // Vista previa — actions/pos.ts recalcula el precio real
-        // convirtiendo a baseUnit (unitCost está en baseUnit).
-        priceDelta: quantity * option.unitCost,
+        // (unitPrice ya viene por unidad de dosis estándar).
+        priceDelta: Math.round(quantity * option.unitPrice * 100) / 100,
       },
     ]);
     setAddingExtraId("");
@@ -304,7 +304,7 @@ export function ProductDialog({
                         {ingredient.name}
                         <span className="text-muted-foreground">
                           {" "}
-                          · {ingredient.standardDoseUnit ?? ingredient.baseUnit}
+                          · {unitLabel(ingredient.standardDoseUnit ?? ingredient.baseUnit)} · {formatCurrency(ingredient.unitPrice)}
                         </span>
                       </button>
                     </li>
@@ -325,7 +325,7 @@ export function ProductDialog({
               />
               {selectedExtraOption && (
                 <span className="text-xs text-muted-foreground">
-                  {selectedExtraOption.standardDoseUnit ?? selectedExtraOption.baseUnit}
+                  {unitLabel(selectedExtraOption.standardDoseUnit ?? selectedExtraOption.baseUnit)}
                 </span>
               )}
             </div>
@@ -339,7 +339,7 @@ export function ProductDialog({
               {extras.map((extra, index) => (
                 <li key={`${extra.ingredientId}-${index}`} className="flex items-center justify-between text-sm">
                   <span>
-                    {extra.name} · {extra.quantity} {extra.unit}
+                    {extra.name} · {extra.quantity} {unitLabel(extra.unit)}
                   </span>
                   <div className="flex items-center gap-2">
                     <span>+{formatCurrency(extra.priceDelta)}</span>

@@ -2,11 +2,15 @@
 
 import { useState, useTransition } from "react";
 import { ShiftType } from "@prisma/client";
-import { openShift } from "@/actions/shift";
+import { openShift as openShiftAction } from "@/actions/shift";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const openShift = withActionErrors(openShiftAction);
 
 export function ShiftOpenForm({
   branchId,

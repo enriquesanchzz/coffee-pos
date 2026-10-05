@@ -304,11 +304,13 @@ model Ingredient {
   purchaseUnit      UnitOfMeasure // unidad en la que normalmente se compra
   tracksExpiration  Boolean            @default(true)
   isActive          Boolean            @default(true)
-  // Precio de venta al cliente por unidad de baseUnit, cuando este
-  // ingrediente se agrega como AGREGAR_EXTRA (fuera de la receta base) o
-  // AUMENTAR (más allá de la cantidad definida por la receta). Distinto del
-  // costo de proveedor — este es lo que se le cobra al cliente.
-  extraUnitPrice    Decimal?           @db.Decimal(10, 2)
+  // Precio de venta al cliente cuando este ingrediente se agrega como extra
+  // libre en el POS ("Agregar otro ingrediente"), por cada unidad de
+  // standardDoseUnit (o de baseUnit si no tiene dosis estándar) — ej.
+  // $12 por shot. Distinto del costo de proveedor. null = se cobra el costo
+  // cotizado ÷ el % de food cost objetivo (ver resolveSaleItems en
+  // actions/pos.ts); antes se cobraba el costo tal cual, sin margen.
+  extraUnitPrice    Decimal?           @db.Decimal(12, 4)
   // Días de anticipación con que se dispara la alerta de caducidad próxima
   // para este ingrediente. Varía por tipo — ej. leche 5 días, jarabe 30 días.
   expirationAlertDays Int?
@@ -1194,6 +1196,9 @@ model Sale {
   createdAt  DateTime   @default(now())
   cancelledAt DateTime?
   cancelledById String?
+  // Motivo capturado al anular (cancelSale en actions/pos.ts) — obligatorio
+  // para auditoría; la anulación exige PIN de alguien con VENTA_CANCELAR.
+  cancelReason String?
 
   items       SaleItem[]
   payments    SalePayment[]

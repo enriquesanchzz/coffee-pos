@@ -43,13 +43,21 @@ npm run dev                 # http://localhost:3000
 Empleados de demo para entrar al POS (selector por PIN — identifica rápido
 quién opera en el mostrador, ver `docs/CONTINUE.md`):
 
-- Ana — PIN `1234` (rol GERENTE)
+- Ana — PIN `1234` (rol ADMINISTRADOR)
 - Luis — PIN `5678` (rol BARISTA)
 
 Para entrar a **Administración** (`/administracion`) hace falta login con
 email + password, no PIN — solo Ana tiene una cuenta de demo con acceso:
 
 - Ana — `ana@nomada.cafe` / `admin1234`
+
+Administración y sus módulos son exclusivos del rol ADMINISTRADOR. Si tu base
+se sembró antes de que Ana tuviera ese rol, vuelve a correr
+`npm run prisma:seed-demo` (actualiza su rol sin borrar datos).
+
+Las fechas, horas, cortes de día y promociones por horario usan la zona
+horaria de la sucursal: `America/Mexico_City` por defecto, configurable con
+`NEXT_PUBLIC_APP_TIME_ZONE` en `.env`.
 
 ## Scripts
 
