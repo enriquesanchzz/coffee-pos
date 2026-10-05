@@ -6,8 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn, posAccentBorderClass, buildWhatsAppLoyaltyLink } from "@/lib/utils";
-import { createCustomer } from "@/actions/customers";
+import { createCustomer as createCustomerAction } from "@/actions/customers";
 import type { CustomerOption } from "@/lib/customers";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const createCustomer = withActionErrors(createCustomerAction);
 
 // Selección/creación de cliente — vive en la comanda (CartPanel), debajo
 // del selector de tipo de venta, en vez de estar escondida dentro del

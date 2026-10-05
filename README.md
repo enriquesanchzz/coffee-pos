@@ -43,7 +43,7 @@ npm run dev                 # http://localhost:3000
 Empleados de demo para entrar al POS (selector por PIN — identifica rápido
 quién opera en el mostrador, ver `docs/CONTINUE.md`):
 
-- Ana — PIN `1234` (rol GERENTE)
+- Ana — PIN `1234` (rol ADMINISTRADOR)
 - Luis — PIN `5678` (rol BARISTA)
 
 Para entrar a **Administración** (`/administracion`) hace falta login con

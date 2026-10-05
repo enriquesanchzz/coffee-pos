@@ -8,8 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { createDiscountCode, updateDiscountCode } from "@/actions/discounts";
+import { createDiscountCode as createDiscountCodeAction, updateDiscountCode as updateDiscountCodeAction } from "@/actions/discounts";
 import { discountTypeLabels, discountCategoryLabels } from "./enum-labels";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const createDiscountCode = withActionErrors(createDiscountCodeAction);
+const updateDiscountCode = withActionErrors(updateDiscountCodeAction);
 
 // Crea o edita un código de descuento — mismo diálogo para ambos casos,
 // mismo patrón que IngredientFormDialog (Inventario): montado de forma

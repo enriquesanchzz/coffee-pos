@@ -3,7 +3,12 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { markTransferInTransit, cancelTransferManifest } from "@/actions/transfers";
+import { markTransferInTransit as markTransferInTransitAction, cancelTransferManifest as cancelTransferManifestAction } from "@/actions/transfers";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const markTransferInTransit = withActionErrors(markTransferInTransitAction);
+const cancelTransferManifest = withActionErrors(cancelTransferManifestAction);
 
 export function TransferStatusActions({
   employeeId,

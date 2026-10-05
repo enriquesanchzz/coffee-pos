@@ -9,11 +9,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { createProductWithRecipe, type RecipeLineInput } from "@/actions/recipes";
+import { createProductWithRecipe as createProductWithRecipeAction, type RecipeLineInput } from "@/actions/recipes";
 import { emptyLine, initialLine, type LineDraft } from "./recipe-lines-editor";
 import { emptyModifierOption, modifierOptionsToInput, type ModifierOptionDraft } from "./modifier-options-editor";
 import { VariantFields } from "./variant-fields";
 import { CategoryIconPicker } from "./category-icon-picker";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const createProductWithRecipe = withActionErrors(createProductWithRecipeAction);
 
 type VariantDraft = {
   key: string;

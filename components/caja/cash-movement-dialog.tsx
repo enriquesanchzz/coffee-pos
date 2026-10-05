@@ -6,7 +6,11 @@ import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createCashMovement } from "@/actions/cash";
+import { createCashMovement as createCashMovementAction } from "@/actions/cash";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const createCashMovement = withActionErrors(createCashMovementAction);
 
 const movementTypes: { value: CashMovementType; label: string }[] = [
   { value: "RETIRO", label: "Retiro" },

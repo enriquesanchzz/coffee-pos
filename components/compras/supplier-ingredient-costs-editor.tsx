@@ -6,8 +6,12 @@ import type { SupplierIngredientLink, IngredientOption } from "@/lib/purchases";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { upsertIngredientSupplier } from "@/actions/purchases";
+import { upsertIngredientSupplier as upsertIngredientSupplierAction } from "@/actions/purchases";
 import { unitLabels } from "./enum-labels";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const upsertIngredientSupplier = withActionErrors(upsertIngredientSupplierAction);
 
 function LinkRow({
   supplierId,

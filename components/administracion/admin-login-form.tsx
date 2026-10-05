@@ -23,9 +23,19 @@ export function AdminLoginForm({ error }: { error?: string }) {
           {error === "credenciales" && (
             <p className="text-sm text-destructive">Email o password incorrectos.</p>
           )}
+          {error === "rol" && (
+            <p className="text-sm text-destructive">
+              Tu cuenta no tiene el rol ADMINISTRADOR, necesario para entrar a Administración.
+            </p>
+          )}
+          {error === "bloqueado" && (
+            <p className="text-sm text-destructive">
+              Demasiados intentos fallidos. Espera 5 minutos antes de volver a intentar.
+            </p>
+          )}
           <Button type="submit">Entrar</Button>
           <p className="text-xs text-muted-foreground">
-            Esto requiere password, no el PIN del POS — ver docs/CONTINUE.md.
+            Administración requiere email y password, no el PIN del POS.
           </p>
         </form>
       </CardContent>

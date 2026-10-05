@@ -1,5 +1,6 @@
 "use server";
 
+import { safeAction } from "@/lib/safe-action";
 import { revalidatePath } from "next/cache";
 import { Permission, PaymentMethod, Prisma, ShiftType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -40,7 +41,7 @@ export type OpenShiftInput = {
   confirmingPin: string;
 };
 
-export async function openShift(input: OpenShiftInput) {
+export const openShift = safeAction(async function openShift(input: OpenShiftInput) {
   if (input.cashierId !== (await getSessionEmployeeId())) {
     throw new Error("El cajero no coincide con la sesión activa.");
   }
@@ -74,7 +75,7 @@ export async function openShift(input: OpenShiftInput) {
   revalidatePath("/pos");
   revalidatePath("/caja");
   return shift;
-}
+});
 
 async function computeExpectedCash(
   tx: Prisma.TransactionClient,
@@ -125,7 +126,11 @@ async function computeExpectedCash(
   };
 }
 
-export async function previewShiftClose(shiftId: string) {
+export const previewShiftClose = safeAction(async function previewShiftClose(shiftId: string) {
+  // Expone los totales de caja del turno — solo para una sesión activa.
+  if (!(await getSessionEmployeeId())) {
+    throw new Error("Necesitas iniciar sesión para ver el corte de caja.");
+  }
   const shift = await prisma.shift.findUniqueOrThrow({ where: { id: shiftId } });
   const openingCash = shift.openingCash.toNumber();
   const {
@@ -148,7 +153,7 @@ export async function previewShiftClose(shiftId: string) {
     ingresosTotal,
     expectedCash,
   };
-}
+});
 
 export type CloseShiftInput = {
   shiftId: string;
@@ -158,7 +163,7 @@ export type CloseShiftInput = {
   confirmingPin: string;
 };
 
-export async function closeShift(input: CloseShiftInput) {
+export const closeShift = safeAction(async function closeShift(input: CloseShiftInput) {
   if (input.cashierId !== (await getSessionEmployeeId())) {
     throw new Error("El cajero no coincide con la sesión activa.");
   }
@@ -214,4 +219,4 @@ export async function closeShift(input: CloseShiftInput) {
 
   revalidatePath("/pos");
   revalidatePath("/caja");
-}
+});

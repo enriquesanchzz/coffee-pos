@@ -1,5 +1,6 @@
 "use server";
 
+import { safeAction } from "@/lib/safe-action";
 import { revalidatePath } from "next/cache";
 import type { DiscountType, DiscountCodeCategory } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -16,7 +17,7 @@ export type CreateDiscountCodeInput = {
   category?: DiscountCodeCategory | null;
 };
 
-export async function createDiscountCode(input: CreateDiscountCodeInput) {
+export const createDiscountCode = safeAction(async function createDiscountCode(input: CreateDiscountCodeInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -42,7 +43,7 @@ export async function createDiscountCode(input: CreateDiscountCodeInput) {
   });
 
   revalidatePath("/descuentos");
-}
+});
 
 export type UpdateDiscountCodeInput = {
   employeeId: string;
@@ -55,7 +56,7 @@ export type UpdateDiscountCodeInput = {
   isActive: boolean;
 };
 
-export async function updateDiscountCode(input: UpdateDiscountCodeInput) {
+export const updateDiscountCode = safeAction(async function updateDiscountCode(input: UpdateDiscountCodeInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -83,7 +84,7 @@ export async function updateDiscountCode(input: UpdateDiscountCodeInput) {
   });
 
   revalidatePath("/descuentos");
-}
+});
 
 export type FindDiscountCodeByCodeInput = {
   employeeId: string;
@@ -103,7 +104,7 @@ export type FoundDiscountCode = {
 
 // Usado desde el checkout: el cajero teclea el código de texto que le dio
 // el cliente, no conoce el id.
-export async function findDiscountCodeByCode(
+export const findDiscountCodeByCode = safeAction(async function findDiscountCodeByCode(
   input: FindDiscountCodeByCodeInput
 ): Promise<FoundDiscountCode> {
   if (input.employeeId !== (await getSessionEmployeeId())) {
@@ -143,4 +144,4 @@ export async function findDiscountCodeByCode(
     type: discountCode.type,
     value: discountCode.value.toNumber(),
   };
-}
+});

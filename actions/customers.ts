@@ -1,5 +1,6 @@
 "use server";
 
+import { safeAction } from "@/lib/safe-action";
 import { revalidatePath } from "next/cache";
 import type { CustomerGender } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -26,7 +27,7 @@ function generateWelcomeCouponCode(): string {
   return `BIENVENIDA-${suffix}`;
 }
 
-export async function createCustomer(input: CreateCustomerInput) {
+export const createCustomer = safeAction(async function createCustomer(input: CreateCustomerInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -81,7 +82,7 @@ export async function createCustomer(input: CreateCustomerInput) {
     loyaltyCardCode: loyaltyCard.code!,
     welcomeCouponCode: welcomeCoupon.code,
   };
-}
+});
 
 export type UpdateCustomerInput = {
   employeeId: string;
@@ -94,7 +95,7 @@ export type UpdateCustomerInput = {
   gender?: CustomerGender;
 };
 
-export async function updateCustomer(input: UpdateCustomerInput) {
+export const updateCustomer = safeAction(async function updateCustomer(input: UpdateCustomerInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -119,4 +120,4 @@ export async function updateCustomer(input: UpdateCustomerInput) {
 
   revalidatePath("/clientes");
   revalidatePath(`/clientes/${input.customerId}`);
-}
+});

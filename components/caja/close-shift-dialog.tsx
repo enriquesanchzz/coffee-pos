@@ -6,7 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/utils";
-import { closeShift, previewShiftClose } from "@/actions/shift";
+import { closeShift as closeShiftAction, previewShiftClose as previewShiftCloseAction } from "@/actions/shift";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const closeShift = withActionErrors(closeShiftAction);
+const previewShiftClose = withActionErrors(previewShiftCloseAction);
 
 type Preview = {
   openingCash: number;

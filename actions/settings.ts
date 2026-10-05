@@ -1,5 +1,6 @@
 "use server";
 
+import { safeAction } from "@/lib/safe-action";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
@@ -11,7 +12,7 @@ import { validateThemeSettings, type ThemeSettings } from "@/lib/theme";
 // exclusiva de Administración, mismo patrón que actions/employees.ts:
 // sesión de contraseña (no PIN), el actor sale siempre de la sesión del
 // servidor.
-export async function updateTargetFoodCostPercent(percent: number) {
+export const updateTargetFoodCostPercent = safeAction(async function updateTargetFoodCostPercent(percent: number) {
   const actor = await requirePasswordSession();
   if (!actor) {
     throw new Error("Necesitas iniciar sesión de Administración para hacer esto.");
@@ -29,12 +30,12 @@ export async function updateTargetFoodCostPercent(percent: number) {
 
   revalidatePath("/configuracion");
   revalidatePath("/productos");
-}
+});
 
 // Apariencia global (tema, acento, tipografía, tamaño de letra) — mismo
 // patrón/permiso que updateTargetFoodCostPercent. Afecta app/layout.tsx,
 // que envuelve toda la app, así que revalida desde la raíz.
-export async function updateAppearanceSettings(input: {
+export const updateAppearanceSettings = safeAction(async function updateAppearanceSettings(input: {
   mode: string;
   color: string;
   backgroundColor?: string | null;
@@ -63,4 +64,4 @@ export async function updateAppearanceSettings(input: {
   revalidatePath("/", "layout");
 
   return settings;
-}
+});

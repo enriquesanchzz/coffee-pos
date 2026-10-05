@@ -25,7 +25,7 @@ async function hashSecret(plain: string): Promise<string> {
 //     casero, para probar la resolución recursiva de receta en createSale).
 //   - Latte y Capuccino (Chico/Grande) con receta activa por variante.
 //   - Modificador "Shot extra" por variante.
-//   - Empleados Ana (PIN 1234, GERENTE) y Luis (PIN 5678, BARISTA).
+//   - Empleados Ana (PIN 1234, ADMINISTRADOR) y Luis (PIN 5678, BARISTA).
 //   - Un turno abierto en la sucursal principal.
 //   - Stock inicial suficiente para vender.
 //
@@ -440,7 +440,7 @@ async function main() {
 
   console.log("Sembrando empleados de demo...");
 
-  const gerenteRole = await prisma.role.findUniqueOrThrow({ where: { name: RoleName.GERENTE } });
+  const administradorRole = await prisma.role.findUniqueOrThrow({ where: { name: RoleName.ADMINISTRADOR } });
   const baristaRole = await prisma.role.findUniqueOrThrow({ where: { name: RoleName.BARISTA } });
 
   // PIN en texto plano solo en este script (dato de demo) — se guarda
@@ -449,8 +449,11 @@ async function main() {
   // iniciar sesión con estas cuentas de prueba.
   const anaPinHash = await hashSecret("1234");
   const luisPinHash = await hashSecret("5678");
-  // Ana (GERENTE) es la única cuenta de demo con acceso a Administración —
-  // tiene EMPLEADO_CREAR/MODIFICAR en la matriz de prisma/seed.ts.
+  // Ana es la única cuenta de demo con acceso a Administración — y todos
+  // los módulos de Administración están reservados al rol ADMINISTRADOR
+  // (ver resolveRoleName en lib/session.ts), así que Ana debe tener ese
+  // rol: con GERENTE el login con password funcionaba pero cada página la
+  // regresaba a /pos.
   const anaPasswordHash = await hashSecret("admin1234");
 
   const ana = await prisma.employee.upsert({
@@ -473,11 +476,13 @@ async function main() {
 
   await prisma.employeeBranch.upsert({
     where: { employeeId_branchId: { employeeId: ana.id, branchId: branch.id } },
-    update: {},
+    // También en update: bases sembradas antes de este cambio tenían a Ana
+    // como GERENTE y nunca podían entrar a Administración.
+    update: { roleId: administradorRole.id },
     create: {
       employeeId: ana.id,
       branchId: branch.id,
-      roleId: gerenteRole.id,
+      roleId: administradorRole.id,
       isPrimary: true,
       isCashier: true,
     },

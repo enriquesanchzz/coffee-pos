@@ -1,5 +1,6 @@
 "use server";
 
+import { safeAction } from "@/lib/safe-action";
 import { revalidatePath } from "next/cache";
 import type { UnitOfMeasure } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -20,7 +21,7 @@ export type CreateSupplierInput = {
   minOrderAmount?: number;
 };
 
-export async function createSupplier(input: CreateSupplierInput) {
+export const createSupplier = safeAction(async function createSupplier(input: CreateSupplierInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -46,7 +47,7 @@ export async function createSupplier(input: CreateSupplierInput) {
   revalidatePath("/compras/proveedores");
 
   return { id: supplier.id };
-}
+});
 
 export type UpdateSupplierInput = {
   employeeId: string;
@@ -59,7 +60,7 @@ export type UpdateSupplierInput = {
   minOrderAmount?: number;
 };
 
-export async function updateSupplier(input: UpdateSupplierInput) {
+export const updateSupplier = safeAction(async function updateSupplier(input: UpdateSupplierInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -85,7 +86,7 @@ export async function updateSupplier(input: UpdateSupplierInput) {
 
   revalidatePath("/compras/proveedores");
   revalidatePath(`/compras/proveedores/${input.supplierId}`);
-}
+});
 
 export type UpsertIngredientSupplierInput = {
   employeeId: string;
@@ -101,7 +102,7 @@ export type UpsertIngredientSupplierInput = {
 // isSelected marca el costo "activo" de un ingrediente para el cálculo de
 // costo de receta (ver comentario en IngredientSupplier del schema) — solo
 // un proveedor puede estar seleccionado a la vez por ingrediente.
-export async function upsertIngredientSupplier(input: UpsertIngredientSupplierInput) {
+export const upsertIngredientSupplier = safeAction(async function upsertIngredientSupplier(input: UpsertIngredientSupplierInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -147,7 +148,7 @@ export async function upsertIngredientSupplier(input: UpsertIngredientSupplierIn
   });
 
   revalidatePath(`/compras/proveedores/${input.supplierId}`);
-}
+});
 
 export type CreatePurchaseOrderLineInput = {
   ingredientId: string;
@@ -162,7 +163,7 @@ export type CreatePurchaseOrderInput = {
   lines: CreatePurchaseOrderLineInput[];
 };
 
-export async function createPurchaseOrder(input: CreatePurchaseOrderInput) {
+export const createPurchaseOrder = safeAction(async function createPurchaseOrder(input: CreatePurchaseOrderInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -210,7 +211,7 @@ export async function createPurchaseOrder(input: CreatePurchaseOrderInput) {
   revalidatePath("/compras");
 
   return { id: order.id };
-}
+});
 
 export type ReceivePurchaseOrderLineInput = {
   purchaseOrderItemId: string;
@@ -238,7 +239,7 @@ export type ReceivePurchaseOrderInput = {
 // llegó en ella), y si el costo real difiere del costo cotizado del
 // proveedor, actualiza IngredientSupplier.cost dejando rastro en
 // IngredientCostHistory.
-export async function receivePurchaseOrder(input: ReceivePurchaseOrderInput) {
+export const receivePurchaseOrder = safeAction(async function receivePurchaseOrder(input: ReceivePurchaseOrderInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -378,7 +379,7 @@ export async function receivePurchaseOrder(input: ReceivePurchaseOrderInput) {
   revalidatePath("/compras");
   revalidatePath(`/compras/${input.purchaseOrderId}`);
   revalidatePath("/inventario");
-}
+});
 
 export type UpdatePurchaseOrderInput = {
   employeeId: string;
@@ -392,7 +393,7 @@ export type UpdatePurchaseOrderInput = {
 // borrarlas/recrearlas perdería ese rastro. Editar después de recibir no
 // está contemplado; para corregir algo ya recibido, la vía es una nueva
 // orden.
-export async function updatePurchaseOrder(input: UpdatePurchaseOrderInput) {
+export const updatePurchaseOrder = safeAction(async function updatePurchaseOrder(input: UpdatePurchaseOrderInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -448,7 +449,7 @@ export async function updatePurchaseOrder(input: UpdatePurchaseOrderInput) {
 
   revalidatePath("/compras");
   revalidatePath(`/compras/${input.purchaseOrderId}`);
-}
+});
 
 export type CancelPurchaseOrderInput = {
   employeeId: string;
@@ -458,7 +459,7 @@ export type CancelPurchaseOrderInput = {
 // Solo antes de cualquier recepción (status CREADA) — cancelar algo ya
 // recibido (ni que sea parcial) dejaría el inventario ya aplicado
 // inconsistente con el estado de la orden.
-export async function cancelPurchaseOrder(input: CancelPurchaseOrderInput) {
+export const cancelPurchaseOrder = safeAction(async function cancelPurchaseOrder(input: CancelPurchaseOrderInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -478,4 +479,4 @@ export async function cancelPurchaseOrder(input: CancelPurchaseOrderInput) {
 
   revalidatePath("/compras");
   revalidatePath(`/compras/${input.purchaseOrderId}`);
-}
+});

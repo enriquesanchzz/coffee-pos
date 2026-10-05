@@ -7,11 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CategoryIconPicker } from "@/components/productos/category-icon-picker";
-import {
-  createIngredientCategory,
-  updateIngredientCategory,
-  deleteIngredientCategory,
-} from "@/actions/inventory";
+import { createIngredientCategory as createIngredientCategoryAction, updateIngredientCategory as updateIngredientCategoryAction, deleteIngredientCategory as deleteIngredientCategoryAction } from "@/actions/inventory";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const createIngredientCategory = withActionErrors(createIngredientCategoryAction);
+const updateIngredientCategory = withActionErrors(updateIngredientCategoryAction);
+const deleteIngredientCategory = withActionErrors(deleteIngredientCategoryAction);
 
 export function CategoryFormDialog({
   open,

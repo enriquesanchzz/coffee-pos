@@ -9,8 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { createCustomer, updateCustomer } from "@/actions/customers";
+import { createCustomer as createCustomerAction, updateCustomer as updateCustomerAction } from "@/actions/customers";
 import { buildWhatsAppLoyaltyLink, cn } from "@/lib/utils";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const createCustomer = withActionErrors(createCustomerAction);
+const updateCustomer = withActionErrors(updateCustomerAction);
 
 const GENDER_OPTIONS: { value: CustomerGender | ""; label: string }[] = [
   { value: "", label: "Prefiere no decir" },

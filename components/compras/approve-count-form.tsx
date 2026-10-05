@@ -6,7 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { approvePhysicalCount } from "@/actions/counts";
+import { approvePhysicalCount as approvePhysicalCountAction } from "@/actions/counts";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const approvePhysicalCount = withActionErrors(approvePhysicalCountAction);
 
 export function ApproveCountForm({ physicalCountId }: { physicalCountId: string }) {
   const router = useRouter();

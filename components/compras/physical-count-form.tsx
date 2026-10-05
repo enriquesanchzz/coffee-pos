@@ -6,8 +6,12 @@ import type { IngredientTheoreticalStock } from "@/lib/counts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { createPhysicalCount } from "@/actions/counts";
+import { createPhysicalCount as createPhysicalCountAction } from "@/actions/counts";
 import { unitLabels } from "./enum-labels";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const createPhysicalCount = withActionErrors(createPhysicalCountAction);
 
 export function PhysicalCountForm({
   employeeId,

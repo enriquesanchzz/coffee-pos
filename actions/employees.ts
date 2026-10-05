@@ -1,13 +1,17 @@
 "use server";
 
+import { safeAction } from "@/lib/safe-action";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { hashSecret } from "@/lib/password";
-import { requirePasswordSession, resolveRoleName } from "@/lib/session";
+import { isPinTaken, requirePasswordSession, resolveRoleName } from "@/lib/session";
+import { isValidEmail } from "@/lib/utils";
 import { requirePermission } from "@/lib/permissions";
 
 const PIN_PATTERN = /^\d{4,6}$/;
+
+const PIN_TAKEN_MESSAGE = "Ese PIN ya lo usa otro empleado activo. Elige uno distinto.";
 
 // Alta/edición de empleados solo desde una sesión de Administración
 // (password, no PIN) — no reciben employeeId del cliente porque el actor se
@@ -36,7 +40,7 @@ export type CreateEmployeeInput = {
   isCashier: boolean;
 };
 
-export async function createEmployee(input: CreateEmployeeInput) {
+export const createEmployee = safeAction(async function createEmployee(input: CreateEmployeeInput) {
   await requireEmployeeManager("EMPLEADO_CREAR");
 
   const name = input.name.trim();
@@ -56,6 +60,12 @@ export async function createEmployee(input: CreateEmployeeInput) {
   }
   if (!input.roleId) {
     throw new Error("Elige un rol.");
+  }
+  if (input.email?.trim() && !isValidEmail(input.email.trim())) {
+    throw new Error("El email no es válido.");
+  }
+  if (pin && (await isPinTaken(pin))) {
+    throw new Error(PIN_TAKEN_MESSAGE);
   }
 
   const pinHash = pin ? await hashSecret(pin) : null;
@@ -83,7 +93,7 @@ export async function createEmployee(input: CreateEmployeeInput) {
   });
 
   revalidatePath("/empleados");
-}
+});
 
 export type UpdateEmployeeInput = {
   employeeId: string;
@@ -96,7 +106,7 @@ export type UpdateEmployeeInput = {
   isCashier: boolean;
 };
 
-export async function updateEmployee(input: UpdateEmployeeInput) {
+export const updateEmployee = safeAction(async function updateEmployee(input: UpdateEmployeeInput) {
   await requireEmployeeManager("EMPLEADO_MODIFICAR");
 
   const name = input.name.trim();
@@ -113,6 +123,12 @@ export async function updateEmployee(input: UpdateEmployeeInput) {
   }
   if (!input.roleId) {
     throw new Error("Elige un rol.");
+  }
+  if (input.email?.trim() && !isValidEmail(input.email.trim())) {
+    throw new Error("El email no es válido.");
+  }
+  if (pin && (await isPinTaken(pin, input.employeeId))) {
+    throw new Error(PIN_TAKEN_MESSAGE);
   }
 
   const newPinHash = pin ? await hashSecret(pin) : undefined;
@@ -146,4 +162,4 @@ export async function updateEmployee(input: UpdateEmployeeInput) {
   });
 
   revalidatePath("/empleados");
-}
+});

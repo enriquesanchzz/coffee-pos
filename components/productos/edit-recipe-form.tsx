@@ -7,10 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { updateVariantRecipe, type RecipeLineInput } from "@/actions/recipes";
+import { updateVariantRecipe as updateVariantRecipeAction, type RecipeLineInput } from "@/actions/recipes";
 import { type LineDraft } from "./recipe-lines-editor";
 import { modifierOptionsToInput, type ModifierOptionDraft } from "./modifier-options-editor";
 import { VariantFields } from "./variant-fields";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const updateVariantRecipe = withActionErrors(updateVariantRecipeAction);
 
 // key = line.id (el id real de RecipeIngredient, ya estable/único) en vez de
 // crypto.randomUUID() — useState corre en SSR y al hidratar, un valor

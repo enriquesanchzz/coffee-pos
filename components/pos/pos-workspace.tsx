@@ -9,8 +9,12 @@ import { ProductDialog } from "./product-dialog";
 import { FavoritesBar } from "./favorites-bar";
 import { OpenTabsDialog } from "./open-tabs-dialog";
 import { useCartStore } from "./cart-store";
-import { getTabDetail, type OpenTabDetail } from "@/actions/pos";
+import { getTabDetail as getTabDetailAction, type OpenTabDetail } from "@/actions/pos";
 import { CashMovementDialog } from "@/components/caja/cash-movement-dialog";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const getTabDetail = withActionErrors(getTabDetailAction);
 
 export function PosWorkspace({
   catalog,

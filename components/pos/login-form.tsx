@@ -27,10 +27,15 @@ export function LoginForm({ error }: { error?: string }) {
           {error === "pin" && (
             <p className="text-sm text-destructive">PIN incorrecto. Intenta de nuevo.</p>
           )}
+          {error === "bloqueado" && (
+            <p className="text-sm text-destructive">
+              Demasiados intentos fallidos. Espera 5 minutos antes de volver a intentar.
+            </p>
+          )}
           <Button type="submit">Entrar</Button>
           <p className="text-xs text-muted-foreground">
-            Esto es un selector de empleado por PIN, no autenticación real.
-            Se reemplaza al construir el módulo de Administración.
+            El PIN identifica a quién atiende en el mostrador. Para entrar a
+            Administración se usa email y password.
           </p>
         </form>
       </CardContent>

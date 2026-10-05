@@ -7,8 +7,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createSupplier, updateSupplier } from "@/actions/purchases";
+import { createSupplier as createSupplierAction, updateSupplier as updateSupplierAction } from "@/actions/purchases";
 import { SupplierIngredientCostsEditor } from "./supplier-ingredient-costs-editor";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const createSupplier = withActionErrors(createSupplierAction);
+const updateSupplier = withActionErrors(updateSupplierAction);
 
 export function SupplierForm({
   employeeId,

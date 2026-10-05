@@ -6,9 +6,14 @@ import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createCombo, updateCombo } from "@/actions/promotions";
+import { createCombo as createComboAction, updateCombo as updateComboAction } from "@/actions/promotions";
 import { DaysOfWeekPicker } from "./days-of-week-picker";
 import { ComboItemsEditor, type ComboItemDraft, initialComboItems } from "./combo-items-editor";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const createCombo = withActionErrors(createComboAction);
+const updateCombo = withActionErrors(updateComboAction);
 
 function itemsFromCombo(combo: ComboListItem | null): ComboItemDraft[] {
   if (!combo || combo.items.length === 0) return initialComboItems();

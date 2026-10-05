@@ -19,12 +19,17 @@ import { NewProductForm } from "./new-product-form";
 import { AddVariantForm } from "./add-variant-form";
 import { EditRecipeForm } from "./edit-recipe-form";
 import { CategoryIconPicker } from "./category-icon-picker";
-import { fetchVariantRecipeDetail, updateProductCategory } from "@/actions/recipes";
+import { fetchVariantRecipeDetail as fetchVariantRecipeDetailAction, updateProductCategory as updateProductCategoryAction } from "@/actions/recipes";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const fetchVariantRecipeDetail = withActionErrors(fetchVariantRecipeDetailAction);
+const updateProductCategory = withActionErrors(updateProductCategoryAction);
 
 type MainView = "browse" | "product-variants" | "new-product" | "add-variant" | "edit-variant";
 

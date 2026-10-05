@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { getIronSession, type SessionOptions } from "iron-session";
 import { prisma } from "./prisma";
 import { verifySecret } from "./password";
+import { TOO_MANY_ATTEMPTS_MESSAGE, clearFailures, isLockedOut, recordFailure } from "./rate-limit";
 
 // -----------------------------------------------------------------------
 // Sesión real: cookie sellada/firmada con iron-session (no se puede
@@ -116,12 +117,35 @@ export async function requirePasswordSession() {
 // Compara contra el conjunto de empleados activos con PIN configurado —
 // con hash+salt por fila no hay forma de indexar una búsqueda directa por
 // igualdad, pero a esta escala (decenas de empleados por sucursal) es
-// trivial recorrerlos.
+// trivial recorrerlos. El PIN es único entre empleados activos (lo exige
+// actions/employees.ts vía isPinTaken), así que el primer match es el único.
+//
+// Con límite de intentos fallidos por IP (lib/rate-limit.ts): pasado el
+// límite lanza un Error con TOO_MANY_ATTEMPTS_MESSAGE en vez de seguir
+// comparando.
 export async function findEmployeeByPin(pin: string) {
   if (!pin) return null;
+  if (await isLockedOut("pin")) {
+    throw new Error(TOO_MANY_ATTEMPTS_MESSAGE);
+  }
 
+  const match = await matchPin(pin);
+  if (match) {
+    await clearFailures("pin");
+  } else {
+    await recordFailure("pin");
+  }
+  return match;
+}
+
+async function matchPin(pin: string, excludeEmployeeId?: string) {
   const candidates = await prisma.employee.findMany({
-    where: { isActive: true, pin: { not: null } },
+    where: {
+      isActive: true,
+      pin: { not: null },
+      ...(excludeEmployeeId ? { id: { not: excludeEmployeeId } } : {}),
+    },
+    orderBy: { createdAt: "asc" },
   });
 
   for (const candidate of candidates) {
@@ -132,14 +156,28 @@ export async function findEmployeeByPin(pin: string) {
   return null;
 }
 
+// Para alta/edición de empleados: dos empleados activos con el mismo PIN
+// harían que el login por PIN siempre resuelva al primero — el segundo
+// nunca podría entrar y sus ventas quedarían a nombre del otro.
+export async function isPinTaken(pin: string, excludeEmployeeId?: string) {
+  return (await matchPin(pin, excludeEmployeeId)) !== null;
+}
+
 export async function findEmployeeByEmailPassword(email: string, password: string) {
   if (!email || !password) return null;
+  if (await isLockedOut("password")) {
+    throw new Error(TOO_MANY_ATTEMPTS_MESSAGE);
+  }
 
   const employee = await prisma.employee.findFirst({
     where: { email, isActive: true },
   });
-  if (!employee) return null;
+  const valid = employee ? await verifySecret(password, employee.passwordHash) : false;
 
-  const valid = await verifySecret(password, employee.passwordHash);
-  return valid ? employee : null;
+  if (!valid) {
+    await recordFailure("password");
+    return null;
+  }
+  await clearFailures("password");
+  return employee;
 }

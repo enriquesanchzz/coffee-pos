@@ -1,5 +1,6 @@
 "use server";
 
+import { safeAction } from "@/lib/safe-action";
 import { revalidatePath } from "next/cache";
 import {
   Prisma,
@@ -636,7 +637,7 @@ function serializeSale(sale: {
 // solo lectura (ninguna de las consultas dentro de resolveSaleItems
 // escribe nada), por eso se llama con el cliente de Prisma normal, sin
 // transacción.
-export async function previewSaleTotal(
+export const previewSaleTotal = safeAction(async function previewSaleTotal(
   employeeId: string,
   items: CreateSaleItemInput[]
 ): Promise<{ subtotal: number; discountableSubtotal: number }> {
@@ -649,9 +650,9 @@ export async function previewSaleTotal(
 
   const { subtotal, discountableSubtotal } = await resolveSaleItems(prisma, items);
   return { subtotal: subtotal.toNumber(), discountableSubtotal: discountableSubtotal.toNumber() };
-}
+});
 
-export async function createSale(input: CreateSaleInput) {
+export const createSale = safeAction(async function createSale(input: CreateSaleInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -762,7 +763,7 @@ export async function createSale(input: CreateSaleInput) {
 
   revalidatePath("/pos");
   return serializeSale(sale);
-}
+});
 
 // -----------------------------------------------------------------------
 // Cuentas abiertas (Mesa) — "cambios para la sección de punto de venta":
@@ -781,7 +782,7 @@ export type OpenTabInput = {
   customerId?: string;
 };
 
-export async function openTab(input: OpenTabInput) {
+export const openTab = safeAction(async function openTab(input: OpenTabInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -830,7 +831,7 @@ export async function openTab(input: OpenTabInput) {
 
   revalidatePath("/pos");
   return serializeSale(sale);
-}
+});
 
 // Para cerrar una cuenta abierta (closeTab): el descuento de código/manual
 // se calcula sobre el subtotal acumulado de TODAS las rondas ya
@@ -869,7 +870,7 @@ export type AddItemsToTabInput = {
   items: CreateSaleItemInput[];
 };
 
-export async function addItemsToTab(input: AddItemsToTabInput) {
+export const addItemsToTab = safeAction(async function addItemsToTab(input: AddItemsToTabInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -902,7 +903,7 @@ export async function addItemsToTab(input: AddItemsToTabInput) {
 
   revalidatePath("/pos");
   return serializeSale(sale);
-}
+});
 
 export type CloseTabInput = {
   saleId: string;
@@ -918,7 +919,7 @@ export type CloseTabInput = {
   manualDiscount?: ManualDiscountInput;
 };
 
-export async function closeTab(input: CloseTabInput) {
+export const closeTab = safeAction(async function closeTab(input: CloseTabInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -1030,7 +1031,7 @@ export async function closeTab(input: CloseTabInput) {
 
   revalidatePath("/pos");
   return serializeSale(sale);
-}
+});
 
 export type OpenTabSummary = {
   id: string;
@@ -1040,7 +1041,7 @@ export type OpenTabSummary = {
   createdAt: string;
 };
 
-export async function listOpenTabs(branchId: string): Promise<OpenTabSummary[]> {
+export const listOpenTabs = safeAction(async function listOpenTabs(branchId: string): Promise<OpenTabSummary[]> {
   const employeeId = await getSessionEmployeeId();
   if (!employeeId) {
     throw new Error("Necesitas iniciar sesión para ver las cuentas abiertas.");
@@ -1059,7 +1060,7 @@ export async function listOpenTabs(branchId: string): Promise<OpenTabSummary[]> 
     itemCount: sale._count.items,
     createdAt: sale.createdAt.toISOString(),
   }));
-}
+});
 
 export type OpenTabItem = {
   id: string;
@@ -1084,7 +1085,10 @@ export type OpenTabDetail = {
 // cajero lo revisa (y puede corregirlo, ver removeTabItem/
 // updateTabItemQuantity abajo) antes de cobrar, para rectificar con el
 // cliente que todo esté bien.
-export async function getTabDetail(saleId: string): Promise<OpenTabDetail> {
+export const getTabDetail = safeAction(async function getTabDetail(saleId: string): Promise<OpenTabDetail> {
+  if (!(await getSessionEmployeeId())) {
+    throw new Error("Necesitas iniciar sesión para ver la cuenta.");
+  }
   const sale = await prisma.sale.findUniqueOrThrow({
     where: { id: saleId },
     include: {
@@ -1113,7 +1117,7 @@ export async function getTabDetail(saleId: string): Promise<OpenTabDetail> {
       notes: item.notes,
     })),
   };
-}
+});
 
 // Ingredientes/modificadores/extras ya guardados de un SaleItem, en el
 // shape que resolveSaleItems espera — para poder recalcular su consumo
@@ -1218,7 +1222,7 @@ export type RemoveTabItemInput = {
 // cobrar) — restaura el inventario que ya se había descontado. Solo
 // mientras la cuenta sigue ABIERTA; una venta ya cobrada no se corrige
 // aquí (existe VENTA_CANCELAR para eso).
-export async function removeTabItem(input: RemoveTabItemInput) {
+export const removeTabItem = safeAction(async function removeTabItem(input: RemoveTabItemInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -1259,7 +1263,7 @@ export async function removeTabItem(input: RemoveTabItemInput) {
 
   revalidatePath("/pos");
   return serializeSale(sale);
-}
+});
 
 export type UpdateTabItemQuantityInput = {
   saleItemId: string;
@@ -1276,7 +1280,7 @@ export type UpdateTabItemQuantityInput = {
 // (bug real encontrado en verificación: reordenaba la lista de forma
 // confusa). Solo se ajusta el inventario por la diferencia exacta entre
 // la cantidad vieja y la nueva.
-export async function updateTabItemQuantity(input: UpdateTabItemQuantityInput) {
+export const updateTabItemQuantity = safeAction(async function updateTabItemQuantity(input: UpdateTabItemQuantityInput) {
   if (input.employeeId !== (await getSessionEmployeeId())) {
     throw new Error("El empleado no coincide con la sesión activa.");
   }
@@ -1328,4 +1332,4 @@ export async function updateTabItemQuantity(input: UpdateTabItemQuantityInput) {
 
   revalidatePath("/pos");
   return serializeSale(sale);
-}
+});

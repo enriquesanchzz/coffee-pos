@@ -8,9 +8,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { createIngredient } from "@/actions/recipes";
-import { updateIngredient, deleteIngredient } from "@/actions/inventory";
+import { createIngredient as createIngredientAction } from "@/actions/recipes";
+import { updateIngredient as updateIngredientAction, deleteIngredient as deleteIngredientAction } from "@/actions/inventory";
 import { unitLabels } from "./unit-labels";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const createIngredient = withActionErrors(createIngredientAction);
+const updateIngredient = withActionErrors(updateIngredientAction);
+const deleteIngredient = withActionErrors(deleteIngredientAction);
 
 const units = Object.keys(unitLabels) as UnitOfMeasure[];
 

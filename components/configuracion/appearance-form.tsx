@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { updateAppearanceSettings } from "@/actions/settings";
+import { updateAppearanceSettings as updateAppearanceSettingsAction } from "@/actions/settings";
 import {
   ACCENT_SUGGESTIONS,
   DEFAULT_BACKGROUND_HEX,
@@ -14,6 +14,10 @@ import {
   FONT_SIZES,
   type ThemeSettings,
 } from "@/lib/theme";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const updateAppearanceSettings = withActionErrors(updateAppearanceSettingsAction);
 
 const HEX_PATTERN = /^#[0-9a-fA-F]{6}$/;
 

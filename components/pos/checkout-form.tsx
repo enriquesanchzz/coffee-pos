@@ -8,11 +8,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { cn, formatCurrency, posAccentClass, posAccentBorderClass } from "@/lib/utils";
-import { createSale, closeTab, previewSaleTotal } from "@/actions/pos";
-import { findDiscountCodeByCode, type FoundDiscountCode } from "@/actions/discounts";
-import { updateCustomer } from "@/actions/customers";
+import { createSale as createSaleAction, closeTab as closeTabAction, previewSaleTotal as previewSaleTotalAction } from "@/actions/pos";
+import { findDiscountCodeByCode as findDiscountCodeByCodeAction, type FoundDiscountCode } from "@/actions/discounts";
+import { updateCustomer as updateCustomerAction } from "@/actions/customers";
 import type { CustomerOption } from "@/lib/customers";
 import { useCartStore, cartLineToSaleItemInput } from "./cart-store";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const createSale = withActionErrors(createSaleAction);
+const closeTab = withActionErrors(closeTabAction);
+const previewSaleTotal = withActionErrors(previewSaleTotalAction);
+const findDiscountCodeByCode = withActionErrors(findDiscountCodeByCodeAction);
+const updateCustomer = withActionErrors(updateCustomerAction);
 
 const paymentMethods: { value: PaymentMethod; label: string }[] = [
   { value: "EFECTIVO", label: "Efectivo" },
@@ -53,6 +61,16 @@ function previewDiscountAmount(type: DiscountType, value: number, subtotal: numb
   }
 }
 
+// Lo que CartPanel muestra después de cobrar — sobre todo el cambio a
+// entregar, que antes desaparecía en cuanto se registraba la venta.
+export type SaleReceipt = {
+  saleId: string;
+  total: number;
+  method: PaymentMethod;
+  cashReceived: number | null;
+  change: number | null;
+};
+
 // Descuento/método de pago/confirmar — antes vivía en un <Dialog> flotante
 // (CheckoutDialog); ahora es el "modo cobro" de CartPanel, en el mismo
 // panel donde ya se arma la comanda, en vez de un popup encima de todo.
@@ -77,7 +95,7 @@ export function CheckoutForm({
   selectedCustomer: CustomerOption | null;
   domicilioAddress: string;
   domicilioOrigen: DomicilioOrigen;
-  onConfirmed: () => void;
+  onConfirmed: (receipt: SaleReceipt) => void;
   onCancel: () => void;
 }) {
   const { lines, subtotal, clear, orderType, tableNumber, activeTabId } = useCartStore();
@@ -176,6 +194,23 @@ export function CheckoutForm({
   const cashReceivedCents = Math.round((Number(cashReceived) || 0) * 100);
   const totalToCollectCents = Math.round(totalToCollect * 100);
 
+  // Mismas reglas que valida computeDiscount en el servidor — aquí solo
+  // para avisar antes de intentar cobrar (antes se podía capturar 150% y
+  // el botón seguía habilitado con un total de $0.00).
+  const manualValueNumber = Number(manualValue) || 0;
+  const manualDiscountError =
+    discountMode !== "MANUAL"
+      ? null
+      : manualValueNumber < 0
+        ? "El valor no puede ser negativo."
+        : manualType === "PORCENTAJE" && manualValueNumber > 100
+          ? "El porcentaje no puede ser mayor a 100%."
+          : manualType === "MONTO_FIJO" && manualValueNumber > discountableBase
+            ? "El descuento no puede ser mayor al subtotal."
+            : manualType === "PRECIO_FINAL" && manualValueNumber > rawSubtotal
+              ? "El precio final no puede ser mayor al subtotal."
+              : null;
+
   function resetDiscountState() {
     setCodeInput("");
     setResolvedCode(null);
@@ -252,10 +287,12 @@ export function CheckoutForm({
               }
             : undefined;
 
+        let saleId: string;
         if (activeTabId) {
           // Cerrar una cuenta abierta (ver "cambios para la sección de
           // punto de venta") — si hay productos en el carrito, se agregan
           // como la última ronda en la misma transacción que cobra.
+          saleId = activeTabId;
           await closeTab({
             saleId: activeTabId,
             branchId,
@@ -269,7 +306,7 @@ export function CheckoutForm({
             manualDiscount,
           });
         } else {
-          await createSale({
+          const created = await createSale({
             branchId,
             shiftId,
             employeeId,
@@ -285,7 +322,15 @@ export function CheckoutForm({
             discountCodeId,
             manualDiscount,
           });
+          saleId = created.id;
         }
+        const receipt: SaleReceipt = {
+          saleId,
+          total: totalToCollect,
+          method,
+          cashReceived: method === "EFECTIVO" ? cashReceivedCents / 100 : null,
+          change: method === "EFECTIVO" ? (cashReceivedCents - totalToCollectCents) / 100 : null,
+        };
         clear();
         setDiscountMode("NINGUNO");
         resetDiscountState();
@@ -293,7 +338,7 @@ export function CheckoutForm({
         setTipMode("NINGUNA");
         setTipCustom("");
         setCashReceived("");
-        onConfirmed();
+        onConfirmed(receipt);
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo registrar la venta.");
       }
@@ -423,6 +468,7 @@ export function CheckoutForm({
               onChange={(e) => setAuthorizingPin(e.target.value)}
             />
           </div>
+          {manualDiscountError && <p className="text-sm text-destructive">{manualDiscountError}</p>}
         </div>
       )}
 
@@ -587,7 +633,7 @@ export function CheckoutForm({
           verifiedSubtotal === null ||
           (lines.length === 0 && !activeTabId) ||
           (discountMode === "CODIGO" && !resolvedCode) ||
-          (discountMode === "MANUAL" && !authorizingPin) ||
+          (discountMode === "MANUAL" && (!authorizingPin || manualDiscountError !== null)) ||
           (method === "EFECTIVO" && (cashReceived === "" || cashReceivedCents < totalToCollectCents))
         }
       >

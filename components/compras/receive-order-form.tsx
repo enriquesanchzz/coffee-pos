@@ -8,8 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/utils";
-import { receivePurchaseOrder } from "@/actions/purchases";
+import { receivePurchaseOrder as receivePurchaseOrderAction } from "@/actions/purchases";
 import { unitLabels } from "./enum-labels";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const receivePurchaseOrder = withActionErrors(receivePurchaseOrderAction);
 
 type LineState = {
   purchaseOrderItemId: string;

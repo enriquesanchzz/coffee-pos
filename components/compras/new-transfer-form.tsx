@@ -10,12 +10,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { createTransferManifest } from "@/actions/transfers";
+import { createTransferManifest as createTransferManifestAction } from "@/actions/transfers";
 import {
   TransferLinesEditor,
   initialTransferLine,
   type TransferLineDraft,
 } from "./transfer-lines-editor";
+import { withActionErrors } from "@/lib/action-result";
+
+// Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
+const createTransferManifest = withActionErrors(createTransferManifestAction);
 
 export function NewTransferForm({
   employeeId,
