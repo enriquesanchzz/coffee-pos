@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { loginAdmin } from "@/actions/session";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,8 +39,12 @@ export function AdminLoginForm({ error }: { error?: string }) {
           )}
           <Button type="submit">Entrar</Button>
           <p className="text-xs text-muted-foreground">
-            Administración requiere email y password, no el PIN del POS.
+            Administración requiere email y password, no el PIN del POS. ¿Olvidaste tu password? Pide a otro
+            administrador que te asigne uno nuevo en Empleados.
           </p>
+          <Link href="/pos" className="text-sm text-muted-foreground underline hover:text-foreground">
+            ← Volver al Punto de Venta
+          </Link>
         </form>
       </CardContent>
     </Card>

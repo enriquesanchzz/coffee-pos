@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { DiscountCodeCard } from "./discount-code-card";
 import { DiscountCodeFormDialog } from "./discount-code-form-dialog";
 import { discountCategoryLabels } from "./enum-labels";
+import { matchesSearch } from "@/lib/search";
 
 type StatusFilter = "todos" | DiscountCodeStatus;
 type CategoryFilter = "todas" | DiscountCodeCategory;
@@ -32,9 +33,9 @@ export function DiscountCodesWorkspace({
   const [selected, setSelected] = useState<DiscountCodeListItem | null>(null);
 
   const filtered = useMemo(() => {
-    const trimmedQuery = query.trim().toUpperCase();
+    const trimmedQuery = query.trim();
     return codes.filter((discountCode) => {
-      if (trimmedQuery && !discountCode.code.includes(trimmedQuery)) return false;
+      if (trimmedQuery && !matchesSearch(trimmedQuery, discountCode.code, discountCode.customerName)) return false;
       if (statusFilter !== "todos" && discountCode.status !== statusFilter) return false;
       if (categoryFilter !== "todas" && discountCode.category !== categoryFilter) return false;
       return true;
@@ -88,9 +89,27 @@ export function DiscountCodesWorkspace({
         </Button>
       </div>
 
-      {filtered.length === 0 && (
-        <p className="text-sm text-muted-foreground">Ningún código coincide con los filtros.</p>
-      )}
+      {filtered.length === 0 &&
+        (codes.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Aún no hay códigos de descuento. Los cupones de bienvenida se crean solos al registrar un cliente.
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Ningún código coincide con los filtros.{" "}
+            <button
+              type="button"
+              className="underline"
+              onClick={() => {
+                setQuery("");
+                setStatusFilter("todos");
+                setCategoryFilter("todas");
+              }}
+            >
+              Limpiar filtros
+            </button>
+          </p>
+        ))}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {filtered.map((discountCode) => (

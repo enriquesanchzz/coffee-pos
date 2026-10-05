@@ -26,6 +26,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { withActionErrors } from "@/lib/action-result";
+import { matchesSearch } from "@/lib/search";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const fetchVariantRecipeDetail = withActionErrors(fetchVariantRecipeDetailAction);
@@ -176,7 +177,7 @@ export function ProductosWorkspace({
             }
             renderSearchResults={(q) =>
               productGrid(
-                visibleProducts.filter((p) => p.name.toLowerCase().includes(q.toLowerCase())),
+                visibleProducts.filter((p) => matchesSearch(q, p.name)),
                 `Sin resultados para "${q}".`
               )
             }

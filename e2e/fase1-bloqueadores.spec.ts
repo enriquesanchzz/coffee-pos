@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { addProduct, db, loginAdmin, loginPin, PIN } from "./helpers";
+import { addProduct, db, loginAdmin, loginPin, pickOption, PIN } from "./helpers";
 
 test.describe("QA-001 último administrador", () => {
   test("la única administradora no puede quitarse el rol", async ({ page }) => {
@@ -28,8 +28,9 @@ test.describe("QA-002 paquetes", () => {
     const dialog = page.getByRole("dialog");
     await page.fill("#combo-name", `Caro E2E ${Date.now()}`);
     await page.fill("#combo-price", "500");
-    await dialog.locator("select").nth(0).selectOption({ label: "Latte Chico — Caliente" });
-    await dialog.locator("select").nth(1).selectOption({ label: "Americano Chico — Caliente" });
+    const pickers = dialog.getByRole("combobox", { name: "Producto del paquete" });
+    await pickOption(pickers.nth(0), "Latte Chico Caliente", "Latte Chico — Caliente");
+    await pickOption(pickers.nth(1), "Americano Chico Caliente", "Americano Chico — Caliente");
     await expect(dialog.getByText("debe costar menos")).toBeVisible();
     await dialog.getByRole("button", { name: /Crear|Guardar/ }).click();
     await expect(dialog.getByText("El paquete debe costar menos que sus productos por separado ($70.00).")).toBeVisible();

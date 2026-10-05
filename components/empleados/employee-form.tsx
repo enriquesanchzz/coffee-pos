@@ -44,8 +44,11 @@ export function EmployeeForm({
   const changesOwnAccess =
     isSelf && employee && (roleId !== employee.roleId || (employee.isActive && !isActive));
 
+  // Desactivar a alguien le quita el acceso de inmediato: se confirma.
+  const deactivatesSomeone = Boolean(employee?.isActive && !isActive && !isSelf);
+
   function handleSubmit() {
-    if (changesOwnAccess && !confirmingSelfChange) {
+    if ((changesOwnAccess || deactivatesSomeone) && !confirmingSelfChange) {
       setConfirmingSelfChange(true);
       return;
     }
@@ -202,8 +205,12 @@ export function EmployeeForm({
       </Button>
       <ConfirmDialog
         open={confirmingSelfChange}
-        title="¿Cambiar tu propio acceso?"
-        message="Estás cambiando tu propio rol o desactivando tu cuenta. Si dejas de ser ADMINISTRADOR, perderás el acceso a Administración en cuanto guardes."
+        title={deactivatesSomeone ? `¿Desactivar a ${employee?.name}?` : "¿Cambiar tu propio acceso?"}
+        message={
+          deactivatesSomeone
+            ? "Ya no podrá entrar al POS ni a Administración. Su historial de ventas se conserva y puedes reactivarlo después."
+            : "Estás cambiando tu propio rol o desactivando tu cuenta. Si dejas de ser ADMINISTRADOR, perderás el acceso a Administración en cuanto guardes."
+        }
         confirmLabel="Sí, guardar"
         destructive
         onConfirm={handleSubmit}

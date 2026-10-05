@@ -168,26 +168,35 @@ export function CartPanel({
     }
   }
 
-  if (view === "checkout") {
-    return (
-      <div className="flex h-full flex-col overflow-y-auto border-t border-border md:border-l md:border-t-0">
-        <CheckoutForm
-          branchId={branchId}
-          shiftId={shiftId}
-          employeeId={employeeId}
-          activeTabBaseTotal={activeTabSummary?.total}
-          selectedCustomer={selectedCustomer}
-          domicilioAddress={domicilioAddress}
-          domicilioOrigen={domicilioOrigen}
-          onConfirmed={handleConfirmed}
-          onCancel={() => setView("cart")}
-        />
-      </div>
-    );
-  }
-
+  // El cobro y la cuenta se montan juntos y solo se oculta el que no está
+  // en uso: así "← Atrás" no borra lo capturado en el cobro (recibido,
+  // propina, descuento — QA-028).
   return (
-    <div className="flex h-full min-h-0 flex-col border-t border-border md:border-l md:border-t-0">
+    <div className="h-full min-h-0">
+      <div
+        className={cn(
+          "h-full flex-col overflow-y-auto border-t border-border md:border-l md:border-t-0",
+          view === "checkout" ? "flex" : "hidden"
+        )}
+      >
+        <CheckoutForm
+            branchId={branchId}
+            shiftId={shiftId}
+            employeeId={employeeId}
+            activeTabBaseTotal={activeTabSummary?.total}
+            selectedCustomer={selectedCustomer}
+            domicilioAddress={domicilioAddress}
+            domicilioOrigen={domicilioOrigen}
+            onConfirmed={handleConfirmed}
+            onCancel={() => setView("cart")}
+          />
+      </div>
+    <div
+      className={cn(
+        "h-full min-h-0 flex-col border-t border-border md:border-l md:border-t-0",
+        view === "cart" ? "flex" : "hidden"
+      )}
+    >
       <div className="flex flex-col gap-3 border-b border-border p-4">
         <p className="font-semibold">Cuenta actual</p>
         <div className="flex gap-1.5">
@@ -280,7 +289,7 @@ export function CartPanel({
                 return (
                   <li key={item.id} className="rounded-xl border border-border p-3">
                     <div className="flex items-start justify-between gap-2">
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-sm font-medium">
                           {item.productName} · {item.productVariantName}
                           {item.temperature && ` · ${temperatureLabels[item.temperature]}`}
@@ -288,12 +297,16 @@ export function CartPanel({
                         {item.modifierNames.length > 0 && (
                           <p className="text-xs text-muted-foreground">{item.modifierNames.join(", ")}</p>
                         )}
-                        {item.notes && <p className="text-xs italic text-muted-foreground">“{item.notes}”</p>}
+                        {item.notes && (
+                          <p className="line-clamp-2 break-words text-xs italic text-muted-foreground" title={item.notes}>
+                            “{item.notes}”
+                          </p>
+                        )}
                       </div>
                       <button
                         onClick={() => handleRemoveRegistered(item.id)}
                         disabled={isPending}
-                        className="text-muted-foreground hover:text-destructive disabled:opacity-50"
+                        className="flex-shrink-0 text-muted-foreground hover:text-destructive disabled:opacity-50"
                         aria-label="Quitar"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -354,9 +367,9 @@ export function CartPanel({
                 )}
               </div>
 
-              <div className="flex flex-1 flex-col gap-2">
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
                 <div className="flex items-start justify-between gap-2">
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-sm font-medium">
                       {line.productName} · {line.variantName}
                     </p>
@@ -369,12 +382,14 @@ export function CartPanel({
                       </p>
                     )}
                     {line.notes && (
-                      <p className="text-xs italic text-muted-foreground">“{line.notes}”</p>
+                      <p className="line-clamp-2 break-words text-xs italic text-muted-foreground" title={line.notes}>
+                        “{line.notes}”
+                      </p>
                     )}
                   </div>
                   <button
                     onClick={() => removeLine(line.lineId)}
-                    className="text-muted-foreground hover:text-destructive"
+                    className="flex-shrink-0 text-muted-foreground hover:text-destructive"
                     aria-label="Quitar"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -453,6 +468,7 @@ export function CartPanel({
         onConfirm={() => handleLeaveOpen(true)}
         onCancel={() => setShortageMessage(null)}
       />
+    </div>
     </div>
   );
 }

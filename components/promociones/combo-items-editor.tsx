@@ -3,7 +3,7 @@
 import type { VariantOption } from "@/lib/promotions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 
 export type ComboItemDraft = { key: string; productVariantId: string; quantity: string };
 
@@ -47,18 +47,14 @@ export function ComboItemsEditor({
     <div className="flex flex-col gap-2">
       {items.map((item) => (
         <div key={item.key} className="flex items-center gap-2">
-          <Select
+          <Combobox
             className="flex-1"
-            value={item.productVariantId}
-            onChange={(e) => updateItem(item.key, { productVariantId: e.target.value })}
-          >
-            <option value="">Selecciona un producto…</option>
-            {variants.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.productName} {v.variantName}
-              </option>
-            ))}
-          </Select>
+            aria-label="Producto del paquete"
+            placeholder="Busca un producto…"
+            value={item.productVariantId || null}
+            onChange={(productVariantId) => updateItem(item.key, { productVariantId })}
+            options={variants.map((v) => ({ value: v.id, label: `${v.productName} ${v.variantName}` }))}
+          />
           <Input
             type="number"
             min="1"

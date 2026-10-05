@@ -3,7 +3,7 @@
 import type { IngredientOption } from "@/lib/purchases";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { formatCurrency, formatUnitCost } from "@/lib/utils";
 import { unitLabels } from "./enum-labels";
 import { roundQty } from "@/lib/units";
@@ -70,12 +70,12 @@ export function OrderLinesEditor({
         const lineTotal = (Number(line.quantity) || 0) * (Number(line.estimatedUnitCost) || 0);
         return (
           <div key={line.key} className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
-            <Select
+            <Combobox
               className="min-w-[10rem] flex-1"
               aria-label="Insumo"
-              value={line.ingredientId}
-              onChange={(e) => {
-                const ingredientId = e.target.value;
+              placeholder="Busca un insumo…"
+              value={line.ingredientId || null}
+              onChange={(ingredientId) => {
                 // El costo cotizado está por unidad base; se pasa al
                 // precio por presentación (ej. $0.03/ml → $30 por L).
                 const suggestedCost = supplierCosts.get(ingredientId);
@@ -87,14 +87,8 @@ export function OrderLinesEditor({
                     : {}),
                 });
               }}
-            >
-              <option value="">Selecciona un ingrediente…</option>
-              {ingredients.map((i) => (
-                <option key={i.id} value={i.id}>
-                  {i.name}
-                </option>
-              ))}
-            </Select>
+              options={ingredients.map((i) => ({ value: i.id, label: i.name }))}
+            />
 
             <Input
               type="number"

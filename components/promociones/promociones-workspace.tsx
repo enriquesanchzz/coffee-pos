@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { PromoCard, type PromoCardItem } from "./promo-card";
 import { ComboFormDialog } from "./combo-form-dialog";
 import { PromotionFormDialog } from "./promotion-form-dialog";
+import { matchesSearch } from "@/lib/search";
 
 type StatusFilter = "todos" | "activo" | "inactivo";
 type CategoryFilter = "todas" | "PAQUETE" | "DOS_POR_UNO" | "DIA_TEMATICO";
@@ -62,7 +63,7 @@ export function PromocionesWorkspace({
       const isActive = item.kind === "combo" ? item.combo.isActive : item.promotion.isActive;
       const category: CategoryFilter = item.kind === "combo" ? "PAQUETE" : item.promotion.category;
 
-      if (trimmedQuery && !name.toLowerCase().includes(trimmedQuery)) return false;
+      if (trimmedQuery && !matchesSearch(trimmedQuery, name)) return false;
       if (statusFilter === "activo" && !isActive) return false;
       if (statusFilter === "inactivo" && isActive) return false;
       if (categoryFilter !== "todas" && category !== categoryFilter) return false;
@@ -122,7 +123,29 @@ export function PromocionesWorkspace({
         </div>
       </div>
 
-      {filtered.length === 0 && <p className="text-sm text-muted-foreground">Ninguna promoción coincide con los filtros.</p>}
+      {/* Empty state: distinguir "no hay ninguna" de "los filtros no
+          encuentran nada" (mejora D6). */}
+      {filtered.length === 0 &&
+        (items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Aún no hay promociones. Crea un paquete, un 2x1 o un día temático con los botones de arriba; se aplican solas en el POS.
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Ninguna promoción coincide con los filtros.{" "}
+            <button
+              type="button"
+              className="underline"
+              onClick={() => {
+                setQuery("");
+                setStatusFilter("todos");
+                setCategoryFilter("todas");
+              }}
+            >
+              Limpiar filtros
+            </button>
+          </p>
+        ))}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {filtered.map((item) => (

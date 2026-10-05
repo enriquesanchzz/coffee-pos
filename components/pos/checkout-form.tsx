@@ -188,6 +188,7 @@ export function CheckoutForm({
   const [tipPercent, setTipPercent] = useState(10);
   const [tipCustom, setTipCustom] = useState("");
   const [cashReceived, setCashReceived] = useState("");
+  const [confirmHighTip, setConfirmHighTip] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -213,6 +214,9 @@ export function CheckoutForm({
         ? Math.max(0, Math.round((Number(tipCustom) || 0) * 100) / 100)
         : 0;
   const totalToCollect = Math.round((total + tipValue) * 100) / 100;
+  // Propina mayor a la mitad de la cuenta: casi siempre es un error de
+  // captura (ej. 100000 en vez de 100) — se pide confirmarla (QA-028).
+  const isHighTip = total > 0 && tipValue > total / 2;
   const cashReceivedCents = Math.round((Number(cashReceived) || 0) * 100);
   const totalToCollectCents = Math.round(totalToCollect * 100);
 
@@ -368,6 +372,7 @@ export function CheckoutForm({
         setTransferNote("");
         setTipMode("NINGUNA");
         setTipCustom("");
+        setConfirmHighTip(false);
         setCashReceived("");
         onConfirmed(receipt);
       } catch (err) {
@@ -580,9 +585,22 @@ export function CheckoutForm({
             step="0.01"
             inputMode="decimal"
             placeholder="Monto de la propina"
+            aria-label="Monto de la propina"
             value={tipCustom}
-            onChange={(e) => setTipCustom(e.target.value)}
+            onChange={(e) => {
+              setTipCustom(e.target.value);
+              setConfirmHighTip(false);
+            }}
           />
+        )}
+        {tipMode === "MONTO" && Number(tipCustom) < 0 && (
+          <p className="mt-1 text-xs text-destructive">La propina no puede ser negativa.</p>
+        )}
+        {isHighTip && (
+          <label className="mt-2 flex items-center gap-2 text-sm text-destructive">
+            <input type="checkbox" checked={confirmHighTip} onChange={(e) => setConfirmHighTip(e.target.checked)} />
+            Confirmo una propina de {formatCurrency(tipValue)} (más de la mitad de la cuenta)
+          </label>
         )}
       </div>
 
@@ -689,6 +707,8 @@ export function CheckoutForm({
           isPending ||
           isPreviewLoading ||
           (shortages.length > 0 && !allowShortage) ||
+          (isHighTip && !confirmHighTip) ||
+          (tipMode === "MONTO" && Number(tipCustom) < 0) ||
           verifiedSubtotal === null ||
           (lines.length === 0 && !activeTabId) ||
           (discountMode === "CODIGO" && !resolvedCode) ||

@@ -15,19 +15,22 @@ import {
   LayoutDashboard,
   Tag,
   Percent,
+  Lock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
 // Los 6 módulos definidos en el ADR / roadmap (ver docs/roadmap.md), más
 // "Clientes" agregado en Fase 4 (no estaba en el ADR original de 6).
+// needsPassword: además del rol, piden entrar con email y password (no
+// basta el PIN) — se marca con un candado para que no sorprenda (QA-016).
 // adminOnly: solo visibles para el rol ADMINISTRADOR — ver
 // lib/session.ts resolveRoleName() y "cambios de administración" en
 // docs/CONTINUE.md.
 const modules = [
   { href: "/pos", label: "Punto de Venta", icon: ShoppingCart, enabled: true, adminOnly: false },
   { href: "/caja", label: "Caja", icon: Wallet, enabled: true, adminOnly: false },
-  { href: "/administracion", label: "Administración", icon: LayoutDashboard, enabled: true, adminOnly: true },
+  { href: "/administracion", label: "Administración", icon: LayoutDashboard, enabled: true, adminOnly: true, needsPassword: true },
   { href: "/clientes", label: "Clientes", icon: Users, enabled: true, adminOnly: true },
   { href: "/descuentos", label: "Códigos de descuento", icon: Tag, enabled: true, adminOnly: true },
   { href: "/promociones", label: "Promociones", icon: Percent, enabled: true, adminOnly: true },
@@ -35,8 +38,8 @@ const modules = [
   { href: "/compras", label: "Compras", icon: Truck, enabled: true, adminOnly: true },
   { href: "/productos", label: "Productos", icon: BookOpen, enabled: true, adminOnly: true },
   { href: "/inventario", label: "Inventario", icon: Package, enabled: true, adminOnly: true },
-  { href: "/empleados", label: "Empleados", icon: UserCog, enabled: true, adminOnly: true },
-  { href: "/configuracion", label: "Configuración", icon: Settings, enabled: true, adminOnly: true },
+  { href: "/empleados", label: "Empleados", icon: UserCog, enabled: true, adminOnly: true, needsPassword: true },
+  { href: "/configuracion", label: "Configuración", icon: Settings, enabled: true, adminOnly: true, needsPassword: true },
 ];
 
 export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
@@ -80,6 +83,9 @@ export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
                   <Icon className="h-4 w-4" />
                   {mod.label}
                 </span>
+                {"needsPassword" in mod && mod.needsPassword && (
+                  <Lock className="h-3.5 w-3.5 opacity-60" aria-label="Pide email y password" />
+                )}
                 {!mod.enabled && (
                   <Badge variant="outline" className="text-[10px]">
                     pronto

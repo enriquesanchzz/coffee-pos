@@ -36,7 +36,13 @@ export default async function EmpleadosPage() {
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
             {employees.map((employee) => (
-              <div key={employee.id} className="flex items-center justify-between text-sm">
+              // Toda la fila es el link (antes solo "Editar", un objetivo
+              // de 24px) — mismo patrón que la lista de Clientes.
+              <Link
+                key={employee.id}
+                href={`/empleados/${employee.id}`}
+                className="-mx-2 flex items-center justify-between rounded-md px-2 py-2 text-sm hover:bg-muted"
+              >
                 <div>
                   <p className="flex items-center gap-2">
                     {employee.name}
@@ -49,13 +55,14 @@ export default async function EmpleadosPage() {
                   <p className="text-xs text-muted-foreground">
                     {employee.roleName ?? "sin rol"}
                     {employee.isCashier && " · cajero"}
-                    {employee.hasPassword && " · acceso Administración"}
+                    {/* Solo ADMINISTRADOR entra a Administración (QA-021). */}
+                    {employee.hasPassword && employee.roleName === "ADMINISTRADOR" && " · acceso Administración"}
                   </p>
                 </div>
-                <Link href={`/empleados/${employee.id}`} className="text-sm text-primary hover:underline">
-                  Editar
-                </Link>
-              </div>
+                <span className="text-sm text-primary" aria-hidden="true">
+                  Editar →
+                </span>
+              </Link>
             ))}
           </CardContent>
         </Card>

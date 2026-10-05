@@ -111,6 +111,9 @@ export function NewTransferForm({
       </Card>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
+      {fromStockLocationId === toStockLocationId && (
+        <p className="text-sm text-muted-foreground">El origen y el destino deben ser distintos.</p>
+      )}
 
       <Button onClick={handleSubmit} disabled={isPending || fromStockLocationId === toStockLocationId}>
         {isPending ? "Creando..." : "Crear transferencia"}

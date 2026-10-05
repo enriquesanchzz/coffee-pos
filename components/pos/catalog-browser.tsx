@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { CatalogCategory, CatalogProduct } from "@/lib/catalog";
 import { CategoryDrilldown, type DrilldownCategory } from "@/components/catalog/category-drilldown";
 import { ProductCard } from "./product-card";
+import { matchesSearch } from "@/lib/search";
 
 function productGrid(products: CatalogProduct[], onSelectProduct: (p: CatalogProduct) => void, emptyText: string) {
   if (products.length === 0) {
@@ -53,8 +54,10 @@ export function CatalogBrowser({
         return productGrid(category?.products ?? [], onSelectProduct, "Sin productos en esta categoría.");
       }}
       renderSearchResults={(q) => {
-        const lower = q.toLowerCase();
-        const results = catalog.flatMap((c) => c.products).filter((p) => p.name.toLowerCase().includes(lower));
+        // Sin acentos y también por categoría/subcategoría ("cafe frio").
+        const results = catalog.flatMap((c) =>
+          c.products.filter((p) => matchesSearch(q, p.name, c.name, c.parentName))
+        );
         return productGrid(results, onSelectProduct, `Sin resultados para "${q}".`);
       }}
     />

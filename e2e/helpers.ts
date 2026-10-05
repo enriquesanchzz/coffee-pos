@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { E2E_DATABASE_URL } from "../playwright.config";
 
@@ -49,4 +49,11 @@ export async function payExactCash(page: Page) {
 export async function stockOf(ingredientId: string) {
   const rows = await db.inventoryStock.findMany({ where: { ingredientId } });
   return rows.reduce((sum, row) => sum + row.quantity.toNumber(), 0);
+}
+
+// Elige una opción de un <Combobox> (patrón ARIA combobox + listbox).
+export async function pickOption(combobox: Locator, query: string, option: string | RegExp = query) {
+  await combobox.click();
+  await combobox.fill(query);
+  await combobox.page().getByRole("option", { name: option }).first().click();
 }

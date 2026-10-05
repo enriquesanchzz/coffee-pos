@@ -11,6 +11,7 @@ import { AdjustStockDialog } from "./adjust-stock-dialog";
 import { IngredientFormDialog } from "./ingredient-form-dialog";
 import { CategoryFormDialog } from "./category-form-dialog";
 import { unitLabels } from "./unit-labels";
+import { matchesSearch } from "@/lib/search";
 
 // Mismo flujo de navegación que /pos y /productos (CategoryDrilldown
 // compartido) — categorías de insumo como píldoras a la izquierda,
@@ -94,7 +95,7 @@ export function InventoryWorkspace({
 
   function renderSearchResults(trimmedQuery: string) {
     const q = trimmedQuery.toLowerCase();
-    const matches = items.filter((item) => item.name.toLowerCase().includes(q));
+    const matches = items.filter((item) => matchesSearch(q, item.name, item.categoryName));
     if (matches.length === 0) {
       return <p className="text-sm text-muted-foreground">Sin resultados para &quot;{trimmedQuery}&quot;.</p>;
     }

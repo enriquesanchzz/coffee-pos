@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { addProduct, db, loginAdmin, loginPin, PIN, stockOf } from "./helpers";
+import { addProduct, db, loginAdmin, loginPin, pickOption, PIN, stockOf } from "./helpers";
 
 test.describe("QA-007 promociones con horario nocturno", () => {
   test("un paquete de horario que cruza la medianoche se aplica", async ({ page }) => {
@@ -114,8 +114,7 @@ test.describe("QA-012 domicilio", () => {
     const customer = await db.customer.create({ data: { name: `Domicilio E2E ${Date.now()}`, phone: `33${Date.now() % 100000000}`.padEnd(10, "0").slice(0, 10) } });
     await loginPin(page, PIN.ana);
     await page.getByRole("button", { name: "A domicilio" }).click();
-    await page.fill("#customer", customer.name);
-    await page.getByRole("button", { name: new RegExp(`^${customer.name}`) }).first().click();
+    await pickOption(page.locator("#customer"), customer.name, new RegExp(`^${customer.name}`));
     await addProduct(page, "Latte", ["Chico", "Caliente"]);
     await page.getByRole("button", { name: "Cobrar" }).click();
     await page.getByRole("button", { name: "Exacto" }).click();
@@ -131,7 +130,7 @@ test.describe("D6 compras por presentación", () => {
     await loginAdmin(page);
     await page.goto("/compras/nueva");
     await page.locator("main select").first().selectOption(supplier.id);
-    await page.locator("main select").nth(1).selectOption({ label: "Leche entera" });
+    await pickOption(page.getByRole("combobox", { name: "Insumo" }).first(), "Leche entera", /^Leche entera$/);
     await expect(page.getByText("= 1000 ml")).toBeVisible();
     const numbers = page.locator("main input[type=number]");
     await numbers.nth(0).fill("2");
