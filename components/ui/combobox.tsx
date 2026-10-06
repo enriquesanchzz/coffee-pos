@@ -181,7 +181,7 @@ export function Combobox({
                 )}
               >
                 <Check aria-hidden="true" className={cn("h-4 w-4 flex-shrink-0", isSelected ? "opacity-100" : "opacity-0")} />
-                <span className="min-w-0 flex-1 truncate">
+                <span className="min-w-0 flex-1 break-words">
                   {option.label}
                   {option.description && <span className="text-muted-foreground"> {option.description}</span>}
                 </span>

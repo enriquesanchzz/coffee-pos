@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
-import { getCatalog, getOpenShift, getExtraIngredientOptions, getTopSellingProductIds } from "@/lib/catalog";
+import { getCatalog, getOpenShift, getExtraIngredientOptions } from "@/lib/catalog";
 import { getCustomerOptions } from "@/lib/customers";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
@@ -15,12 +15,11 @@ export default async function PosPage() {
   if (!employee) redirect("/");
   const isAdmin = resolveRoleName(employee, DEFAULT_BRANCH_ID) === "ADMINISTRADOR";
 
-  const [shift, catalog, customers, extraIngredientOptions, favoriteProductIds] = await Promise.all([
+  const [shift, catalog, customers, extraIngredientOptions] = await Promise.all([
     getOpenShift(DEFAULT_BRANCH_ID),
     getCatalog(DEFAULT_BRANCH_ID),
     getCustomerOptions(),
     getExtraIngredientOptions(),
-    getTopSellingProductIds(DEFAULT_BRANCH_ID),
   ]);
 
   return (
@@ -33,7 +32,6 @@ export default async function PosPage() {
           employee={{ id: employee.id, name: employee.name }}
           customers={customers}
           extraIngredientOptions={extraIngredientOptions}
-          favoriteProductIds={favoriteProductIds}
         />
       ) : (
         <div className="flex h-full items-center justify-center p-6">

@@ -124,7 +124,7 @@ export function CategoryDrilldown({
                 )}
               >
                 <CategoryIcon icon={icon} className="h-4 w-4 flex-shrink-0" />
-                <span className="truncate">{name}</span>
+                <span className="min-w-0 break-words leading-snug">{name}</span>
               </button>
               {onEditCategory && entry.kind === "standalone" && (
                 <button

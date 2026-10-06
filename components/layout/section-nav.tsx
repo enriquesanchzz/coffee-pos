@@ -42,7 +42,7 @@ export function SectionLinksNav({
           aria-current={current === s.href ? "page" : undefined}
           className={sectionPillClass(current === s.href)}
         >
-          <span className="truncate">{s.label}</span>
+          <span className="min-w-0 break-words leading-snug">{s.label}</span>
         </Link>
       ))}
     </nav>
