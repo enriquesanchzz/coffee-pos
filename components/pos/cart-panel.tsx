@@ -250,6 +250,9 @@ export function CartPanel({
             <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-emerald-700" />
             <div className="flex flex-1 flex-col gap-0.5 text-sm">
               <p className="font-semibold">Venta registrada · {formatCurrency(lastReceipt.total)}</p>
+              {lastReceipt.taxIncluded > 0 && (
+                <p className="text-xs text-muted-foreground">Incluye IVA {formatCurrency(lastReceipt.taxIncluded)}</p>
+              )}
               {lastReceipt.change !== null ? (
                 <>
                   <p className="text-muted-foreground">

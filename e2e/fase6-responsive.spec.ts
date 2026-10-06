@@ -91,6 +91,8 @@ test.describe("Textos y validaciones", () => {
     await loginAdmin(page);
     await page.goto("/configuracion");
     const nav = page.getByRole("navigation", { name: "Secciones de Configuración" });
+    await expect(nav.getByRole("link", { name: "Negocio" })).toHaveAttribute("aria-current", "page");
+    await nav.getByRole("link", { name: "Costos y precios" }).click();
     await expect(nav.getByRole("link", { name: "Costos y precios" })).toHaveAttribute("aria-current", "page");
     await expect(page.getByLabel("% de food cost objetivo")).toBeVisible();
     await nav.getByRole("link", { name: "Apariencia" }).click();

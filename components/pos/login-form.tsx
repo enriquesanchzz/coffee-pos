@@ -1,14 +1,23 @@
 import { loginWithPin } from "@/actions/session";
+import { tooManyAttemptsText } from "@/lib/settings-shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-export function LoginForm({ error }: { error?: string }) {
+export function LoginForm({
+  error,
+  businessName,
+  lockMinutes,
+}: {
+  error?: string;
+  businessName: string;
+  lockMinutes: number;
+}) {
   return (
     <Card className="w-full max-w-sm">
       <CardHeader>
-        <CardTitle as="h1">Nomada Café — Entrar</CardTitle>
+        <CardTitle as="h1">{businessName} — Entrar</CardTitle>
       </CardHeader>
       <CardContent>
         <form action={loginWithPin} className="flex flex-col gap-4">
@@ -39,7 +48,7 @@ export function LoginForm({ error }: { error?: string }) {
           )}
           {error === "bloqueado" && (
             <p id="pin-error" role="alert" className="text-sm text-destructive">
-              Demasiados intentos fallidos. Espera 5 minutos antes de volver a intentar.
+              {tooManyAttemptsText(lockMinutes)}
             </p>
           )}
           <Button type="submit">Entrar</Button>

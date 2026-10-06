@@ -56,6 +56,8 @@ export type ProfitReportLine = {
 
 export type ProfitReport = {
   revenue: number;
+  // IVA contenido en los ingresos (ventas cobradas con desglose activo).
+  taxTotal: number;
   cogs: number;
   margin: number;
   marginPct: number;
@@ -76,6 +78,7 @@ export async function getProfitReport(from: Date, to: Date): Promise<ProfitRepor
   });
 
   let totalRevenue = new Prisma.Decimal(0);
+  let totalTax = new Prisma.Decimal(0);
   let totalCogs = new Prisma.Decimal(0);
   const costCache = new Map<string, Prisma.Decimal>();
   const byVariant = new Map<
@@ -85,6 +88,7 @@ export async function getProfitReport(from: Date, to: Date): Promise<ProfitRepor
 
   for (const sale of sales) {
     totalRevenue = totalRevenue.add(sale.total);
+    totalTax = totalTax.add(sale.taxAmount);
 
     for (const item of sale.items) {
       let itemCogs = new Prisma.Decimal(0);
@@ -148,6 +152,7 @@ export async function getProfitReport(from: Date, to: Date): Promise<ProfitRepor
 
   return {
     revenue: totalRevenue.toNumber(),
+    taxTotal: totalTax.toNumber(),
     cogs: totalCogs.toNumber(),
     margin: totalMargin.toNumber(),
     marginPct: totalRevenue.isZero() ? 0 : totalMargin.div(totalRevenue).mul(100).toNumber(),

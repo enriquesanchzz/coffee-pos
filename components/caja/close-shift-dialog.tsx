@@ -1,5 +1,6 @@
 "use client";
 
+import { useBusinessSettings } from "@/components/layout/business-settings-context";
 import { useEffect, useState, useTransition } from "react";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ export function CloseShiftDialog({
   shiftId: string;
   cashierId: string;
 }) {
+  const { cashDifferenceTolerance } = useBusinessSettings();
   const [preview, setPreview] = useState<Preview | null>(null);
   const [closingCash, setClosingCash] = useState("0");
   const [differenceReason, setDifferenceReason] = useState("");
@@ -58,7 +60,8 @@ export function CloseShiftDialog({
   // "Diferencia de -$581.70" en cuanto se abría el diálogo.
   const hasCount = closingCash.trim() !== "";
   const difference = preview && hasCount ? (Number(closingCash) || 0) - preview.expectedCash : 0;
-  const hasDifference = hasCount && Math.abs(difference) > 0.01;
+  // Diferencia permitida sin motivo: Configuración → Caja y turnos.
+  const hasDifference = hasCount && Math.abs(difference) > cashDifferenceTolerance + 0.005;
 
   function handleConfirm() {
     setError(null);

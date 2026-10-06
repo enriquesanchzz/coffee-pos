@@ -1,11 +1,12 @@
 import Link from "next/link";
+import { tooManyAttemptsText } from "@/lib/settings-shared";
 import { loginAdmin } from "@/actions/session";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-export function AdminLoginForm({ error }: { error?: string }) {
+export function AdminLoginForm({ error, lockMinutes }: { error?: string; lockMinutes: number }) {
   return (
     <Card className="w-full max-w-sm">
       <CardHeader>
@@ -34,7 +35,7 @@ export function AdminLoginForm({ error }: { error?: string }) {
           )}
           {error === "bloqueado" && (
             <p role="alert" className="text-sm text-destructive">
-              Demasiados intentos fallidos. Espera 5 minutos antes de volver a intentar.
+              {tooManyAttemptsText(lockMinutes)}
             </p>
           )}
           <Button type="submit">Entrar</Button>

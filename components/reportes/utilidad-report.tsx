@@ -16,6 +16,9 @@ export function UtilidadReport({ report, fromStr, toStr }: { report: ProfitRepor
           <div>
             <p className="text-muted-foreground">Ingresos</p>
             <p className="text-lg font-semibold">{formatCurrency(report.revenue)}</p>
+            {report.taxTotal > 0 && (
+              <p className="text-xs text-muted-foreground">incluye IVA {formatCurrency(report.taxTotal)}</p>
+            )}
           </div>
           <div>
             <p className="text-muted-foreground">Costo (COGS)</p>

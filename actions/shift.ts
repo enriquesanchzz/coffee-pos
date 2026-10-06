@@ -7,6 +7,7 @@ import { Permission, PaymentMethod, Prisma, ShiftType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { findEmployeeByPin, getSessionEmployeeId, assertSessionEmployee, SessionExpiredError } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
+import { getBusinessSettings } from "@/lib/settings";
 
 // -----------------------------------------------------------------------
 // Doble confirmación (apertura y cierre): el PIN debe pertenecer a un
@@ -197,7 +198,8 @@ export const closeShift = safeAction(async function closeShift(input: CloseShift
     const { expectedCash } = await computeExpectedCash(tx, input.shiftId, openingCash);
     const cashDifference = input.closingCash - expectedCash;
 
-    if (Math.abs(cashDifference) > 0.01 && !input.differenceReason?.trim()) {
+    const { cashDifferenceTolerance } = await getBusinessSettings();
+    if (Math.abs(cashDifference) > cashDifferenceTolerance + 0.005 && !input.differenceReason?.trim()) {
       throw new Error(
         "Hay una diferencia entre el efectivo contado y el esperado — captura el motivo."
       );

@@ -1,28 +1,40 @@
 // Zona horaria de la sucursal. Sin esto, todo se calculaba con la zona del
 // servidor: en un hosting en UTC las ventas de la noche contaban para el
 // día siguiente, la "hora pico" salía 6h corrida y las promociones por
-// horario/día de la semana se activaban a deshoras. Se puede sobrescribir
-// con NEXT_PUBLIC_APP_TIME_ZONE (es pública porque también se usa para
-// formatear fechas en componentes cliente).
-export const APP_TIME_ZONE = process.env.NEXT_PUBLIC_APP_TIME_ZONE || "America/Mexico_City";
+// horario/día de la semana se activaban a deshoras.
+//
+// Se elige en Configuración → Negocio (Branch.timeZone). El valor inicial
+// es NEXT_PUBLIC_APP_TIME_ZONE o Ciudad de México; setAppTimeZone lo
+// actualiza en el servidor (lib/settings.ts syncAppTimeZone, al renderizar
+// y antes de cada Server Action) y en el navegador (TimeZoneSync en
+// app/layout.tsx), así las funciones de abajo siguen siendo síncronas.
+let appTimeZone = process.env.NEXT_PUBLIC_APP_TIME_ZONE || "America/Mexico_City";
+
+export function setAppTimeZone(tz: string) {
+  appTimeZone = tz;
+}
+
+export function getAppTimeZone() {
+  return appTimeZone;
+}
 
 type DateInput = Date | string | number;
 
 export function formatDateTime(date: DateInput) {
-  return new Date(date).toLocaleString("es-MX", { timeZone: APP_TIME_ZONE });
+  return new Date(date).toLocaleString("es-MX", { timeZone: appTimeZone });
 }
 
 export function formatDate(date: DateInput) {
-  return new Date(date).toLocaleDateString("es-MX", { timeZone: APP_TIME_ZONE });
+  return new Date(date).toLocaleDateString("es-MX", { timeZone: appTimeZone });
 }
 
 export function formatTime(date: DateInput, options?: Intl.DateTimeFormatOptions) {
-  return new Date(date).toLocaleTimeString("es-MX", { timeZone: APP_TIME_ZONE, ...options });
+  return new Date(date).toLocaleTimeString("es-MX", { timeZone: appTimeZone, ...options });
 }
 
 function zonedParts(date: Date) {
   const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: APP_TIME_ZONE,
+    timeZone: appTimeZone,
     hourCycle: "h23",
     year: "numeric",
     month: "2-digit",

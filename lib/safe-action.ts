@@ -3,6 +3,7 @@ import { unstable_rethrow } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import type { ActionError } from "./action-result";
 import { SessionExpiredError } from "./session";
+import { syncAppTimeZone } from "./settings";
 
 // Ver lib/action-result.ts. Los errores de negocio (throw new Error("...")
 // en español) se regresan con su mensaje; los de Prisma u otros inesperados
@@ -13,6 +14,9 @@ export function safeAction<A extends unknown[], R>(
 ): (...args: A) => Promise<R | ActionError> {
   return async (...args: A) => {
     try {
+      // Zona horaria de Configuración → Negocio antes de cualquier cálculo
+      // de fechas/horarios dentro de la acción.
+      await syncAppTimeZone();
       return await action(...args);
     } catch (err) {
       unstable_rethrow(err);

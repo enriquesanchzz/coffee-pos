@@ -243,6 +243,39 @@ model Branch {
   themeFontFamily      String? // "sans" | "rounded" | "serif"
   themeFontSize        String? // "sm" | "md" | "lg"
 
+  // ---- Configuración del sistema (lib/settings.ts, actions/settings.ts) ----
+  // Negocio. businessName null = "Nomada Café"; timeZone null = la de
+  // NEXT_PUBLIC_APP_TIME_ZONE (o America/Mexico_City).
+  businessName String?
+  phone        String?
+  timeZone     String?
+  // Cobro
+  tipPercents             Int[]           @default([10, 15, 20])
+  highTipThresholdPercent Int             @default(50) // % del total arriba del cual se confirma la propina
+  paymentMethods          PaymentMethod[] @default([EFECTIVO, TARJETA, TRANSFERENCIA])
+  cashQuickBills          Int[]           @default([20, 50, 100, 200, 500, 1000])
+  // Caja y turnos
+  shiftChangeHour         Int     @default(14) // desde esta hora se sugiere VESPERTINO
+  defaultOpeningCash      Decimal @default(0) @db.Decimal(10, 2)
+  cashDifferenceTolerance Decimal @default(0) @db.Decimal(10, 2) // diferencia de corte permitida sin motivo
+  // Lealtad
+  loyaltyStampsPerReward Int  @default(5)
+  welcomeCouponPercent   Int  @default(10) // 0 = no se crea cupón de bienvenida
+  welcomeCouponValidDays Int? // null = sin vencimiento
+  // Descuentos: tope del descuento manual como % del subtotal (null = sin tope)
+  maxManualDiscountPercent Int?
+  // Inventario: qué pasa al vender sin insumos suficientes
+  // "CONFIRMAR" (cualquiera confirma) | "GERENTE" (solo quien tenga
+  // INVENTARIO_AJUSTAR) | "BLOQUEAR" (nunca)
+  shortagePolicy String @default("CONFIRMAR")
+  // Seguridad
+  pinMaxAttempts Int @default(5)
+  pinLockMinutes Int @default(5)
+  sessionHours   Int @default(12)
+  // Impuestos: "NINGUNO" | "INCLUIDO" (precios con IVA incluido; se desglosa)
+  taxMode        String  @default("NINGUNO")
+  taxRatePercent Decimal @default(16) @db.Decimal(5, 2)
+
   employeeBranches EmployeeBranch[]
   branchProducts   BranchProduct[]
   stockLocations   StockLocation[]
@@ -1206,6 +1239,9 @@ model Sale {
   // Propina: se cobra junto con la venta (los pagos suman total + tipAmount)
   // pero NO es ingreso por ventas — reportes siguen usando `total`.
   tipAmount  Decimal    @default(0) @db.Decimal(10, 2)
+  // IVA contenido en `total` cuando la sucursal tiene taxMode INCLUIDO
+  // (0 si no se desglosa) — no cambia el total cobrado.
+  taxAmount  Decimal    @default(0) @db.Decimal(10, 2)
   createdAt  DateTime   @default(now())
   cancelledAt DateTime?
   cancelledById String?

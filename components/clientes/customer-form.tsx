@@ -1,5 +1,6 @@
 "use client";
 
+import { useBusinessSettings } from "@/components/layout/business-settings-context";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { CustomerGender } from "@prisma/client";
@@ -31,6 +32,7 @@ export function CustomerForm({
   employeeId: string;
   customer?: CustomerDetail;
 }) {
+  const { businessName, welcomeCouponPercent } = useBusinessSettings();
   const router = useRouter();
   const isEdit = Boolean(customer);
   const [name, setName] = useState(customer?.name ?? "");
@@ -46,7 +48,7 @@ export function CustomerForm({
   const [created, setCreated] = useState<{
     id: string;
     loyaltyCardCode: string;
-    welcomeCouponCode: string;
+    welcomeCouponCode: string | null;
   } | null>(null);
 
   function handleSubmit() {
@@ -90,6 +92,8 @@ export function CustomerForm({
       origin: window.location.origin,
       loyaltyCardCode: created.loyaltyCardCode,
       welcomeCouponCode: created.welcomeCouponCode,
+      businessName,
+      welcomeCouponPercent,
     });
 
     return (
@@ -99,8 +103,15 @@ export function CustomerForm({
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <p className="text-sm text-muted-foreground">
-            {name} ya tiene su tarjeta de lealtad y un cupón de 10% para su próxima compra
-            (código <span className="font-mono">{created.welcomeCouponCode}</span>).
+            {name} ya tiene su tarjeta de lealtad
+            {created.welcomeCouponCode ? (
+              <>
+                {" "}y un cupón de {welcomeCouponPercent}% para su próxima compra (código{" "}
+                <span className="font-mono">{created.welcomeCouponCode}</span>).
+              </>
+            ) : (
+              "."
+            )}
           </p>
           {whatsappLink ? (
             <a

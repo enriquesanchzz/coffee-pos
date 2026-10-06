@@ -15,7 +15,9 @@ import {
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID, DEFAULT_STOCK_LOCATION_ID } from "@/lib/constants";
 import { getSessionEmployeeId, findEmployeeByPin, assertSessionEmployee, SessionExpiredError } from "@/lib/session";
-import { requirePermission } from "@/lib/permissions";
+import { hasPermission, requirePermission } from "@/lib/permissions";
+import { getBusinessSettings } from "@/lib/settings";
+import { includedTax, PAYMENT_METHOD_LABELS } from "@/lib/settings-shared";
 import { zonedClock } from "@/lib/time";
 import { unitLabel } from "@/lib/utils";
 import { SHORTAGE_ERROR_PREFIX } from "@/lib/stock";
@@ -628,16 +630,55 @@ function describeShortages(shortages: StockShortage[]) {
   return shortages.map((s) => `${s.name} (faltan ${s.missing} ${s.unit})`).join(", ");
 }
 
+// ¿Este empleado puede confirmar una venta con faltantes? Depende de
+// Configuración → Inventario (shortagePolicy): cualquiera, solo quien tenga
+// INVENTARIO_AJUSTAR (gerente/administrador) o nadie.
+async function canOverrideShortage(employeeId: string, branchId: string) {
+  const { shortagePolicy } = await getBusinessSettings();
+  if (shortagePolicy === "BLOQUEAR") return false;
+  if (shortagePolicy === "GERENTE") return hasPermission(employeeId, branchId, "INVENTARIO_AJUSTAR");
+  return true;
+}
+
 async function assertStockOrAllowed(
   tx: Prisma.TransactionClient,
   consumption: Map<string, Prisma.Decimal>,
-  allowShortage: boolean | undefined
+  allowShortage: boolean | undefined,
+  employeeId: string,
+  branchId: string
 ) {
-  if (allowShortage) return;
   const shortages = await findShortages(tx, consumption);
-  if (shortages.length > 0) {
-    throw new Error(`${SHORTAGE_ERROR_PREFIX} ${describeShortages(shortages)}.`);
+  if (shortages.length === 0) return;
+  if (allowShortage && (await canOverrideShortage(employeeId, branchId))) return;
+  if (allowShortage) {
+    throw new Error(
+      `No tienes permiso para vender sin insumos suficientes (${describeShortages(shortages)}). Pide a un gerente.`
+    );
   }
+  throw new Error(`${SHORTAGE_ERROR_PREFIX} ${describeShortages(shortages)}.`);
+}
+
+// Reglas de cobro de Configuración (Cobro, Descuentos, Impuestos) que el
+// servidor vuelve a validar aunque el POS ya las aplique.
+async function assertPaymentMethodsEnabled(payments: { method: PaymentMethod }[]) {
+  const { paymentMethods } = await getBusinessSettings();
+  const disabled = payments.find((p) => !paymentMethods.includes(p.method));
+  if (disabled) {
+    throw new Error(`El método de pago ${PAYMENT_METHOD_LABELS[disabled.method]} está desactivado en Configuración.`);
+  }
+}
+
+async function assertManualDiscountCap(discountTotal: Prisma.Decimal, discountableSubtotal: Prisma.Decimal) {
+  const { maxManualDiscountPercent } = await getBusinessSettings();
+  if (maxManualDiscountPercent === null) return;
+  const cap = discountableSubtotal.mul(maxManualDiscountPercent).div(100);
+  if (discountTotal.greaterThan(cap.add(0.005))) {
+    throw new Error(`El descuento manual no puede pasar del ${maxManualDiscountPercent}% del subtotal.`);
+  }
+}
+
+async function taxAmountFor(total: Prisma.Decimal) {
+  return new Prisma.Decimal(includedTax(total.toNumber(), await getBusinessSettings()));
 }
 
 // Crea los SaleItem (+ modificadores + extras libres) de una ronda de
@@ -710,11 +751,21 @@ async function applyConsumption(
 }
 
 // Lealtad: +1 sello por venta COMPLETADA con cliente ligado, se reinicia
-// a 0 al llegar a 5 (ver comentario en LoyaltyCard del schema). El nivel
+// a 0 al llegar a los sellos por recompensa (Configuración → Lealtad,
+// antes fijo en 5). El nivel
 // se deriva contando ventas históricas del cliente — el schema no guarda
 // un acumulado aparte, y esta cuenta ya incluye la venta recién creada
 // por correr dentro de la misma transacción.
+async function loyaltyStampsPerReward(tx: Prisma.TransactionClient) {
+  const branch = await tx.branch.findUnique({
+    where: { id: DEFAULT_BRANCH_ID },
+    select: { loyaltyStampsPerReward: true },
+  });
+  return Math.max(1, branch?.loyaltyStampsPerReward ?? 5);
+}
+
 async function applyLoyaltyStamp(tx: Prisma.TransactionClient, customerId: string) {
+  const perReward = await loyaltyStampsPerReward(tx);
   const card = await tx.loyaltyCard.upsert({
     where: { customerId },
     update: {},
@@ -722,7 +773,7 @@ async function applyLoyaltyStamp(tx: Prisma.TransactionClient, customerId: strin
   });
 
   const incrementedStamps = card.stamps + 1;
-  const newStamps = incrementedStamps >= 5 ? 0 : incrementedStamps;
+  const newStamps = incrementedStamps >= perReward ? 0 : incrementedStamps;
 
   const lifetimeStamps = await tx.sale.count({ where: { customerId, status: "COMPLETADA" } });
 
@@ -784,18 +835,23 @@ export const previewSaleTotal = safeAction(async function previewSaleTotal(
   discountableSubtotal: number;
   appliedPromotions: AppliedPromotion[];
   shortages: StockShortage[];
+  // Si este empleado puede confirmar la venta aun con faltantes
+  // (Configuración → Inventario).
+  canOverrideShortage: boolean;
 }> {
   await assertSessionEmployee(employeeId);
   if (items.length === 0) {
-    return { subtotal: 0, discountableSubtotal: 0, appliedPromotions: [], shortages: [] };
+    return { subtotal: 0, discountableSubtotal: 0, appliedPromotions: [], shortages: [], canOverrideShortage: true };
   }
 
   const { subtotal, discountableSubtotal, appliedPromotions, consumption } = await resolveSaleItems(prisma, items);
+  const shortages = await findShortages(prisma, consumption);
   return {
     subtotal: subtotal.toNumber(),
     discountableSubtotal: discountableSubtotal.toNumber(),
     appliedPromotions,
-    shortages: await findShortages(prisma, consumption),
+    shortages,
+    canOverrideShortage: shortages.length > 0 ? await canOverrideShortage(employeeId, DEFAULT_BRANCH_ID) : true,
   };
 });
 
@@ -817,7 +873,7 @@ export const createSale = safeAction(async function createSale(input: CreateSale
     }
 
     const { saleItemsData, consumption, subtotal, discountableSubtotal } = await resolveSaleItems(tx, input.items);
-    await assertStockOrAllowed(tx, consumption, input.allowShortage);
+    await assertStockOrAllowed(tx, consumption, input.allowShortage, input.employeeId, input.branchId);
 
     // A domicilio: sin cliente con dirección no hay a dónde entregar
     // (QA-012). El POS guarda la dirección capturada antes de cobrar.
@@ -868,6 +924,7 @@ export const createSale = safeAction(async function createSale(input: CreateSale
 
       const value = new Prisma.Decimal(input.manualDiscount.value);
       discountTotal = computeDiscount(input.manualDiscount.type, value, discountableSubtotal);
+      await assertManualDiscountCap(discountTotal, discountableSubtotal);
       manualDiscountData = {
         type: input.manualDiscount.type,
         value,
@@ -883,6 +940,8 @@ export const createSale = safeAction(async function createSale(input: CreateSale
     const total = subtotal.sub(discountTotal);
 
     const tipAmount = validateTipAmount(input.tipAmount);
+    await assertPaymentMethodsEnabled(input.payments);
+    const taxAmount = await taxAmountFor(total);
     const paymentsTotal = input.payments.reduce((sum, p) => sum + p.amount, 0);
     if (Math.abs(paymentsTotal - total.add(tipAmount).toNumber()) > 0.01) {
       throw new Error("El total pagado no coincide con el total de la venta más la propina.");
@@ -902,6 +961,7 @@ export const createSale = safeAction(async function createSale(input: CreateSale
         discountTotal,
         total,
         tipAmount,
+        taxAmount,
         clientRequestId: input.clientRequestId || null,
         ...(manualDiscountData ? { manualDiscount: { create: manualDiscountData } } : {}),
         payments: {
@@ -983,7 +1043,7 @@ export const openTab = safeAction(async function openTab(input: OpenTabInput) {
     }
 
     const { saleItemsData, consumption, subtotal } = await resolveSaleItems(tx, input.items);
-    await assertStockOrAllowed(tx, consumption, input.allowShortage);
+    await assertStockOrAllowed(tx, consumption, input.allowShortage, input.employeeId, input.branchId);
 
     const createdSale = await tx.sale.create({
       data: {
@@ -1066,7 +1126,7 @@ export const addItemsToTab = safeAction(async function addItemsToTab(input: AddI
   const sale = await prisma.$transaction(async (tx) => {
     const existing = await loadOpenTab(tx, input.saleId, input.branchId, input.shiftId);
     const { saleItemsData, consumption, subtotal } = await resolveSaleItems(tx, input.items);
-    await assertStockOrAllowed(tx, consumption, input.allowShortage);
+    await assertStockOrAllowed(tx, consumption, input.allowShortage, input.employeeId, input.branchId);
 
     await persistSaleItems(tx, existing.id, saleItemsData);
     await applyConsumption(tx, consumption, {
@@ -1124,7 +1184,7 @@ export const closeTab = safeAction(async function closeTab(input: CloseTabInput)
 
     if (input.items && input.items.length > 0) {
       const { saleItemsData, consumption, subtotal: roundSubtotal } = await resolveSaleItems(tx, input.items);
-      await assertStockOrAllowed(tx, consumption, input.allowShortage);
+      await assertStockOrAllowed(tx, consumption, input.allowShortage, input.employeeId, input.branchId);
       await persistSaleItems(tx, existing.id, saleItemsData);
       await applyConsumption(tx, consumption, {
         branchId: input.branchId,
@@ -1178,6 +1238,7 @@ export const closeTab = safeAction(async function closeTab(input: CloseTabInput)
 
       const value = new Prisma.Decimal(input.manualDiscount.value);
       discountTotal = computeDiscount(input.manualDiscount.type, value, discountableSubtotal);
+      await assertManualDiscountCap(discountTotal, discountableSubtotal);
       manualDiscountData = {
         type: input.manualDiscount.type,
         value,
@@ -1193,6 +1254,8 @@ export const closeTab = safeAction(async function closeTab(input: CloseTabInput)
     const total = subtotal.sub(discountTotal);
 
     const tipAmount = validateTipAmount(input.tipAmount);
+    await assertPaymentMethodsEnabled(input.payments);
+    const taxAmount = await taxAmountFor(total);
     const paymentsTotal = input.payments.reduce((sum, p) => sum + p.amount, 0);
     if (Math.abs(paymentsTotal - total.add(tipAmount).toNumber()) > 0.01) {
       throw new Error("El total pagado no coincide con el total de la cuenta más la propina.");
@@ -1208,6 +1271,7 @@ export const closeTab = safeAction(async function closeTab(input: CloseTabInput)
         discountTotal,
         total,
         tipAmount,
+        taxAmount,
         customerId,
         discountCodeId: input.discountCodeId || null,
         ...(manualDiscountData ? { manualDiscount: { create: manualDiscountData } } : {}),
@@ -1627,16 +1691,17 @@ export const cancelSale = safeAction(async function cancelSale(input: CancelSale
   revalidatePath("/caja");
 });
 
-// Inverso de applyLoyaltyStamp: los sellos se reinician a 0 al llegar a 5,
-// así que quitar uno desde 0 regresa a 4 (la venta anulada fue la que
-// completó la tarjeta). El nivel se recalcula con las ventas COMPLETADA
+// Inverso de applyLoyaltyStamp: los sellos se reinician a 0 al llegar a
+// los sellos por recompensa, así que quitar uno desde 0 regresa a N−1 (la
+// venta anulada fue la que completó la tarjeta). El nivel se recalcula con las ventas COMPLETADA
 // restantes.
 async function removeLoyaltyStamp(tx: Prisma.TransactionClient, customerId: string) {
   const card = await tx.loyaltyCard.findUnique({ where: { customerId } });
   if (!card) return;
 
   const lifetimeStamps = await tx.sale.count({ where: { customerId, status: "COMPLETADA" } });
-  const newStamps = card.stamps > 0 ? card.stamps - 1 : lifetimeStamps > 0 ? 4 : 0;
+  const perReward = await loyaltyStampsPerReward(tx);
+  const newStamps = card.stamps > 0 ? card.stamps - 1 : lifetimeStamps > 0 ? perReward - 1 : 0;
   const eligibleTier = await tx.loyaltyTier.findFirst({
     where: { minLifetimeStamps: { lte: lifetimeStamps } },
     orderBy: { minLifetimeStamps: "desc" },

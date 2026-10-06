@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import QRCode from "qrcode";
 import { getPublicLoyaltyCard } from "@/lib/loyalty";
 import { orNotFound } from "@/lib/not-found";
+import { getBusinessSettings } from "@/lib/settings";
 
 export const metadata: Metadata = { title: "Tarjeta de lealtad" };
 
@@ -20,17 +21,19 @@ export default async function TarjetaLealtadPage({
 }) {
   const { code } = await params;
   // Tarjeta inexistente -> 404 real (ver not-found.tsx de esta ruta).
-  const card = await orNotFound(getPublicLoyaltyCard(code));
+  const [card, settings] = await Promise.all([orNotFound(getPublicLoyaltyCard(code)), getBusinessSettings()]);
+  // Sellos por recompensa: Configuración → Lealtad.
+  const stampsPerReward = settings.loyaltyStampsPerReward;
 
   const qrSvg = await QRCode.toString(card.code, { type: "svg", width: 180, margin: 1 });
   const firstName = card.customerName.trim().split(" ")[0];
-  const filledStamps = card.stamps % 5;
+  const filledStamps = card.stamps % stampsPerReward;
 
   return (
     <div className="flex min-h-screen flex-col items-center bg-muted/30 px-4 py-10">
       <div className="w-full max-w-sm rounded-2xl border border-border bg-background p-6 shadow-sm">
         <p className="text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Nomada Café
+          {settings.businessName}
         </p>
         <h1 className="mt-1 text-center text-xl font-semibold">Hola, {firstName}</h1>
         <p className="text-center text-sm text-muted-foreground">Esta es tu tarjeta de lealtad</p>
@@ -38,9 +41,9 @@ export default async function TarjetaLealtadPage({
         <div className="mt-6 flex justify-center" dangerouslySetInnerHTML={{ __html: qrSvg }} />
 
         <div className="mt-6 flex flex-col items-center gap-2">
-          <p className="text-sm font-medium">{filledStamps} de 5 sellos</p>
-          <div className="flex gap-2">
-            {Array.from({ length: 5 }).map((_, i) => (
+          <p className="text-sm font-medium">{filledStamps} de {stampsPerReward} sellos</p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {Array.from({ length: stampsPerReward }).map((_, i) => (
               <span
                 key={i}
                 className={
@@ -66,6 +69,11 @@ export default async function TarjetaLealtadPage({
           </div>
         )}
       </div>
+      {(settings.address || settings.phone) && (
+        <p className="mt-4 max-w-sm text-center text-xs text-muted-foreground">
+          {[settings.address, settings.phone].filter(Boolean).join(" · ")}
+        </p>
+      )}
     </div>
   );
 }

@@ -3,7 +3,10 @@ import { cookies } from "next/headers";
 import { getIronSession, type SessionOptions } from "iron-session";
 import { prisma } from "./prisma";
 import { verifySecret } from "./password";
-import { TOO_MANY_ATTEMPTS_MESSAGE, clearFailures, isLockedOut, recordFailure } from "./rate-limit";
+import { clearFailures, isLockedOut, recordFailure, tooManyAttemptsError } from "./rate-limit";
+import { DEFAULT_SETTINGS } from "./settings-shared";
+import { DEFAULT_BRANCH_ID } from "./constants";
+import { syncAppTimeZone } from "./settings";
 
 // -----------------------------------------------------------------------
 // Sesión real: cookie sellada/firmada con iron-session (no se puede
@@ -57,6 +60,9 @@ export async function assertSessionEmployee(employeeId: string) {
 type SessionData = {
   employeeId?: string;
   authLevel?: AuthLevel;
+  // Inicio de la sesión (ms) — la duración se valida contra
+  // Configuración → Seguridad (sessionHours), no solo con la cookie.
+  issuedAt?: number;
 };
 
 const sessionOptions: SessionOptions = {
@@ -81,14 +87,26 @@ function requireSessionSecret(): string {
   return secret;
 }
 
-async function getSession() {
-  return getIronSession<SessionData>(await cookies(), sessionOptions);
+async function getSession(maxAgeSeconds?: number) {
+  const options = maxAgeSeconds
+    ? { ...sessionOptions, cookieOptions: { ...sessionOptions.cookieOptions, maxAge: maxAgeSeconds } }
+    : sessionOptions;
+  return getIronSession<SessionData>(await cookies(), options);
+}
+
+async function sessionHours() {
+  const branch = await prisma.branch.findUnique({
+    where: { id: DEFAULT_BRANCH_ID },
+    select: { sessionHours: true },
+  });
+  return branch?.sessionHours ?? DEFAULT_SETTINGS.sessionHours;
 }
 
 export async function setSessionEmployee(employeeId: string, authLevel: AuthLevel) {
-  const session = await getSession();
+  const session = await getSession((await sessionHours()) * 60 * 60);
   session.employeeId = employeeId;
   session.authLevel = authLevel;
+  session.issuedAt = Date.now();
   await session.save();
 }
 
@@ -99,7 +117,16 @@ export async function clearSession() {
 
 export async function getSessionEmployeeId(): Promise<string | null> {
   const session = await getSession();
-  return session.employeeId ?? null;
+  if (!session.employeeId) return null;
+  // Sesiones anteriores a este cambio no tienen issuedAt: se respetan
+  // hasta que expire su cookie.
+  if (session.issuedAt && Date.now() - session.issuedAt > (await sessionHours()) * 60 * 60 * 1000) {
+    return null;
+  }
+  // Cada página autenticada pasa por aquí: aplica la zona horaria
+  // configurada antes de calcular fechas (ver lib/settings.ts).
+  await syncAppTimeZone();
+  return session.employeeId;
 }
 
 export async function getSessionAuthLevel(): Promise<AuthLevel | null> {
@@ -149,12 +176,12 @@ export async function requirePasswordSession() {
 // actions/employees.ts vía isPinTaken), así que el primer match es el único.
 //
 // Con límite de intentos fallidos por IP (lib/rate-limit.ts): pasado el
-// límite lanza un Error con TOO_MANY_ATTEMPTS_MESSAGE en vez de seguir
+// límite lanza TooManyAttemptsError (lib/rate-limit.ts) en vez de seguir
 // comparando.
 export async function findEmployeeByPin(pin: string) {
   if (!pin) return null;
   if (await isLockedOut("pin")) {
-    throw new Error(TOO_MANY_ATTEMPTS_MESSAGE);
+    throw await tooManyAttemptsError();
   }
 
   const match = await matchPin(pin);
@@ -194,7 +221,7 @@ export async function isPinTaken(pin: string, excludeEmployeeId?: string) {
 export async function findEmployeeByEmailPassword(email: string, password: string) {
   if (!email || !password) return null;
   if (await isLockedOut("password")) {
-    throw new Error(TOO_MANY_ATTEMPTS_MESSAGE);
+    throw await tooManyAttemptsError();
   }
 
   const employee = await prisma.employee.findFirst({
