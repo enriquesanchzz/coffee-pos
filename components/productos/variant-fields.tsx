@@ -128,7 +128,7 @@ export function VariantFields({
                       temperature === t ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted"
                     )}
                   >
-                    {t === "" ? "Sin eje" : temperatureLabels[t]}
+                    {t === "" ? "No aplica" : temperatureLabels[t]}
                   </button>
                 ))}
               </div>

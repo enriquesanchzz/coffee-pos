@@ -712,24 +712,28 @@ export function CheckoutForm({
         </div>
       )}
 
-      <Button
-        className={posAccentClass}
-        onClick={handleConfirm}
-        disabled={
-          isPending ||
-          isPreviewLoading ||
-          (shortages.length > 0 && !allowShortage) ||
-          (isHighTip && !confirmHighTip) ||
-          (tipMode === "MONTO" && Number(tipCustom) < 0) ||
-          verifiedSubtotal === null ||
-          (lines.length === 0 && !activeTabId) ||
-          (discountMode === "CODIGO" && !resolvedCode) ||
-          (discountMode === "MANUAL" && (!authorizingPin || manualDiscountError !== null)) ||
-          (method === "EFECTIVO" && (cashReceived === "" || cashReceivedCents < totalToCollectCents))
-        }
-      >
-        {isPending ? "Procesando..." : isPreviewLoading ? "Calculando total..." : "Confirmar venta"}
-      </Button>
+      {/* Fijo al fondo del panel con scroll: en celular el formulario es
+          más alto que la pantalla y "Confirmar" quedaba fuera de vista. */}
+      <div className="sticky bottom-0 -mx-4 -mb-4 border-t border-border bg-background p-4">
+        <Button
+          className={cn("w-full", posAccentClass)}
+          onClick={handleConfirm}
+          disabled={
+            isPending ||
+            isPreviewLoading ||
+            (shortages.length > 0 && !allowShortage) ||
+            (isHighTip && !confirmHighTip) ||
+            (tipMode === "MONTO" && Number(tipCustom) < 0) ||
+            verifiedSubtotal === null ||
+            (lines.length === 0 && !activeTabId) ||
+            (discountMode === "CODIGO" && !resolvedCode) ||
+            (discountMode === "MANUAL" && (!authorizingPin || manualDiscountError !== null)) ||
+            (method === "EFECTIVO" && (cashReceived === "" || cashReceivedCents < totalToCollectCents))
+          }
+        >
+          {isPending ? "Procesando..." : isPreviewLoading ? "Calculando total..." : "Confirmar venta"}
+        </Button>
+      </div>
     </div>
   );
 }

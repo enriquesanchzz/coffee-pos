@@ -25,7 +25,9 @@ async function lookup<T>(fn: () => Promise<T>): Promise<T | "bloqueado"> {
 
 export async function loginWithPin(formData: FormData) {
   const pin = String(formData.get("pin") ?? "").trim();
-  const employee = pin ? await lookup(() => findEmployeeByPin(pin)) : null;
+  // Vacío no cuenta como intento fallido (QA-029).
+  if (!pin) redirect("/?error=vacio");
+  const employee = await lookup(() => findEmployeeByPin(pin));
 
   if (employee === "bloqueado") {
     redirect("/?error=bloqueado");

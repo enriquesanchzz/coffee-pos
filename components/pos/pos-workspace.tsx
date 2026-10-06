@@ -12,6 +12,7 @@ import { useCartStore } from "./cart-store";
 import { getTabDetail as getTabDetailAction, type OpenTabDetail } from "@/actions/pos";
 import { CashMovementDialog } from "@/components/caja/cash-movement-dialog";
 import { withActionErrors } from "@/lib/action-result";
+import { cn, formatCurrency, posAccentClass } from "@/lib/utils";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const getTabDetail = withActionErrors(getTabDetailAction);
@@ -41,6 +42,20 @@ export function PosWorkspace({
   const addLine = useCartStore((s) => s.addLine);
   const activeTabId = useCartStore((s) => s.activeTabId);
   const hasLines = useCartStore((s) => s.lines.length > 0);
+  const itemCount = useCartStore((s) => s.lines.reduce((sum, l) => sum + l.quantity, 0));
+  const cartSubtotal = useCartStore((s) => s.subtotal());
+  // Celular (< md): la cuenta vive en una hoja inferior que se abre desde
+  // la barra fija "Ver cuenta" (QA-005); en tablet/escritorio es columna.
+  const [mobileCartOpen, setMobileCartOpen] = useState(false);
+
+  useEffect(() => {
+    if (!mobileCartOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setMobileCartOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileCartOpen]);
 
   // Recupera el carrito guardado (ver cart-store.ts) y lo descarta si era
   // de otro empleado o de otro turno.
@@ -85,9 +100,10 @@ export function PosWorkspace({
   }, [activeTabId]);
 
   return (
-    // Celular: catálogo arriba y cuenta abajo. Tablet: cuenta a 320px.
-    // Escritorio: 360px (el drawer de ProductDialog se alinea a ese ancho).
-    <div className="grid h-full grid-rows-[minmax(0,1fr)_minmax(0,45%)] md:grid-cols-[minmax(0,1fr)_320px] md:grid-rows-1 lg:grid-cols-[minmax(0,1fr)_360px]">
+    // Celular: catálogo a pantalla completa + barra "Ver cuenta" que abre
+    // la hoja inferior. Tablet: cuenta a 320px. Escritorio: 360px (el
+    // drawer de ProductDialog se alinea a ese ancho).
+    <div className="grid h-full grid-rows-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1fr)_320px] md:grid-rows-1 lg:grid-cols-[minmax(0,1fr)_360px]">
       <div className="flex h-full min-w-0 flex-col">
         <div className="flex items-center justify-end gap-4 border-b border-border px-3 py-2 sm:px-5 sm:py-3">
           <button
@@ -123,18 +139,64 @@ export function PosWorkspace({
         </div>
       </div>
 
-      <CartPanel
-        branchId={branchId}
-        shiftId={shiftId}
-        employeeId={employee.id}
-        customers={customers}
-        activeTabSummary={activeTabSummary}
-        onTabChanged={() => {
-          if (activeTabId) {
-            getTabDetail(activeTabId).then(setActiveTabSummary).catch(() => setActiveTabSummary(null));
-          }
-        }}
-      />
+      <div className="border-t border-border bg-background p-2 md:hidden">
+        <button
+          type="button"
+          aria-expanded={mobileCartOpen}
+          aria-controls="cuenta"
+          onClick={() => setMobileCartOpen(true)}
+          className={cn("flex min-h-12 w-full items-center justify-between rounded-md px-4 text-sm font-medium", posAccentClass)}
+        >
+          <span>
+            Ver cuenta{itemCount > 0 && ` · ${itemCount} producto${itemCount === 1 ? "" : "s"}`}
+            {activeTabId && " · cuenta abierta"}
+          </span>
+          <span className="text-base font-semibold">{formatCurrency(cartSubtotal)}</span>
+        </button>
+      </div>
+
+      {mobileCartOpen && (
+        <div
+          aria-hidden="true"
+          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          onClick={() => setMobileCartOpen(false)}
+        />
+      )}
+      <section
+        id="cuenta"
+        aria-label="Cuenta"
+        className={cn(
+          "min-h-0 md:static md:z-auto md:block md:h-full md:rounded-none md:shadow-none",
+          mobileCartOpen
+            ? "fixed inset-x-0 bottom-0 z-40 flex h-[88dvh] flex-col overflow-hidden rounded-t-2xl bg-background shadow-2xl"
+            : "hidden"
+        )}
+      >
+        <div className="flex items-center justify-between border-b border-border px-4 py-2 md:hidden">
+          <p className="font-semibold">Cuenta</p>
+          <button
+            type="button"
+            onClick={() => setMobileCartOpen(false)}
+            className="min-h-11 rounded-md px-3 text-sm text-muted-foreground hover:bg-muted"
+          >
+            Seguir agregando
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 md:h-full">
+          <CartPanel
+            branchId={branchId}
+            shiftId={shiftId}
+            employeeId={employee.id}
+            customers={customers}
+            activeTabSummary={activeTabSummary}
+            onTabChanged={() => {
+              if (activeTabId) {
+                getTabDetail(activeTabId).then(setActiveTabSummary).catch(() => setActiveTabSummary(null));
+              }
+            }}
+          />
+        </div>
+      </section>
 
       <ProductDialog
         product={selectedProduct}

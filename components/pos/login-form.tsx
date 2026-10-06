@@ -19,19 +19,26 @@ export function LoginForm({ error }: { error?: string }) {
               name="pin"
               type="password"
               inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={6}
               autoComplete="off"
+              aria-invalid={error === "pin" || error === "vacio" || undefined}
+              aria-describedby={error ? "pin-error" : undefined}
               autoFocus
               placeholder="••••"
             />
           </div>
+          {error === "vacio" && (
+            <p id="pin-error" role="alert" className="text-sm text-destructive">Escribe tu PIN.</p>
+          )}
           {error === "pin" && (
-            <p role="alert" className="text-sm text-destructive">PIN incorrecto. Intenta de nuevo.</p>
+            <p id="pin-error" role="alert" className="text-sm text-destructive">PIN incorrecto. Intenta de nuevo.</p>
           )}
           {error === "sesion" && (
-            <p role="alert" className="text-sm text-destructive">Tu sesión expiró. Vuelve a ingresar tu PIN.</p>
+            <p id="pin-error" role="alert" className="text-sm text-destructive">Tu sesión expiró. Vuelve a ingresar tu PIN.</p>
           )}
           {error === "bloqueado" && (
-            <p role="alert" className="text-sm text-destructive">
+            <p id="pin-error" role="alert" className="text-sm text-destructive">
               Demasiados intentos fallidos. Espera 5 minutos antes de volver a intentar.
             </p>
           )}

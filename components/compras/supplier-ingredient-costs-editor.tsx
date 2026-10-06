@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import type { UnitOfMeasure } from "@prisma/client";
 import type { SupplierIngredientLink, IngredientOption } from "@/lib/purchases";
 import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
 import { upsertIngredientSupplier as upsertIngredientSupplierAction } from "@/actions/purchases";
@@ -194,7 +195,7 @@ export function SupplierIngredientCostsEditor({
       )}
 
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      {savedMessage && <p className="text-sm text-emerald-700">{savedMessage}</p>}
+      {savedMessage && <Alert variant="success">{savedMessage}</Alert>}
 
       <Button type="button" onClick={handleSaveAll} disabled={isPending || dirtyRows.length === 0}>
         {isPending

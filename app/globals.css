@@ -43,4 +43,23 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Checkboxes/radios nativos con el color de acento del tema (E4). */
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: hsl(var(--primary));
+    @apply h-4 w-4;
+  }
+
+  /* Montos: sin flechas de incremento, que sumaban centavos al hacer
+     scroll sobre el campo (E5). */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
 }

@@ -5,6 +5,7 @@ import { requirePasswordSession, resolveRoleName } from "@/lib/session";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getEmployees } from "@/lib/employees";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
+import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -20,18 +21,11 @@ export default async function EmpleadosPage() {
   return (
     <AuthenticatedShell isAdmin employeeName={actor.name}>
       <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-semibold">Empleados</h1>
-            <p className="text-sm text-muted-foreground">Roles y acceso.</p>
-          </div>
-          <Link
-            href="/empleados/nuevo"
-            className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            + Nuevo empleado
-          </Link>
-        </div>
+        <PageHeader
+          title="Empleados"
+          description="Roles y acceso."
+          action={{ href: "/empleados/nuevo", label: "+ Nuevo empleado" }}
+        />
 
         <Card>
           <CardHeader>

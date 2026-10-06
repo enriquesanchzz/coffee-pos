@@ -20,7 +20,7 @@ export const updateTargetFoodCostPercent = safeAction(async function updateTarge
   await requirePermission(actor.id, DEFAULT_BRANCH_ID, "CONFIGURACION_SISTEMA_GESTIONAR");
 
   if (!(percent > 0) || percent > 100) {
-    throw new Error("El % de food cost objetivo debe estar entre 0 y 100.");
+    throw new Error("El % de food cost objetivo debe ser mayor que 0 y hasta 100.");
   }
 
   await prisma.branch.update({

@@ -130,10 +130,13 @@ export function CategoryDrilldown({
                 <button
                   type="button"
                   onClick={() => onEditCategory(entry.category)}
-                  className="hidden h-6 w-6 flex-shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted group-hover:flex"
+                  // Siempre presente: en touch y con teclado no hay hover
+                  // (E10). Con mouse se atenúa hasta pasar por encima.
+                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:hover)]:opacity-0"
                   title="Editar categoría"
+                  aria-label={`Editar categoría ${name}`}
                 >
-                  <Pencil className="h-3 w-3" />
+                  <Pencil aria-hidden="true" className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>
@@ -166,7 +169,18 @@ export function CategoryDrilldown({
                   className="flex aspect-[4/3] cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl p-4 text-center transition-shadow hover:shadow-md"
                   onClick={() => setActiveSubId(child.id)}
                 >
-                  <CategoryIcon icon={child.icon} className="h-8 w-8 text-muted-foreground" />
+                  {child.icon ? (
+                    <CategoryIcon icon={child.icon} className="h-8 w-8 text-muted-foreground" />
+                  ) : (
+                    // Sin ícono: inicial, para que todas las tarjetas tengan
+                    // el mismo peso visual (E7).
+                    <span
+                      aria-hidden="true"
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-sm font-semibold text-muted-foreground"
+                    >
+                      {child.name.charAt(0).toUpperCase()}
+                    </span>
+                  )}
                   <p className="text-sm font-medium leading-tight">{child.name}</p>
                 </Card>
               ))}

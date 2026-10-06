@@ -5,6 +5,7 @@ import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getCustomers } from "@/lib/customers";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
+import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -31,17 +32,7 @@ export default async function ClientesPage({
   return (
     <AuthenticatedShell isAdmin employeeName={employee.name}>
       <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-semibold">Clientes</h1>
-          </div>
-          <Link
-            href="/clientes/nuevo"
-            className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            + Nuevo cliente
-          </Link>
-        </div>
+        <PageHeader title="Clientes" action={{ href: "/clientes/nuevo", label: "+ Nuevo cliente" }} />
 
         <form action="/clientes" role="search" className="flex gap-2">
           <Input

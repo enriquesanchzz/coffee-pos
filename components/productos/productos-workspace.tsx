@@ -213,7 +213,10 @@ export function ProductosWorkspace({
                   Categorías
                 </button>
                 <h2 className="mt-2 text-lg font-semibold">{selectedProduct.name}</h2>
-                <p className="text-sm text-muted-foreground">{selectedProduct.categoryName}</p>
+                {/* Sin el subtítulo cuando repite el nombre ("Latte / Latte", E8). */}
+                {selectedProduct.categoryName.trim().toLowerCase() !== selectedProduct.name.trim().toLowerCase() && (
+                  <p className="text-sm text-muted-foreground">{selectedProduct.categoryName}</p>
+                )}
               </div>
 
               <div className="grid auto-rows-min grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-3 sm:gap-4">
