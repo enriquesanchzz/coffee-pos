@@ -34,6 +34,7 @@ async function routes() {
     "/compras/transferencias/nueva",
     transfer && `/compras/transferencias/${transfer.id}`,
     "/configuracion",
+    "/configuracion/apariencia",
     "/descuentos",
     "/empleados",
     "/empleados/nuevo",

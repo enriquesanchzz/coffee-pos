@@ -2,38 +2,34 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requirePasswordSession, resolveRoleName } from "@/lib/session";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
-import { getTargetFoodCostPercent } from "@/lib/recipes";
+import { getThemeSettings } from "@/lib/theme";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { ConfiguracionLayout } from "@/components/configuracion/configuracion-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { SettingsForm } from "@/components/configuracion/settings-form";
+import { AppearanceForm } from "@/components/configuracion/appearance-form";
 
-export const metadata: Metadata = { title: "Configuración · Costos y precios" };
+export const metadata: Metadata = { title: "Configuración · Apariencia" };
 
-// Configuración del sistema — separada de Administración (ahora un
-// dashboard) para que tenga su propia sección de menú. Cada tipo de ajuste
-// vive en su propia pantalla (ver CONFIGURACION_SECTIONS); esta es la
-// primera: costos y precio sugerido.
-export default async function ConfiguracionCostosPage() {
+export default async function ConfiguracionAparienciaPage() {
   const actor = await requirePasswordSession();
   if (!actor) redirect("/administracion/login");
   if (resolveRoleName(actor, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
 
-  const targetFoodCostPercent = await getTargetFoodCostPercent();
+  const themeSettings = await getThemeSettings();
 
   return (
     <AuthenticatedShell isAdmin employeeName={actor.name} contentClassName="overflow-hidden">
       <ConfiguracionLayout>
         <div>
-          <h2 className="text-lg font-semibold">Costos y precios</h2>
-          <p className="text-sm text-muted-foreground">Cómo se calcula el precio sugerido de recetas y extras.</p>
+          <h2 className="text-lg font-semibold">Apariencia</h2>
+          <p className="text-sm text-muted-foreground">Colores, tipo y tamaño de letra de todo el sistema.</p>
         </div>
         <Card>
           <CardHeader>
-            <CardTitle as="h3">Food cost objetivo</CardTitle>
+            <CardTitle as="h3">Tema</CardTitle>
           </CardHeader>
           <CardContent>
-            <SettingsForm targetFoodCostPercent={targetFoodCostPercent} />
+            <AppearanceForm initial={themeSettings} />
           </CardContent>
         </Card>
       </ConfiguracionLayout>
