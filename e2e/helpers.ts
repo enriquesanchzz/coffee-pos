@@ -9,6 +9,8 @@ export const db = new PrismaClient({ datasources: { db: { url: E2E_DATABASE_URL 
 export const PIN = { ana: "1234", luis: "5678" };
 
 export async function loginPin(page: Page, pin: string) {
+  // Con una sesión activa "/" redirige al POS sin pedir PIN: se sale antes.
+  await page.context().clearCookies();
   await page.goto("/");
   await page.fill("#pin", pin);
   await page.click("button[type=submit]");

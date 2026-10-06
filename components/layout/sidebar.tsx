@@ -21,6 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { NAV_MODULES, type NavIconName } from "@/lib/navigation";
+import { useBusinessSettings } from "./business-settings-context";
 
 // Los 6 módulos definidos en el ADR / roadmap (ver docs/roadmap.md), más
 // "Clientes" agregado en Fase 4 (no estaba en el ADR original de 6).
@@ -51,6 +52,7 @@ const ICONS: Record<NavIconName, LucideIcon> = {
 const modules = NAV_MODULES.map((mod) => ({ ...mod, icon: ICONS[mod.icon], enabled: true }));
 
 export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
+  const { businessName } = useBusinessSettings();
   const pathname = usePathname();
   const visibleModules = modules.filter((mod) => !mod.adminOnly || isAdmin);
 
@@ -60,7 +62,7 @@ export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
     // permite navegar entre módulos.
     <aside className="hidden h-full w-56 flex-shrink-0 flex-col overflow-y-auto border-r border-border bg-muted/40 p-3 xl:flex">
       <div className="mb-4 px-3 py-1">
-        <p className="text-sm font-semibold">Nomada Café</p>
+        <p className="text-sm font-semibold">{businessName}</p>
         <p className="text-xs text-muted-foreground">POS</p>
       </div>
 

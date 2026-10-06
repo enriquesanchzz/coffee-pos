@@ -1,5 +1,6 @@
 "use client";
 
+import { useBusinessSettings } from "@/components/layout/business-settings-context";
 import { useEffect, useState, useTransition } from "react";
 import type { SaleOrderType, DomicilioOrigen } from "@prisma/client";
 import { Button } from "@/components/ui/button";
@@ -52,7 +53,7 @@ export function CustomerPicker({
   const [justCreatedCustomer, setJustCreatedCustomer] = useState<{
     id: string;
     loyaltyCardCode: string;
-    welcomeCouponCode: string;
+    welcomeCouponCode: string | null;
   } | null>(null);
 
   const [showNewCustomerForm, setShowNewCustomerForm] = useState(false);
@@ -251,8 +252,9 @@ function WhatsAppLoyaltyLink({
 }: {
   phone: string;
   loyaltyCardCode: string;
-  welcomeCouponCode: string;
+  welcomeCouponCode: string | null;
 }) {
+  const { businessName, welcomeCouponPercent } = useBusinessSettings();
   const [href, setHref] = useState<string | null>(null);
 
   useEffect(() => {
@@ -262,9 +264,11 @@ function WhatsAppLoyaltyLink({
         origin: window.location.origin,
         loyaltyCardCode,
         welcomeCouponCode,
+        businessName,
+        welcomeCouponPercent,
       })
     );
-  }, [phone, loyaltyCardCode, welcomeCouponCode]);
+  }, [phone, loyaltyCardCode, welcomeCouponCode, businessName, welcomeCouponPercent]);
 
   if (!href) return null;
 

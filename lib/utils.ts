@@ -98,19 +98,24 @@ export function buildWhatsAppLoyaltyLink({
   origin,
   loyaltyCardCode,
   welcomeCouponCode,
+  businessName,
+  welcomeCouponPercent,
 }: {
   phone: string;
   origin: string;
   loyaltyCardCode: string;
   welcomeCouponCode?: string | null;
+  // Configuración → Negocio / Lealtad.
+  businessName: string;
+  welcomeCouponPercent: number;
 }): string | null {
   const digits = toWhatsAppNumber(phone);
   if (!digits) return null;
 
   const cardUrl = `${origin}/lealtad/${loyaltyCardCode}`;
-  const lines = [`¡Hola! Aquí está tu tarjeta de lealtad de Nomada Café: ${cardUrl}`];
-  if (welcomeCouponCode) {
-    lines.push(`Tienes un cupón de 10% para tu próxima compra — código ${welcomeCouponCode}.`);
+  const lines = [`¡Hola! Aquí está tu tarjeta de lealtad de ${businessName}: ${cardUrl}`];
+  if (welcomeCouponCode && welcomeCouponPercent > 0) {
+    lines.push(`Tienes un cupón de ${welcomeCouponPercent}% para tu próxima compra — código ${welcomeCouponCode}.`);
   }
 
   return `https://wa.me/${digits}?text=${encodeURIComponent(lines.join(" "))}`;

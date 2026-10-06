@@ -52,7 +52,15 @@ export const REPORTES_SECTIONS: NavChild[] = [
 
 // Configuración dividida por tipo de ajuste (cada uno su pantalla).
 export const CONFIGURACION_SECTIONS: NavChild[] = [
-  { href: "/configuracion", label: "Costos y precios" },
+  { href: "/configuracion", label: "Negocio" },
+  { href: "/configuracion/cobro", label: "Cobro" },
+  { href: "/configuracion/caja", label: "Caja y turnos" },
+  { href: "/configuracion/impuestos", label: "Impuestos" },
+  { href: "/configuracion/descuentos", label: "Descuentos" },
+  { href: "/configuracion/lealtad", label: "Lealtad" },
+  { href: "/configuracion/inventario", label: "Inventario" },
+  { href: "/configuracion/costos", label: "Costos y precios" },
+  { href: "/configuracion/seguridad", label: "Seguridad" },
   { href: "/configuracion/apariencia", label: "Apariencia" },
 ];
 

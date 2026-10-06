@@ -87,19 +87,29 @@ export const createCustomer = safeAction(async function createCustomer(input: Cr
       data: { customerId: customer.id, stamps: 0 },
     });
 
-    // Cupón de bienvenida: 10% para su próxima compra, personal (solo
+    // Cupón de bienvenida: % y vigencia de Configuración → Lealtad
+    // (10%, sin vencimiento por defecto; 0% = no se crea), personal (solo
     // ese cliente lo puede usar) y de un solo uso — ver
     // actions/discounts.ts (findDiscountCodeByCode) y actions/pos.ts
-    // (validateAndConsumeDiscountCode). Sin fecha de expiración a
-    // propósito.
-    const welcomeCoupon = await tx.discountCode.create({
-      data: {
-        code: generateWelcomeCouponCode(),
-        type: "PORCENTAJE",
-        value: 10,
-        customerId: customer.id,
-      },
+    // (validateAndConsumeDiscountCode).
+    const branch = await tx.branch.findUnique({
+      where: { id: DEFAULT_BRANCH_ID },
+      select: { welcomeCouponPercent: true, welcomeCouponValidDays: true },
     });
+    const couponPercent = branch?.welcomeCouponPercent ?? 10;
+    const validDays = branch?.welcomeCouponValidDays ?? null;
+    const welcomeCoupon =
+      couponPercent > 0
+        ? await tx.discountCode.create({
+            data: {
+              code: generateWelcomeCouponCode(),
+              type: "PORCENTAJE",
+              value: couponPercent,
+              customerId: customer.id,
+              expiresAt: validDays ? new Date(Date.now() + validDays * 24 * 60 * 60 * 1000) : null,
+            },
+          })
+        : null;
 
     return { customer, loyaltyCard, welcomeCoupon };
   });
@@ -109,7 +119,7 @@ export const createCustomer = safeAction(async function createCustomer(input: Cr
   return {
     id: customer.id,
     loyaltyCardCode: loyaltyCard.code!,
-    welcomeCouponCode: welcomeCoupon.code,
+    welcomeCouponCode: welcomeCoupon?.code ?? null,
   };
 });
 

@@ -1,5 +1,7 @@
 "use client";
 
+import { useBusinessSettings } from "@/components/layout/business-settings-context";
+import { includedTax, PAYMENT_METHOD_LABELS } from "@/lib/settings-shared";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { PaymentMethod, DiscountType, ManualDiscountReason } from "@prisma/client";
 import type { DomicilioOrigen } from "@prisma/client";
@@ -28,11 +30,6 @@ const previewSaleTotal = withActionErrors(previewSaleTotalAction);
 const findDiscountCodeByCode = withActionErrors(findDiscountCodeByCodeAction);
 const updateCustomer = withActionErrors(updateCustomerAction);
 
-const paymentMethods: { value: PaymentMethod; label: string }[] = [
-  { value: "EFECTIVO", label: "Efectivo" },
-  { value: "TARJETA", label: "Tarjeta" },
-  { value: "TRANSFERENCIA", label: "Transferencia" },
-];
 
 const discountModes = [
   { value: "NINGUNO", label: "Sin descuento" },
@@ -75,6 +72,8 @@ export type SaleReceipt = {
   method: PaymentMethod;
   cashReceived: number | null;
   change: number | null;
+  // IVA contenido (Configuración → Impuestos); 0 si no se desglosa.
+  taxIncluded: number;
 };
 
 // Descuento/método de pago/confirmar — antes vivía en un <Dialog> flotante
@@ -105,7 +104,10 @@ export function CheckoutForm({
   onCancel: () => void;
 }) {
   const { lines, subtotal, clear, orderType, tableNumber, activeTabId } = useCartStore();
-  const [method, setMethod] = useState<PaymentMethod>("EFECTIVO");
+  // Configuración → Cobro / Descuentos / Impuestos.
+  const settings = useBusinessSettings();
+  const paymentMethods = settings.paymentMethods.map((value) => ({ value, label: PAYMENT_METHOD_LABELS[value] }));
+  const [method, setMethod] = useState<PaymentMethod>(settings.paymentMethods[0] ?? "EFECTIVO");
   const [transferNote, setTransferNote] = useState("");
 
   // El subtotal "de verdad" de esta ronda — lo que sumaría quantity×precio
@@ -129,6 +131,8 @@ export function CheckoutForm({
   // Insumos que no alcanzan para esta ronda — se advierte y solo se cobra
   // si el cajero confirma "vender de todos modos" (QA-003).
   const [shortages, setShortages] = useState<StockShortage[]>([]);
+  // Configuración → Inventario: si este empleado puede vender con faltantes.
+  const [canOverrideShortage, setCanOverrideShortage] = useState(true);
   // Id del intento de cobro: se reutiliza en reintentos (p. ej. tras un
   // corte de red) para que el servidor nunca registre la venta dos veces;
   // se renueva si cambia la cuenta o después de cobrar.
@@ -150,14 +154,23 @@ export function CheckoutForm({
     let cancelled = false;
     setIsPreviewLoading(true);
     previewSaleTotal(employeeId, lines.map(cartLineToSaleItemInput))
-      .then(({ subtotal: serverSubtotal, discountableSubtotal, appliedPromotions: promos, shortages: missing }) => {
-        if (!cancelled) {
-          setVerifiedSubtotal(serverSubtotal);
-          setVerifiedDiscountableSubtotal(discountableSubtotal);
-          setAppliedPromotions(promos);
-          setShortages(missing);
+      .then(
+        ({
+          subtotal: serverSubtotal,
+          discountableSubtotal,
+          appliedPromotions: promos,
+          shortages: missing,
+          canOverrideShortage: canOverride,
+        }) => {
+          if (!cancelled) {
+            setVerifiedSubtotal(serverSubtotal);
+            setVerifiedDiscountableSubtotal(discountableSubtotal);
+            setAppliedPromotions(promos);
+            setShortages(missing);
+            setCanOverrideShortage(canOverride);
+          }
         }
-      })
+      )
       .catch(() => {
         if (!cancelled) {
           setVerifiedSubtotal(null);
@@ -185,7 +198,7 @@ export function CheckoutForm({
   const [authorizingPin, setAuthorizingPin] = useState("");
 
   const [tipMode, setTipMode] = useState<"NINGUNA" | "PORCENTAJE" | "MONTO">("NINGUNA");
-  const [tipPercent, setTipPercent] = useState(10);
+  const [tipPercent, setTipPercent] = useState(settings.tipPercents[0] ?? 10);
   const [tipCustom, setTipCustom] = useState("");
   const [cashReceived, setCashReceived] = useState("");
   const [confirmHighTip, setConfirmHighTip] = useState(false);
@@ -214,9 +227,11 @@ export function CheckoutForm({
         ? Math.max(0, Math.round((Number(tipCustom) || 0) * 100) / 100)
         : 0;
   const totalToCollect = Math.round((total + tipValue) * 100) / 100;
-  // Propina mayor a la mitad de la cuenta: casi siempre es un error de
-  // captura (ej. 100000 en vez de 100) — se pide confirmarla (QA-028).
-  const isHighTip = total > 0 && tipValue > total / 2;
+  // Propina mayor al umbral (por defecto, la mitad de la cuenta): casi
+  // siempre es un error de captura (ej. 100000 en vez de 100) — se pide
+  // confirmarla (QA-028). Umbral en Configuración → Cobro.
+  const isHighTip = total > 0 && tipValue > (total * settings.highTipThresholdPercent) / 100;
+  const taxIncluded = includedTax(total, settings);
   const cashReceivedCents = Math.round((Number(cashReceived) || 0) * 100);
   const totalToCollectCents = Math.round(totalToCollect * 100);
 
@@ -235,7 +250,10 @@ export function CheckoutForm({
             ? "El descuento no puede ser mayor al subtotal."
             : manualType === "PRECIO_FINAL" && manualValueNumber > rawSubtotal
               ? "El precio final no puede ser mayor al subtotal."
-              : null;
+              : settings.maxManualDiscountPercent !== null &&
+                  discountPreview > (discountableBase * settings.maxManualDiscountPercent) / 100 + 0.005
+                ? `El descuento manual no puede pasar del ${settings.maxManualDiscountPercent}% del subtotal.`
+                : null;
 
   function resetDiscountState() {
     setCodeInput("");
@@ -363,6 +381,7 @@ export function CheckoutForm({
           method,
           cashReceived: method === "EFECTIVO" ? cashReceivedCents / 100 : null,
           change: method === "EFECTIVO" ? (cashReceivedCents - totalToCollectCents) / 100 : null,
+          taxIncluded,
         };
         requestIdRef.current = null;
         clear();
@@ -536,6 +555,12 @@ export function CheckoutForm({
           <span className="text-base font-semibold">Total</span>
           <span className="text-3xl font-bold">{formatCurrency(totalToCollect)}</span>
         </div>
+        {taxIncluded > 0 && (
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>Incluye IVA ({settings.taxRatePercent}%)</span>
+            <span>{formatCurrency(taxIncluded)}</span>
+          </div>
+        )}
       </div>
 
       <div>
@@ -552,7 +577,7 @@ export function CheckoutForm({
           >
             Sin propina
           </button>
-          {[10, 15, 20].map((pct) => (
+          {settings.tipPercents.map((pct) => (
             <button
               aria-pressed={tipMode === "PORCENTAJE" && tipPercent === pct}
               key={pct}
@@ -603,7 +628,7 @@ export function CheckoutForm({
         {isHighTip && (
           <label className="mt-2 flex items-center gap-2 text-sm text-destructive">
             <input type="checkbox" checked={confirmHighTip} onChange={(e) => setConfirmHighTip(e.target.checked)} />
-            Confirmo una propina de {formatCurrency(tipValue)} (más de la mitad de la cuenta)
+            Confirmo una propina de {formatCurrency(tipValue)} (más del {settings.highTipThresholdPercent}% de la cuenta)
           </label>
         )}
       </div>
@@ -667,7 +692,7 @@ export function CheckoutForm({
             </Button>
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {[20, 50, 100, 200, 500, 1000].map((bill) => (
+            {settings.cashQuickBills.map((bill) => (
               <button
                 key={bill}
                 type="button"
@@ -701,14 +726,22 @@ export function CheckoutForm({
               </li>
             ))}
           </ul>
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={allowShortage}
-              onChange={(e) => setAllowShortage(e.target.checked)}
-            />
-            Vender de todos modos (el inventario quedará en negativo)
-          </label>
+          {canOverrideShortage ? (
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={allowShortage}
+                onChange={(e) => setAllowShortage(e.target.checked)}
+              />
+              Vender de todos modos (el inventario quedará en negativo)
+            </label>
+          ) : (
+            <p className="text-destructive">
+              {settings.shortagePolicy === "BLOQUEAR"
+                ? "No se permite vender sin insumos suficientes. Quita esos productos o registra la entrada de inventario."
+                : "Solo un gerente o administrador puede confirmar esta venta."}
+            </p>
+          )}
         </div>
       )}
 

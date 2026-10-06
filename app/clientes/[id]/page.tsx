@@ -11,6 +11,7 @@ import { LoyaltyActions } from "@/components/clientes/loyalty-actions";
 import { formatCurrency } from "@/lib/utils";
 import { formatDateTime } from "@/lib/time";
 import { orNotFound } from "@/lib/not-found";
+import { getBusinessSettings } from "@/lib/settings";
 
 export const metadata: Metadata = { title: "Detalle de cliente" };
 
@@ -27,7 +28,7 @@ export default async function DetalleClientePage({
   }
 
   const { id } = await params;
-  const customer = await orNotFound(getCustomerDetail(id));
+  const [customer, settings] = await Promise.all([orNotFound(getCustomerDetail(id)), getBusinessSettings()]);
 
   return (
     <AuthenticatedShell isAdmin employeeName={employee.name}>
@@ -40,7 +41,7 @@ export default async function DetalleClientePage({
             </CardHeader>
             <CardContent className="flex flex-col gap-3 text-sm">
               <div className="flex items-center justify-between">
-                <p>{customer.stamps} de 5 sellos</p>
+                <p>{customer.stamps % settings.loyaltyStampsPerReward} de {settings.loyaltyStampsPerReward} sellos</p>
                 <p className="text-muted-foreground">{customer.tierName ?? "sin nivel"}</p>
               </div>
               {customer.welcomeCoupon && (

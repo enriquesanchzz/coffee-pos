@@ -1,5 +1,6 @@
 "use client";
 
+import { useBusinessSettings } from "@/components/layout/business-settings-context";
 import { useEffect, useState, useTransition } from "react";
 import { ShiftType } from "@prisma/client";
 import { openShift as openShiftAction } from "@/actions/shift";
@@ -20,14 +21,16 @@ export function ShiftOpenForm({
   branchId: string;
   employeeId: string;
 }) {
+  // Configuración → Caja y turnos.
+  const { shiftChangeHour, defaultOpeningCash } = useBusinessSettings();
   const [type, setType] = useState<ShiftType>("MATUTINO");
   // Propone el turno según la hora de la sucursal (antes siempre decía
   // Matutino, incluso de noche). En un efecto para no desalinear el HTML
   // del servidor al hidratar.
   useEffect(() => {
-    if (zonedClock(new Date()).hour >= 14) setType("VESPERTINO");
-  }, []);
-  const [openingCash, setOpeningCash] = useState("0");
+    if (zonedClock(new Date()).hour >= shiftChangeHour) setType("VESPERTINO");
+  }, [shiftChangeHour]);
+  const [openingCash, setOpeningCash] = useState(String(defaultOpeningCash));
   const [confirmingPin, setConfirmingPin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();

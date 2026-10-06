@@ -29,6 +29,43 @@ Claude Code) pueda retomarlo sin arqueología.
 | **Tarjeta de lealtad pública + cupón de bienvenida** (`/lealtad/[code]`, QR, cupón de 10% de un solo uso, link de WhatsApp) | ✅ Construido (rama `tarjeta-lealtad-publica`). Envío real por WhatsApp API y pases nativos de Apple/Google Wallet **no** incluidos — requieren cuentas de terceros que el negocio no tiene. Ver sección dedicada abajo. |
 | Multi-sucursal en UI (Fase 5) | ⚪ No construido. `DEFAULT_BRANCH_ID` fijo en `lib/constants.ts`. |
 
+## Configuración del sistema (Configuración → 10 secciones)
+
+Reglas del negocio que estaban fijas en el código ahora se ajustan en
+Configuración, una pantalla por tipo (`CONFIGURACION_SECTIONS` en
+`lib/navigation.ts`, mismo esquema de columna que el POS):
+
+| Sección | Ajustes | Dónde se aplican |
+|---|---|---|
+| Negocio (`/configuracion`) | nombre, teléfono, dirección, zona horaria | login, menú, título, tarjeta de lealtad, WhatsApp; `lib/time.ts` |
+| Cobro | propinas sugeridas, umbral de propina alta, métodos de pago, billetes rápidos | checkout; el servidor rechaza métodos desactivados |
+| Caja y turnos | hora de cambio Matutino→Vespertino, fondo sugerido, tolerancia del corte | apertura y cierre de turno (`actions/shift.ts`) |
+| Impuestos | NINGUNO / INCLUIDO + tasa | checkout, comprobante, `Sale.taxAmount`, reporte de Utilidad |
+| Descuentos | tope del descuento manual (% del subtotal) | checkout y `actions/pos.ts` |
+| Lealtad | sellos por recompensa, cupón de bienvenida (% y vigencia), niveles (CRUD) | `applyLoyaltyStamp`, `createCustomer`, `/lealtad/[code]` |
+| Inventario | política de venta con faltantes (CONFIRMAR / GERENTE / BLOQUEAR), mínimos por insumo (`ReorderPoint`) | checkout/cuentas, Inventario, Dashboard |
+| Costos y precios | % de food cost objetivo | precio sugerido |
+| Seguridad | intentos de PIN, minutos de bloqueo, duración de sesión | `lib/rate-limit.ts`, `lib/session.ts` (`issuedAt`) |
+| Apariencia | tema | `app/layout.tsx` |
+
+Convenciones:
+
+- Los valores viven como columnas de `Branch` (migración
+  `20261007010000_system_settings`). **Léelos siempre con
+  `getBusinessSettings()`** (`lib/settings.ts`, aplica defaults); en
+  componentes cliente usa `useBusinessSettings()`
+  (`components/layout/business-settings-context.tsx`, lo llena
+  `app/layout.tsx`). Defaults y etiquetas en `lib/settings-shared.ts`.
+- **Zona horaria**: `lib/time.ts` ya no es constante. `syncAppTimeZone()`
+  se llama en `app/layout.tsx`, en `getSessionEmployeeId()` y en
+  `safeAction` antes de cada acción; en el navegador lo aplica
+  `TimeZoneSync`.
+- El IVA solo se **desglosa** (precios con IVA incluido, como exige la ley
+  para el precio al público): el total cobrado no cambia.
+- Cada sección tiene "Restaurar valores originales"
+  (`resetSettingsSection`). Las pruebas están en `e2e/configuracion.spec.ts`
+  y restauran los valores al terminar.
+
 ## Auditoría QA/UX/A11y y plan de acción (octubre 2026, fases 0–6)
 
 Segunda ronda: auditoría senior (tickets QA-001..030, A11Y-01..09, mejoras D/E)

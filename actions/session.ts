@@ -10,15 +10,15 @@ import {
 } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
-import { TOO_MANY_ATTEMPTS_MESSAGE } from "@/lib/rate-limit";
+import { TooManyAttemptsError } from "@/lib/rate-limit";
 
-// findEmployeeBy* lanzan TOO_MANY_ATTEMPTS_MESSAGE al pasar el límite de
+// findEmployeeBy* lanzan TooManyAttemptsError al pasar el límite de
 // intentos (lib/rate-limit.ts) — aquí se traduce a un ?error= del login.
 async function lookup<T>(fn: () => Promise<T>): Promise<T | "bloqueado"> {
   try {
     return await fn();
   } catch (err) {
-    if (err instanceof Error && err.message === TOO_MANY_ATTEMPTS_MESSAGE) return "bloqueado";
+    if (err instanceof TooManyAttemptsError) return "bloqueado";
     throw err;
   }
 }

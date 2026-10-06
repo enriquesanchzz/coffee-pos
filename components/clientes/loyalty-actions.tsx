@@ -1,5 +1,6 @@
 "use client";
 
+import { useBusinessSettings } from "@/components/layout/business-settings-context";
 import { useEffect, useState } from "react";
 import { buildWhatsAppLoyaltyLink } from "@/lib/utils";
 
@@ -18,11 +19,19 @@ export function LoyaltyActions({
 }) {
   // El origen se lee al montar (no en el render) para que el HTML del
   // servidor coincida al hidratar.
+  const { businessName, welcomeCouponPercent } = useBusinessSettings();
   const [origin, setOrigin] = useState<string | null>(null);
   useEffect(() => setOrigin(window.location.origin), []);
   const whatsappLink =
     origin && phone
-      ? buildWhatsAppLoyaltyLink({ phone, origin, loyaltyCardCode: loyaltyCode, welcomeCouponCode })
+      ? buildWhatsAppLoyaltyLink({
+          phone,
+          origin,
+          loyaltyCardCode: loyaltyCode,
+          welcomeCouponCode,
+          businessName,
+          welcomeCouponPercent,
+        })
       : null;
 
   return (
