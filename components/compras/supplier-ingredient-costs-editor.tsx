@@ -193,7 +193,7 @@ export function SupplierIngredientCostsEditor({
         />
       )}
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       {savedMessage && <p className="text-sm text-emerald-700">{savedMessage}</p>}
 
       <Button type="button" onClick={handleSaveAll} disabled={isPending || dirtyRows.length === 0}>

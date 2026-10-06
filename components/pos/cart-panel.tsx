@@ -202,11 +202,12 @@ export function CartPanel({
         <div className="flex gap-1.5">
           {orderTypes.map((type) => (
             <button
+              aria-pressed={orderType === type.value}
               key={type.value}
               type="button"
               onClick={() => setOrderType(type.value)}
               className={cn(
-                "flex-1 rounded-full border border-border px-2 py-1.5 text-xs font-medium",
+                "min-h-10 flex-1 rounded-full border border-border px-2 py-2 text-xs font-medium",
                 orderType === type.value ? posAccentClass : "hover:bg-muted"
               )}
             >
@@ -277,7 +278,7 @@ export function CartPanel({
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Ya registrado en la cuenta — revisa con el cliente antes de cobrar
             </p>
-            {registeredError && <p className="text-xs text-destructive">{registeredError}</p>}
+            {registeredError && <p role="alert" className="text-xs text-destructive">{registeredError}</p>}
             {activeTabSummary.items.length === 0 && (
               <p className="text-xs text-muted-foreground">
                 Todavía no hay nada registrado (se quitó todo) — la cuenta sigue abierta.
@@ -317,7 +318,7 @@ export function CartPanel({
                         <Button
                           size="icon"
                           variant="outline"
-                          className="h-7 w-7 rounded-full"
+                          className="h-10 w-10 rounded-full"
                           disabled={isPending}
                           onClick={() => handleAdjustRegistered(item.id, item.quantity - 1)}
                         >
@@ -327,7 +328,7 @@ export function CartPanel({
                         <Button
                           size="icon"
                           variant="outline"
-                          className="h-7 w-7 rounded-full"
+                          className="h-10 w-10 rounded-full"
                           disabled={isPending}
                           onClick={() => handleAdjustRegistered(item.id, item.quantity + 1)}
                         >
@@ -401,7 +402,7 @@ export function CartPanel({
                     <Button
                       size="icon"
                       variant="outline"
-                      className="h-7 w-7 rounded-full"
+                      className="h-10 w-10 rounded-full"
                       onClick={() => decrementLine(line.lineId)}
                     >
                       <Minus className="h-3 w-3" />
@@ -410,7 +411,7 @@ export function CartPanel({
                     <Button
                       size="icon"
                       variant="outline"
-                      className="h-7 w-7 rounded-full"
+                      className="h-10 w-10 rounded-full"
                       onClick={() => incrementLine(line.lineId)}
                     >
                       <Plus className="h-3 w-3" />
@@ -431,7 +432,7 @@ export function CartPanel({
           <span className="text-sm font-medium">Total{activeTabSummary && " (esta ronda)"}</span>
           <span className="text-2xl font-bold">{formatCurrency(subtotal())}</span>
         </div>
-        {tabError && <p className="mb-2 text-xs text-destructive">{tabError}</p>}
+        {tabError && <p role="alert" className="mb-2 text-xs text-destructive">{tabError}</p>}
         <div className="flex gap-2">
           {orderType === "CONSUMO_LOCAL" && (
             <Button

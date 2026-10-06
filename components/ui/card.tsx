@@ -39,8 +39,16 @@ export function CardHeader({ className, ...props }: React.HTMLAttributes<HTMLDiv
   return <div className={cn("p-4 pb-2", className)} {...props} />;
 }
 
-export function CardTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
-  return <h3 className={cn("text-sm font-semibold", className)} {...props} />;
+// h2 por defecto: las tarjetas cuelgan directo del h1 de la página
+// (antes h3, que saltaba un nivel — A11Y-06). `as` para los casos donde
+// la tarjeta es el título de la pantalla (logins) o va dentro de otra
+// sección.
+export function CardTitle({
+  className,
+  as: Heading = "h2",
+  ...props
+}: React.HTMLAttributes<HTMLHeadingElement> & { as?: "h1" | "h2" | "h3" }) {
+  return <Heading className={cn("text-sm font-semibold", className)} {...props} />;
 }
 
 export function CardContent({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {

@@ -193,6 +193,7 @@ export function NewProductForm({
                 ]
               ).map((opt) => (
                 <button
+                  aria-pressed={productType === opt.value}
                   key={opt.value}
                   type="button"
                   onClick={() => setProductType(opt.value)}
@@ -330,7 +331,7 @@ export function NewProductForm({
         + Agregar variante
       </Button>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
       <Button onClick={handleSubmit} disabled={isPending}>
         {isPending ? "Guardando..." : "Crear producto"}

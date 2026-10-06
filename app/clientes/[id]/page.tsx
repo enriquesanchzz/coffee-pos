@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
@@ -10,6 +11,8 @@ import { LoyaltyActions } from "@/components/clientes/loyalty-actions";
 import { formatCurrency } from "@/lib/utils";
 import { formatDateTime } from "@/lib/time";
 import { orNotFound } from "@/lib/not-found";
+
+export const metadata: Metadata = { title: "Detalle de cliente" };
 
 export default async function DetalleClientePage({
   params,

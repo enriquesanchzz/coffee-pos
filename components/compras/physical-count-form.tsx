@@ -68,6 +68,7 @@ export function PhysicalCountForm({
                   min="0"
                   step="0.01"
                   className="w-28"
+                  aria-label={`Conteo físico de ${ingredient.name} en ${unitLabel}`}
                   value={physicalQty[ingredient.ingredientId] ?? ""}
                   onChange={(e) =>
                     setPhysicalQty((prev) => ({ ...prev, [ingredient.ingredientId]: e.target.value }))
@@ -79,7 +80,7 @@ export function PhysicalCountForm({
         </CardContent>
       </Card>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
       <Button onClick={handleSubmit} disabled={isPending}>
         {isPending ? "Guardando..." : "Enviar conteo a aprobación"}

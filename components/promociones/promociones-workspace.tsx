@@ -96,13 +96,13 @@ export function PromocionesWorkspace({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
-        <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar promoción…" className="max-w-xs" />
-        <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as StatusFilter)} className="w-40">
+        <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar promoción…" aria-label="Buscar promoción" className="max-w-xs" />
+        <Select aria-label="Filtrar por estado" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as StatusFilter)} className="w-40">
           <option value="todos">Todos</option>
           <option value="activo">Activos</option>
           <option value="inactivo">Inactivos</option>
         </Select>
-        <Select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value as CategoryFilter)} className="w-56">
+        <Select aria-label="Filtrar por categoría" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value as CategoryFilter)} className="w-56">
           <option value="todas">Todas las categorías</option>
           {Object.entries(CATEGORY_LABELS).map(([v, label]) => (
             <option key={v} value={v}>

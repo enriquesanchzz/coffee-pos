@@ -59,9 +59,11 @@ export function DiscountCodesWorkspace({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Buscar código…"
+          aria-label="Buscar código"
           className="max-w-xs"
         />
         <Select
+          aria-label="Filtrar por estado"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
           className="w-40"
@@ -73,6 +75,7 @@ export function DiscountCodesWorkspace({
           <option value="INACTIVO">Inactivos</option>
         </Select>
         <Select
+          aria-label="Filtrar por categoría"
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value as CategoryFilter)}
           className="w-48"

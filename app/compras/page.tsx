@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
@@ -10,6 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 import { purchaseOrderStatusLabels } from "@/components/compras/enum-labels";
 import { formatDate } from "@/lib/time";
+
+export const metadata: Metadata = { title: "Compras" };
 
 export default async function ComprasPage() {
   const employee = await getCurrentEmployee();

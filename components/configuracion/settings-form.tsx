@@ -57,7 +57,7 @@ export function SettingsForm({ targetFoodCostPercent }: { targetFoodCostPercent:
       <p className="text-xs text-muted-foreground">
         Precio sugerido al crear/editar una receta = costo de ingredientes ÷ este %.
       </p>
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       {saved && !error && <p className="text-sm text-emerald-600">Guardado.</p>}
     </div>
   );

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
@@ -8,6 +9,8 @@ import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { physicalCountStatusLabels } from "@/components/compras/enum-labels";
 import { formatDate } from "@/lib/time";
+
+export const metadata: Metadata = { title: "Conteos físicos" };
 
 export default async function ConteosPage() {
   const employee = await getCurrentEmployee();

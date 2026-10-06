@@ -244,7 +244,7 @@ export function IngredientFormDialog({
           Da seguimiento a caducidad
         </label>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
         <div className="flex items-center gap-2">
           <Button onClick={handleSave} disabled={isPending} className="flex-1">

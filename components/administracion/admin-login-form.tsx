@@ -9,7 +9,7 @@ export function AdminLoginForm({ error }: { error?: string }) {
   return (
     <Card className="w-full max-w-sm">
       <CardHeader>
-        <CardTitle>Administración — Entrar</CardTitle>
+        <CardTitle as="h1">Administración — Entrar</CardTitle>
       </CardHeader>
       <CardContent>
         <form action={loginAdmin} className="flex flex-col gap-4">
@@ -22,18 +22,18 @@ export function AdminLoginForm({ error }: { error?: string }) {
             <Input id="password" name="password" type="password" autoComplete="current-password" />
           </div>
           {error === "credenciales" && (
-            <p className="text-sm text-destructive">Email o password incorrectos.</p>
+            <p role="alert" className="text-sm text-destructive">Email o password incorrectos.</p>
           )}
           {error === "rol" && (
-            <p className="text-sm text-destructive">
+            <p role="alert" className="text-sm text-destructive">
               Tu cuenta no tiene el rol ADMINISTRADOR, necesario para entrar a Administración.
             </p>
           )}
           {error === "sesion" && (
-            <p className="text-sm text-destructive">Tu sesión de Administración expiró. Vuelve a entrar.</p>
+            <p role="alert" className="text-sm text-destructive">Tu sesión de Administración expiró. Vuelve a entrar.</p>
           )}
           {error === "bloqueado" && (
-            <p className="text-sm text-destructive">
+            <p role="alert" className="text-sm text-destructive">
               Demasiados intentos fallidos. Espera 5 minutos antes de volver a intentar.
             </p>
           )}

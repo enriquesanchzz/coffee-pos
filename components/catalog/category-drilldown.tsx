@@ -115,6 +115,8 @@ export function CategoryDrilldown({
           return (
             <div key={id} className="group flex items-center gap-1">
               <button
+                type="button"
+                aria-pressed={isActive}
                 onClick={() => selectTop(id)}
                 className={cn(
                   "flex flex-1 items-center gap-2 rounded-full px-3 py-2 text-left text-sm font-medium transition-colors",
@@ -141,11 +143,12 @@ export function CategoryDrilldown({
 
       <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-hidden p-2 sm:gap-4 sm:p-4">
         <div className="relative max-w-sm flex-shrink-0">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
             placeholder={searchPlaceholder}
+            aria-label={searchPlaceholder.replace(/…$/, "")}
             className="rounded-full pl-9"
           />
         </div>

@@ -110,7 +110,7 @@ export function NewTransferForm({
         </CardContent>
       </Card>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       {fromStockLocationId === toStockLocationId && (
         <p className="text-sm text-muted-foreground">El origen y el destino deben ser distintos.</p>
       )}

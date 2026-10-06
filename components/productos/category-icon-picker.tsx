@@ -61,6 +61,7 @@ export function CategoryIconPicker({
       <Label>Ícono (opcional)</Label>
       <div className="flex flex-wrap gap-1.5">
         <button
+          aria-pressed={value === null}
           type="button"
           onClick={() => onChange(null)}
           className={cn(
@@ -73,6 +74,7 @@ export function CategoryIconPicker({
         </button>
         {Object.entries(CATEGORY_ICONS).map(([name, Icon]) => (
           <button
+            aria-pressed={value === name}
             key={name}
             type="button"
             onClick={() => onChange(name)}

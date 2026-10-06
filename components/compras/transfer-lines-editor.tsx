@@ -57,6 +57,7 @@ export function TransferLinesEditor({
               min="0"
               step="0.01"
               className="w-24"
+              aria-label="Cantidad a transferir"
               value={line.quantity}
               onChange={(e) => updateLine(line.key, { quantity: e.target.value })}
             />

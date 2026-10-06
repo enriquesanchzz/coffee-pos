@@ -215,11 +215,12 @@ export function ProductDialog({
             <div className="flex flex-wrap gap-2">
               {sizes.map((size) => (
                 <button
+                  aria-pressed={sizeLabel === size}
                   key={size}
                   type="button"
                   onClick={() => setSizeLabel(size)}
                   className={cn(
-                    "rounded-md border border-border px-3 py-1.5 text-sm",
+                    "min-h-11 rounded-md border border-border px-3 py-2 text-sm",
                     sizeLabel === size ? posAccentBorderClass : "hover:bg-muted"
                   )}
                 >
@@ -236,11 +237,12 @@ export function ProductDialog({
             <div className="flex flex-wrap gap-2">
               {temperatures.map((temp) => (
                 <button
+                  aria-pressed={temperature === temp}
                   key={temp}
                   type="button"
                   onClick={() => setTemperature(temp)}
                   className={cn(
-                    "rounded-md border border-border px-3 py-1.5 text-sm",
+                    "min-h-11 rounded-md border border-border px-3 py-2 text-sm",
                     temperature === temp ? posAccentBorderClass : "hover:bg-muted"
                   )}
                 >
@@ -252,7 +254,7 @@ export function ProductDialog({
         )}
 
         {!variant && (sizes.length > 0 || temperatures.length > 0) && (
-          <p className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p role="alert" className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             Esta combinación no está disponible.
           </p>
         )}
@@ -268,11 +270,12 @@ export function ProductDialog({
                 const isSelected = selected[group.id]?.has(option.id) ?? false;
                 return (
                   <button
+                    aria-pressed={isSelected}
                     key={option.id}
                     type="button"
                     onClick={() => toggleOption(group.id, option, group.allowMultiple)}
                     className={cn(
-                      "rounded-md border border-border px-3 py-1.5 text-sm",
+                      "min-h-11 rounded-md border border-border px-3 py-2 text-sm",
                       isSelected ? posAccentBorderClass : "hover:bg-muted"
                     )}
                   >
@@ -331,7 +334,7 @@ export function ProductDialog({
               Agregar
             </Button>
           </div>
-          {extraQtyError && <p className="mt-1 text-xs text-destructive">{extraQtyError}</p>}
+          {extraQtyError && <p role="alert" className="mt-1 text-xs text-destructive">{extraQtyError}</p>}
 
           {extras.length > 0 && (
             <ul className="mt-2 flex flex-col gap-1">

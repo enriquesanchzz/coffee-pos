@@ -41,7 +41,7 @@ export function SessionBar({
     // Franja fija oscura a propósito, independiente del acento/modo elegido
     // en Administración → Apariencia: es un ancla visual constante para
     // identificar quién opera el sistema, no debe cambiar con el tema.
-    <div className="flex h-12 shrink-0 items-center justify-between gap-2 bg-neutral-900 px-3 text-neutral-50 sm:px-4">
+    <footer aria-label="Sesión" className="flex h-12 shrink-0 items-center justify-between gap-2 bg-neutral-900 px-3 text-neutral-50 sm:px-4">
       <p className="min-w-0 truncate text-sm">
         <span className="hidden sm:inline">Atendiendo: </span>
         <span className="font-semibold">{employeeName}</span>
@@ -53,7 +53,7 @@ export function SessionBar({
           onChange={(e) => {
             if (e.target.value) router.push(e.target.value);
           }}
-          className="h-8 rounded-md border border-neutral-700 bg-neutral-900 px-2 text-sm text-neutral-50"
+          className="h-9 rounded-md border border-neutral-700 bg-neutral-900 px-2 text-sm text-neutral-50"
         >
           {zones.map((zone) => (
             <option key={zone.href} value={zone.href}>
@@ -75,13 +75,13 @@ export function SessionBar({
         >
           <button
             type="submit"
-            className="whitespace-nowrap text-sm text-neutral-300 hover:text-neutral-50 hover:underline"
+            className="min-h-9 whitespace-nowrap px-1 text-sm text-neutral-300 hover:text-neutral-50 hover:underline"
           >
             <span className="sm:hidden">Salir</span>
             <span className="hidden sm:inline">Cambiar de empleado</span>
           </button>
         </form>
       </div>
-    </div>
+    </footer>
   );
 }

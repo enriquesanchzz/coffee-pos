@@ -98,7 +98,7 @@ export function NewOrderForm({
           <CardTitle>Proveedor</CardTitle>
         </CardHeader>
         <CardContent>
-          <Select value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+          <Select aria-label="Proveedor" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
             {suppliers.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
@@ -122,7 +122,7 @@ export function NewOrderForm({
         </CardContent>
       </Card>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
       <Button onClick={handleSubmit} disabled={isPending || !supplierId}>
         {isPending ? "Guardando..." : isEdit ? "Guardar cambios" : "Crear orden"}

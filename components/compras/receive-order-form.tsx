@@ -140,7 +140,7 @@ export function ReceiveOrderForm({
           );
         })}
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
         <Button onClick={handleSubmit} disabled={isPending}>
           {isPending ? "Registrando..." : "Registrar recepción"}

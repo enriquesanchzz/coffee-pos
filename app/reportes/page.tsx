@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
@@ -19,6 +20,8 @@ import { InventarioReport } from "@/components/reportes/inventario-report";
 import { EstadisticasReport } from "@/components/reportes/estadisticas-report";
 import { ClientesReport } from "@/components/reportes/clientes-report";
 import type { VariantTemperature } from "@prisma/client";
+
+export const metadata: Metadata = { title: "Reportes" };
 
 const VALID_VIEWS = new Set<ReportesView>(["utilidad", "recetas", "inventario", "estadisticas", "clientes"]);
 const VALID_TEMPERATURES = new Set(["CALIENTE", "FRIO", "FRAPPE"]);
@@ -63,7 +66,7 @@ export default async function ReportesPage({
   const { from, to, fromStr, toStr, swapped } = resolveDateRange(params.from, params.to);
 
   return (
-    <AuthenticatedShell isAdmin employeeName={employee.name}>
+    <AuthenticatedShell isAdmin employeeName={employee.name} srTitle="Reportes">
       <div className="mx-auto flex max-w-4xl flex-col gap-4 p-4 sm:p-6 md:flex-row md:gap-6">
         <ReportesNav active={requestedView} visible={visible} />
 

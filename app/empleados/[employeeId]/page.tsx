@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requirePasswordSession, resolveRoleName } from "@/lib/session";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
@@ -5,6 +6,8 @@ import { getRoles, getEmployeeDetail } from "@/lib/employees";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { EmployeeForm } from "@/components/empleados/employee-form";
 import { orNotFound } from "@/lib/not-found";
+
+export const metadata: Metadata = { title: "Editar empleado" };
 
 export default async function EditarEmpleadoPage({
   params,

@@ -173,13 +173,20 @@ export function CustomerPicker({
       {showNewCustomerForm && (
         <div className="mt-1 flex flex-col gap-2 rounded-md border border-border p-3">
           <p className="text-sm font-medium">Cliente nuevo</p>
-          <Input value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} placeholder="Nombre" />
           <Input
+            aria-label="Nombre del cliente nuevo"
+            value={newCustomerName}
+            onChange={(e) => setNewCustomerName(e.target.value)}
+            placeholder="Nombre"
+          />
+          <Input
+            aria-label="Teléfono del cliente nuevo"
+            type="tel"
             value={newCustomerPhone}
             onChange={(e) => setNewCustomerPhone(e.target.value)}
             placeholder={orderType === "DOMICILIO" ? "Teléfono (obligatorio)" : "Teléfono (opcional)"}
           />
-          {newCustomerError && <p className="text-sm text-destructive">{newCustomerError}</p>}
+          {newCustomerError && <p role="alert" className="text-sm text-destructive">{newCustomerError}</p>}
           <div className="flex gap-2">
             <Button type="button" size="sm" onClick={handleCreateCustomer} disabled={isCreatingCustomer}>
               {isCreatingCustomer ? "Creando…" : "Crear y seleccionar"}
@@ -215,11 +222,12 @@ export function CustomerPicker({
                 ]
               ).map((opt) => (
                 <button
+                  aria-pressed={domicilioOrigen === opt.value}
                   key={opt.value}
                   type="button"
                   onClick={() => onDomicilioOrigenChange(opt.value)}
                   className={cn(
-                    "flex-1 rounded-md border border-border px-3 py-1.5 text-sm",
+                    "min-h-11 flex-1 rounded-md border border-border px-3 py-2 text-sm",
                     domicilioOrigen === opt.value ? posAccentBorderClass : "hover:bg-muted"
                   )}
                 >

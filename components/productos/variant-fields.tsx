@@ -119,6 +119,7 @@ export function VariantFields({
               <div className="flex gap-2">
                 {TEMPERATURE_CHOICES.map((t) => (
                   <button
+                    aria-pressed={temperature === t}
                     key={t || "ninguna"}
                     type="button"
                     onClick={() => onTemperatureChange(t)}

@@ -14,7 +14,7 @@ export function ClientesReport({ demographics }: { demographics: CustomerDemogra
 
       <Card>
         <CardHeader>
-          <CardTitle>Por edad</CardTitle>
+          <CardTitle as="h3">Por edad</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
           {demographics.byAgeBucket.map((row) => (
@@ -28,7 +28,7 @@ export function ClientesReport({ demographics }: { demographics: CustomerDemogra
 
       <Card>
         <CardHeader>
-          <CardTitle>Por género</CardTitle>
+          <CardTitle as="h3">Por género</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
           {demographics.byGender.map((row) => (

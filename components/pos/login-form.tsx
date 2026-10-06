@@ -8,7 +8,7 @@ export function LoginForm({ error }: { error?: string }) {
   return (
     <Card className="w-full max-w-sm">
       <CardHeader>
-        <CardTitle>Nomada Café — Entrar</CardTitle>
+        <CardTitle as="h1">Nomada Café — Entrar</CardTitle>
       </CardHeader>
       <CardContent>
         <form action={loginWithPin} className="flex flex-col gap-4">
@@ -25,13 +25,13 @@ export function LoginForm({ error }: { error?: string }) {
             />
           </div>
           {error === "pin" && (
-            <p className="text-sm text-destructive">PIN incorrecto. Intenta de nuevo.</p>
+            <p role="alert" className="text-sm text-destructive">PIN incorrecto. Intenta de nuevo.</p>
           )}
           {error === "sesion" && (
-            <p className="text-sm text-destructive">Tu sesión expiró. Vuelve a ingresar tu PIN.</p>
+            <p role="alert" className="text-sm text-destructive">Tu sesión expiró. Vuelve a ingresar tu PIN.</p>
           )}
           {error === "bloqueado" && (
-            <p className="text-sm text-destructive">
+            <p role="alert" className="text-sm text-destructive">
               Demasiados intentos fallidos. Espera 5 minutos antes de volver a intentar.
             </p>
           )}

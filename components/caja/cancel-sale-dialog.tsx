@@ -99,7 +99,7 @@ export function CancelSaleDialog({
               placeholder="PIN de un empleado con permiso"
             />
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           <Button
             variant="destructive"
             onClick={handleConfirm}

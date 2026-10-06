@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Nomada Café POS",
+  title: { default: "Nomada Café POS", template: "%s · Nomada Café" },
   description: "Punto de venta para Nomada Café",
 };
 

@@ -159,7 +159,7 @@ export function ComboFormDialog({
           </label>
         )}
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
         <Button onClick={handleSave} disabled={isPending}>
           {isPending ? "Guardando..." : isEdit ? "Guardar cambios" : "Crear paquete"}

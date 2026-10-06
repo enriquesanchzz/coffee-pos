@@ -1,4 +1,7 @@
+import type { Metadata } from "next";
 import { AdminLoginForm } from "@/components/administracion/admin-login-form";
+
+export const metadata: Metadata = { title: "Acceso a Administración" };
 
 export default async function AdminLoginPage({
   searchParams,

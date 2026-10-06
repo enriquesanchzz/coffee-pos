@@ -56,7 +56,7 @@ export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
         <p className="text-xs text-muted-foreground">POS</p>
       </div>
 
-      <nav className="flex flex-1 flex-col gap-1">
+      <nav aria-label="Módulos" className="flex flex-1 flex-col gap-1">
         {visibleModules.map((mod, index) => {
           const Icon = mod.icon;
           const isActive = pathname === mod.href || pathname?.startsWith(`${mod.href}/`);

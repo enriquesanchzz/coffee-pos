@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { CustomerForm } from "@/components/clientes/customer-form";
+
+export const metadata: Metadata = { title: "Cliente nuevo" };
 
 export default async function NuevoClientePage() {
   const employee = await getCurrentEmployee();

@@ -268,7 +268,7 @@ export function ProductosWorkspace({
               {mainView === "edit-variant" && (
                 <>
                   {isLoadingDetail && <p className="text-sm text-muted-foreground">Cargando…</p>}
-                  {detailError && <p className="text-sm text-destructive">{detailError}</p>}
+                  {detailError && <p role="alert" className="text-sm text-destructive">{detailError}</p>}
                   {editingDetail && !isLoadingDetail && (
                     <EditRecipeForm
                       detail={editingDetail}
@@ -363,7 +363,7 @@ function EditCategoryDialog({
             ))}
           </Select>
         </div>
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <div className="flex gap-2">
           <Button onClick={handleSave} disabled={isPending}>
             {isPending ? "Guardando..." : "Guardar"}

@@ -96,7 +96,7 @@ export function ShiftOpenForm({
               onChange={(e) => setConfirmingPin(e.target.value)}
             />
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           <Button type="submit" disabled={isPending}>
             {isPending ? "Abriendo..." : "Abrir turno"}
           </Button>
