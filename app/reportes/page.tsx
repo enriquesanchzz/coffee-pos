@@ -13,7 +13,8 @@ import {
 import { getProductCategories } from "@/lib/recipes";
 import { getCustomerDemographics } from "@/lib/customers";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
-import { ReportesNav, type ReportesView } from "@/components/reportes/reportes-nav";
+import { SectionLayout, SectionLinksNav } from "@/components/layout/section-nav";
+import { REPORTES_SECTIONS } from "@/lib/navigation";
 import { UtilidadReport } from "@/components/reportes/utilidad-report";
 import { RecetasReport } from "@/components/reportes/recetas-report";
 import { InventarioReport } from "@/components/reportes/inventario-report";
@@ -22,6 +23,8 @@ import { ClientesReport } from "@/components/reportes/clientes-report";
 import type { VariantTemperature } from "@prisma/client";
 
 export const metadata: Metadata = { title: "Reportes" };
+
+type ReportesView = "utilidad" | "recetas" | "inventario" | "estadisticas" | "clientes";
 
 const VALID_VIEWS = new Set<ReportesView>(["utilidad", "recetas", "inventario", "estadisticas", "clientes"]);
 const VALID_TEMPERATURES = new Set(["CALIENTE", "FRIO", "FRAPPE"]);
@@ -66,11 +69,19 @@ export default async function ReportesPage({
   const { from, to, fromStr, toStr, swapped } = resolveDateRange(params.from, params.to);
 
   return (
-    <AuthenticatedShell isAdmin employeeName={employee.name} srTitle="Reportes">
-      <div className="mx-auto flex max-w-4xl flex-col gap-4 p-4 sm:p-6 md:flex-row md:gap-6">
-        <ReportesNav active={requestedView} visible={visible} />
-
-        <div className="min-w-0 flex-1">
+    <AuthenticatedShell isAdmin employeeName={employee.name} contentClassName="overflow-hidden">
+      <SectionLayout
+        title="Reportes"
+        description="Utilidad, costo de recetas, inventario, estadísticas y clientes."
+        nav={
+          <SectionLinksNav
+            label="Reportes"
+            sections={REPORTES_SECTIONS.filter((s) => visible.includes(s.href.split("view=")[1] as ReportesView))}
+            active={`/reportes?view=${requestedView}`}
+          />
+        }
+      >
+        <div className="mx-auto max-w-4xl p-4 sm:p-6">
           {swapped && (
             <p className="mb-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
               La fecha “Desde” era posterior a “Hasta” — se intercambiaron para mostrar el rango.
@@ -94,7 +105,7 @@ export default async function ReportesPage({
 
           {requestedView === "clientes" && <ClientesReport demographics={await getCustomerDemographics()} />}
         </div>
-      </div>
+      </SectionLayout>
     </AuthenticatedShell>
   );
 }

@@ -5,6 +5,7 @@ import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getPhysicalCountDetail } from "@/lib/counts";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
+import { ComprasLayout } from "@/components/compras/compras-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApproveCountForm } from "@/components/compras/approve-count-form";
 import { physicalCountStatusLabels, unitLabels } from "@/components/compras/enum-labels";
@@ -33,10 +34,11 @@ export default async function DetalleConteoPage({
     physicalCountStatusLabels[count.status as keyof typeof physicalCountStatusLabels] ?? count.status;
 
   return (
-    <AuthenticatedShell isAdmin employeeName={employee.name}>
+    <AuthenticatedShell isAdmin employeeName={employee.name} contentClassName="overflow-hidden">
+      <ComprasLayout>
         <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
           <div>
-            <h1 className="text-lg font-semibold">Conteo — {count.performedByName}</h1>
+            <h2 className="text-lg font-semibold">Conteo — {count.performedByName}</h2>
             <p className="text-sm text-muted-foreground">
               {statusLabel} · {formatDateTime(count.startedAt)}
               {count.approvedByName && ` · resuelto por ${count.approvedByName}`}
@@ -69,6 +71,7 @@ export default async function DetalleConteoPage({
 
           {count.status === "PENDIENTE_APROBACION" && <ApproveCountForm physicalCountId={count.id} />}
         </div>
+      </ComprasLayout>
     </AuthenticatedShell>
   );
 }

@@ -91,7 +91,7 @@ export function NewOrderForm({
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
-      {!isEdit && <h1 className="text-lg font-semibold">Nueva orden de compra</h1>}
+      {!isEdit && <h2 className="text-lg font-semibold">Nueva orden de compra</h2>}
 
       <Card>
         <CardHeader>

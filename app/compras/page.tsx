@@ -6,7 +6,8 @@ import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getPurchaseOrders } from "@/lib/purchases";
 import { getInventoryOverview } from "@/lib/inventory";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
-import { ComprasNav, PageHeader } from "@/components/layout/page-header";
+import { ComprasLayout } from "@/components/compras/compras-layout";
+import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
@@ -24,11 +25,10 @@ export default async function ComprasPage() {
   const lowStockItems = inventory.filter((item) => item.isLow);
 
   return (
-    <AuthenticatedShell isAdmin employeeName={employee.name}>
+    <AuthenticatedShell isAdmin employeeName={employee.name} contentClassName="overflow-hidden">
+      <ComprasLayout>
       <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
-        <PageHeader title="Compras" action={{ href: "/compras/nueva", label: "+ Nueva orden" }}>
-          <ComprasNav active="/compras" />
-        </PageHeader>
+        <PageHeader level={2} title="Órdenes de compra" action={{ href: "/compras/nueva", label: "+ Nueva orden" }} />
 
         {lowStockItems.length > 0 && (
           <Card>
@@ -90,6 +90,7 @@ export default async function ComprasPage() {
           </CardContent>
         </Card>
       </div>
+      </ComprasLayout>
     </AuthenticatedShell>
   );
 }

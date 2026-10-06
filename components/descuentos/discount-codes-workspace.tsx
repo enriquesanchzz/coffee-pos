@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { DiscountCodeCard } from "./discount-code-card";
 import { DiscountCodeFormDialog } from "./discount-code-form-dialog";
 import { discountCategoryLabels } from "./enum-labels";
+import { sectionColumnClass, sectionPillClass } from "@/components/layout/section-nav";
 import { matchesSearch } from "@/lib/search";
 
 type StatusFilter = "todos" | DiscountCodeStatus;
@@ -18,13 +19,7 @@ type CategoryFilter = "todas" | DiscountCodeCategory;
 // Filtros en memoria sobre la lista ya cargada (búsqueda + estado +
 // categoría) — no hace falta volver a pegarle al servidor por cada
 // cambio de filtro, mismo criterio que otros workspaces de Administración.
-export function DiscountCodesWorkspace({
-  codes,
-  employeeId,
-}: {
-  codes: DiscountCodeListItem[];
-  employeeId: string;
-}) {
+export function DiscountCodesWorkspace({ codes, employeeId }: { codes: DiscountCodeListItem[]; employeeId: string }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("todos");
@@ -52,72 +47,95 @@ export function DiscountCodesWorkspace({
     setDialogOpen(true);
   }
 
+  const categoryEntries: { value: CategoryFilter; label: string }[] = [
+    { value: "todas", label: "Todas" },
+    ...Object.entries(discountCategoryLabels).map(([value, label]) => ({ value: value as CategoryFilter, label })),
+  ];
+
+  // Mismo esquema que Inventario/Productos/POS: encabezado arriba, columna
+  // de categorías a la izquierda y contenido a la derecha.
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Buscar código…"
-          aria-label="Buscar código"
-          className="max-w-xs"
-        />
-        <Select
-          aria-label="Filtrar por estado"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-          className="w-40"
-        >
-          <option value="todos">Todos</option>
-          <option value="ACTIVO">Activos</option>
-          <option value="USADO">Usados</option>
-          <option value="VENCIDO">Vencidos</option>
-          <option value="INACTIVO">Inactivos</option>
-        </Select>
-        <Select
-          aria-label="Filtrar por categoría"
-          value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value as CategoryFilter)}
-          className="w-48"
-        >
-          <option value="todas">Todas las categorías</option>
-          {Object.entries(discountCategoryLabels).map(([v, label]) => (
-            <option key={v} value={v}>
-              {label}
-            </option>
-          ))}
-        </Select>
-        <Button onClick={openCreate} className="ml-auto">
+    <div className="flex h-full flex-col">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3">
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold">Códigos de descuento</h1>
+          <p className="text-sm text-muted-foreground">Para clientes específicos, campañas o empleados.</p>
+        </div>
+        <Button size="sm" onClick={openCreate}>
           + Nuevo código
         </Button>
       </div>
 
-      {filtered.length === 0 &&
-        (codes.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Aún no hay códigos de descuento. Los cupones de bienvenida se crean solos al registrar un cliente.
-          </p>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Ningún código coincide con los filtros.{" "}
+      <div className="flex min-h-0 flex-1">
+        <nav aria-label="Categorías de código" className={sectionColumnClass}>
+          {categoryEntries.map((entry) => (
             <button
+              key={entry.value}
               type="button"
-              className="underline"
-              onClick={() => {
-                setQuery("");
-                setStatusFilter("todos");
-                setCategoryFilter("todas");
-              }}
+              aria-pressed={categoryFilter === entry.value}
+              onClick={() => setCategoryFilter(entry.value)}
+              className={sectionPillClass(categoryFilter === entry.value)}
             >
-              Limpiar filtros
+              <span className="truncate">{entry.label}</span>
             </button>
-          </p>
-        ))}
+          ))}
+        </nav>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {filtered.map((discountCode) => (
-          <DiscountCodeCard key={discountCode.id} discountCode={discountCode} onSelect={() => openEdit(discountCode)} />
-        ))}
+        <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-2 sm:p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar código…"
+              aria-label="Buscar código"
+              className="max-w-xs rounded-full"
+            />
+            <Select
+              aria-label="Filtrar por estado"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+              className="w-40"
+            >
+              <option value="todos">Todos</option>
+              <option value="ACTIVO">Activos</option>
+              <option value="USADO">Usados</option>
+              <option value="VENCIDO">Vencidos</option>
+              <option value="INACTIVO">Inactivos</option>
+            </Select>
+          </div>
+
+          {filtered.length === 0 &&
+            (codes.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Aún no hay códigos de descuento. Los cupones de bienvenida se crean solos al registrar un cliente.
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Ningún código coincide con los filtros.{" "}
+                <button
+                  type="button"
+                  className="underline"
+                  onClick={() => {
+                    setQuery("");
+                    setStatusFilter("todos");
+                    setCategoryFilter("todas");
+                  }}
+                >
+                  Limpiar filtros
+                </button>
+              </p>
+            ))}
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {filtered.map((discountCode) => (
+              <DiscountCodeCard
+                key={discountCode.id}
+                discountCode={discountCode}
+                onSelect={() => openEdit(discountCode)}
+              />
+            ))}
+          </div>
+        </div>
       </div>
 
       <DiscountCodeFormDialog

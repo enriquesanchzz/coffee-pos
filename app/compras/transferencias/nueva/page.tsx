@@ -6,6 +6,7 @@ import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getStockLocations } from "@/lib/transfers";
 import { getIngredientOptions } from "@/lib/purchases";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
+import { ComprasLayout } from "@/components/compras/compras-layout";
 import { NewTransferForm } from "@/components/compras/new-transfer-form";
 
 export const metadata: Metadata = { title: "Nueva transferencia" };
@@ -24,8 +25,10 @@ export default async function NuevaTransferenciaPage() {
   ]);
 
   return (
-    <AuthenticatedShell isAdmin employeeName={employee.name}>
+    <AuthenticatedShell isAdmin employeeName={employee.name} contentClassName="overflow-hidden">
+      <ComprasLayout>
         <NewTransferForm employeeId={employee.id} stockLocations={stockLocations} ingredients={ingredients} />
+      </ComprasLayout>
     </AuthenticatedShell>
   );
 }

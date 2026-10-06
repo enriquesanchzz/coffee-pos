@@ -6,7 +6,8 @@ import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getPhysicalCounts } from "@/lib/counts";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
-import { ComprasNav, PageHeader } from "@/components/layout/page-header";
+import { ComprasLayout } from "@/components/compras/compras-layout";
+import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { physicalCountStatusLabels } from "@/components/compras/enum-labels";
 import { formatDate } from "@/lib/time";
@@ -26,11 +27,10 @@ export default async function ConteosPage() {
   const counts = await getPhysicalCounts();
 
   return (
-    <AuthenticatedShell isAdmin employeeName={employee.name}>
+    <AuthenticatedShell isAdmin employeeName={employee.name} contentClassName="overflow-hidden">
+      <ComprasLayout>
         <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
-          <PageHeader title="Conteos físicos" action={{ href: "/compras/conteos/nuevo", label: "+ Nuevo conteo" }}>
-            <ComprasNav active="/compras/conteos" />
-          </PageHeader>
+          <PageHeader level={2} title="Conteos físicos" action={{ href: "/compras/conteos/nuevo", label: "+ Nuevo conteo" }} />
 
           <Card>
             <CardHeader>
@@ -60,6 +60,7 @@ export default async function ConteosPage() {
             </CardContent>
           </Card>
         </div>
+      </ComprasLayout>
     </AuthenticatedShell>
   );
 }

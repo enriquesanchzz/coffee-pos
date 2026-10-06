@@ -5,6 +5,7 @@ import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getSupplierDetail, getIngredientOptions } from "@/lib/purchases";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
+import { ComprasLayout } from "@/components/compras/compras-layout";
 import { SupplierForm } from "@/components/compras/supplier-form";
 import { orNotFound } from "@/lib/not-found";
 
@@ -29,8 +30,10 @@ export default async function EditarProveedorPage({
   ]);
 
   return (
-    <AuthenticatedShell isAdmin employeeName={employee.name}>
+    <AuthenticatedShell isAdmin employeeName={employee.name} contentClassName="overflow-hidden">
+      <ComprasLayout>
         <SupplierForm employeeId={employee.id} supplier={supplier} ingredientOptions={ingredientOptions} />
+      </ComprasLayout>
     </AuthenticatedShell>
   );
 }

@@ -6,7 +6,8 @@ import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getTransferManifests } from "@/lib/transfers";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
-import { ComprasNav, PageHeader } from "@/components/layout/page-header";
+import { ComprasLayout } from "@/components/compras/compras-layout";
+import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { transferStatusLabels } from "@/components/compras/enum-labels";
 import { formatDate } from "@/lib/time";
@@ -26,11 +27,10 @@ export default async function TransferenciasPage() {
   const manifests = await getTransferManifests();
 
   return (
-    <AuthenticatedShell isAdmin employeeName={employee.name}>
+    <AuthenticatedShell isAdmin employeeName={employee.name} contentClassName="overflow-hidden">
+      <ComprasLayout>
         <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
-          <PageHeader title="Transferencias" action={{ href: "/compras/transferencias/nueva", label: "+ Nueva transferencia" }}>
-            <ComprasNav active="/compras/transferencias" />
-          </PageHeader>
+          <PageHeader level={2} title="Transferencias" action={{ href: "/compras/transferencias/nueva", label: "+ Nueva transferencia" }} />
 
           <Card>
             <CardHeader>
@@ -62,6 +62,7 @@ export default async function TransferenciasPage() {
             </CardContent>
           </Card>
         </div>
+      </ComprasLayout>
     </AuthenticatedShell>
   );
 }

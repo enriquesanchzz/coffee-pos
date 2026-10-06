@@ -72,9 +72,9 @@ export function SupplierForm({
 
   return (
     <div className="mx-auto flex max-w-xl flex-col gap-4 p-6">
-      <h1 className="text-lg font-semibold">
+      <h2 className="text-lg font-semibold">
         {isEdit ? `Editar — ${supplier!.name}` : "Nuevo proveedor"}
-      </h1>
+      </h2>
 
       <Card>
         <CardHeader>

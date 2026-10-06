@@ -47,7 +47,7 @@ export function PurchaseOrderDetailView({
     <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-lg font-semibold">Orden — {order.supplierName}</h1>
+          <h2 className="text-lg font-semibold">Orden — {order.supplierName}</h2>
           <p className="text-sm text-muted-foreground">
             {statusLabel} · creada {formatDateTime(order.createdAt)}
           </p>

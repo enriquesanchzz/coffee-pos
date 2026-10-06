@@ -6,6 +6,7 @@ import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getActiveSuppliers, getIngredientOptions, getSupplierCostMap } from "@/lib/purchases";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
+import { ComprasLayout } from "@/components/compras/compras-layout";
 import { NewOrderForm } from "@/components/compras/new-order-form";
 
 export const metadata: Metadata = { title: "Nueva orden de compra" };
@@ -25,7 +26,8 @@ export default async function NuevaOrdenPage() {
   ]);
 
   return (
-    <AuthenticatedShell isAdmin employeeName={employee.name}>
+    <AuthenticatedShell isAdmin employeeName={employee.name} contentClassName="overflow-hidden">
+      <ComprasLayout>
         {suppliers.length === 0 ? (
           <div className="mx-auto flex max-w-xl flex-col gap-2 p-6">
             <p className="text-sm text-muted-foreground">
@@ -43,6 +45,7 @@ export default async function NuevaOrdenPage() {
             supplierCostsBySupplier={supplierCostsBySupplier}
           />
         )}
+      </ComprasLayout>
     </AuthenticatedShell>
   );
 }

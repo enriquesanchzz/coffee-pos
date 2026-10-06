@@ -6,7 +6,8 @@ import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getSuppliers } from "@/lib/purchases";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
-import { ComprasNav, PageHeader } from "@/components/layout/page-header";
+import { ComprasLayout } from "@/components/compras/compras-layout";
+import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -25,11 +26,10 @@ export default async function ProveedoresPage() {
   const suppliers = await getSuppliers();
 
   return (
-    <AuthenticatedShell isAdmin employeeName={employee.name}>
+    <AuthenticatedShell isAdmin employeeName={employee.name} contentClassName="overflow-hidden">
+      <ComprasLayout>
         <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
-          <PageHeader title="Proveedores" action={{ href: "/compras/proveedores/nuevo", label: "+ Nuevo proveedor" }}>
-            <ComprasNav active="/compras/proveedores" />
-          </PageHeader>
+          <PageHeader level={2} title="Proveedores" action={{ href: "/compras/proveedores/nuevo", label: "+ Nuevo proveedor" }} />
 
           <Card>
             <CardHeader>
@@ -66,6 +66,7 @@ export default async function ProveedoresPage() {
             </CardContent>
           </Card>
         </div>
+      </ComprasLayout>
     </AuthenticatedShell>
   );
 }

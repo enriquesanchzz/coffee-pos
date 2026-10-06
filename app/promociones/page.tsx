@@ -5,7 +5,6 @@ import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getCombos, getPromotions, getVariantOptions } from "@/lib/promotions";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
-import { PageHeader } from "@/components/layout/page-header";
 import { PromocionesWorkspace } from "@/components/promociones/promociones-workspace";
 
 export const metadata: Metadata = { title: "Promociones" };
@@ -21,15 +20,8 @@ export default async function PromocionesPage() {
   const [combos, promotions, variants] = await Promise.all([getCombos(), getPromotions(), getVariantOptions()]);
 
   return (
-    <AuthenticatedShell isAdmin employeeName={employee.name}>
-      <div className="mx-auto flex max-w-4xl flex-col gap-4 p-6">
-        <PageHeader
-          title="Promociones"
-          description="Paquetes precio reducido, 2x1 y días temáticos — se aplican solos en el POS."
-        />
-
-        <PromocionesWorkspace combos={combos} promotions={promotions} variants={variants} employeeId={employee.id} />
-      </div>
+    <AuthenticatedShell isAdmin employeeName={employee.name} contentClassName="overflow-hidden">
+      <PromocionesWorkspace combos={combos} promotions={promotions} variants={variants} employeeId={employee.id} />
     </AuthenticatedShell>
   );
 }

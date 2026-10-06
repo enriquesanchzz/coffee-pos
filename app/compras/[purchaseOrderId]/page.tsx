@@ -10,6 +10,7 @@ import {
   getSupplierCostMap,
 } from "@/lib/purchases";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
+import { ComprasLayout } from "@/components/compras/compras-layout";
 import { PurchaseOrderDetailView } from "@/components/compras/purchase-order-detail-view";
 import { orNotFound } from "@/lib/not-found";
 
@@ -38,7 +39,8 @@ export default async function DetalleOrdenPage({
   ]);
 
   return (
-    <AuthenticatedShell isAdmin employeeName={employee.name}>
+    <AuthenticatedShell isAdmin employeeName={employee.name} contentClassName="overflow-hidden">
+      <ComprasLayout>
       <PurchaseOrderDetailView
         employeeId={employee.id}
         order={order}
@@ -46,6 +48,7 @@ export default async function DetalleOrdenPage({
         ingredients={ingredients}
         supplierCostsBySupplier={supplierCostsBySupplier}
       />
+      </ComprasLayout>
     </AuthenticatedShell>
   );
 }
