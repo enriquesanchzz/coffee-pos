@@ -6,20 +6,20 @@ import { revalidatePath } from "next/cache";
 import { Permission, PaymentMethod, Prisma, ShiftType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { findEmployeeByPin, getSessionEmployeeId, assertSessionEmployee, SessionExpiredError } from "@/lib/session";
-import { requirePermission } from "@/lib/permissions";
+import { hasPermission } from "@/lib/permissions";
 
 // -----------------------------------------------------------------------
 // Doble confirmación (apertura y cierre): el PIN debe pertenecer a un
-// empleado activo DISTINTO de quien cuenta la caja Y que tenga el permiso
-// correspondiente (CAJA_ABRIR/CAJA_CERRAR) — respeta el criterio
-// documentado en el schema: "preferentemente gerente, pero puede ser
-// cualquier otro empleado si el gerente no está disponible", ahora
-// verificado de verdad contra la matriz de permisos en vez de solo pedir
-// "cualquier empleado distinto".
+// empleado activo DISTINTO de quien cuenta la caja, y al menos uno de los
+// dos debe tener el permiso correspondiente (CAJA_ABRIR/CAJA_CERRAR) —
+// el criterio del schema: "preferentemente gerente, pero puede ser
+// cualquier otro empleado si el gerente no está disponible". Antes se
+// exigía el permiso a quien autoriza, así que una administradora que abría
+// su propio turno con un barista de testigo siempre era rechazada.
 // -----------------------------------------------------------------------
 async function verifyConfirmingEmployee(
   pin: string,
-  excludeEmployeeId: string,
+  cashierId: string,
   branchId: string,
   permission: Permission
 ) {
@@ -27,10 +27,19 @@ async function verifyConfirmingEmployee(
   if (!employee) {
     throw new Error("PIN de confirmación incorrecto.");
   }
-  if (employee.id === excludeEmployeeId) {
+  if (employee.id === cashierId) {
     throw new Error("La confirmación debe ser de un empleado distinto.");
   }
-  await requirePermission(employee.id, branchId, permission);
+  const [cashierCan, confirmerCan] = await Promise.all([
+    hasPermission(cashierId, branchId, permission),
+    hasPermission(employee.id, branchId, permission),
+  ]);
+  if (!cashierCan && !confirmerCan) {
+    const action = permission === "CAJA_ABRIR" ? "abrir" : "cerrar";
+    throw new Error(
+      `Ni tú ni ${employee.name} tienen permiso para ${action} caja. Uno de los dos debe ser gerente o administrador.`
+    );
+  }
   return employee;
 }
 
