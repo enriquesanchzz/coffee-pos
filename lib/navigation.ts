@@ -50,6 +50,12 @@ export const REPORTES_SECTIONS: NavChild[] = [
   { href: "/reportes?view=clientes", label: "Clientes" },
 ];
 
+// Configuración dividida por tipo de ajuste (cada uno su pantalla).
+export const CONFIGURACION_SECTIONS: NavChild[] = [
+  { href: "/configuracion", label: "Costos y precios" },
+  { href: "/configuracion/apariencia", label: "Apariencia" },
+];
+
 export const NAV_MODULES: NavModule[] = [
   { href: "/pos", label: "Punto de Venta", icon: "pos", adminOnly: false },
   { href: "/caja", label: "Caja", icon: "caja", adminOnly: false },
@@ -62,7 +68,14 @@ export const NAV_MODULES: NavModule[] = [
   { href: "/productos", label: "Productos", icon: "productos", adminOnly: true },
   { href: "/inventario", label: "Inventario", icon: "inventario", adminOnly: true },
   { href: "/empleados", label: "Empleados", icon: "empleados", adminOnly: true, needsPassword: true },
-  { href: "/configuracion", label: "Configuración", icon: "configuracion", adminOnly: true, needsPassword: true },
+  {
+    href: "/configuracion",
+    label: "Configuración",
+    icon: "configuracion",
+    adminOnly: true,
+    needsPassword: true,
+    children: CONFIGURACION_SECTIONS,
+  },
 ];
 
 export function visibleModules(isAdmin: boolean) {
