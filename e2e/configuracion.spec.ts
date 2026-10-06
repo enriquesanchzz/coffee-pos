@@ -206,7 +206,7 @@ test.describe.serial("Configuración del sistema", () => {
     await expect(page.locator("#openingCash")).toHaveValue("750");
     await page.fill("#confirmingPin", PIN.luis);
     await page.getByRole("button", { name: "Abrir turno" }).click();
-    await expect(page.getByPlaceholder("Buscar en todo el menú…")).toBeVisible();
+    await expect(page.getByLabel("Buscar en todo el menú")).toBeVisible();
   });
 
   test("Restaurar valores originales de una sección", async ({ page }) => {

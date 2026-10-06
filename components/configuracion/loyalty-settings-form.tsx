@@ -57,7 +57,7 @@ export function LoyaltySettingsForm({ initial }: { initial: BusinessSettings }) 
             type="number"
             min="1"
             step="1"
-            placeholder="Sin vencimiento"
+            placeholder="No vence"
             value={validDays}
             onChange={(e) => setValidDays(e.target.value)}
           />

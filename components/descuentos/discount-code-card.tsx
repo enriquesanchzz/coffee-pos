@@ -23,8 +23,8 @@ export function DiscountCodeCard({
       className="flex min-w-0 cursor-pointer flex-col gap-1 rounded-2xl p-4 transition-shadow hover:shadow-md"
       onClick={onSelect}
     >
-      <div className="flex min-w-0 items-center justify-between gap-2">
-        <p className="min-w-0 truncate font-semibold" title={discountCode.code}>
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <p className="min-w-0 break-all font-semibold" title={discountCode.code}>
           {discountCode.code}
         </p>
         <Badge variant={variant} className="flex-shrink-0 text-[10px]">
@@ -33,7 +33,7 @@ export function DiscountCodeCard({
       </div>
       <p className="text-sm text-muted-foreground">{describeValue(discountCode.type, discountCode.value)}</p>
       {discountCode.customerName && (
-        <p className="truncate text-xs text-muted-foreground">Cupón de: {discountCode.customerName}</p>
+        <p className="break-words text-xs text-muted-foreground">Cupón de: {discountCode.customerName}</p>
       )}
       <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
         <span>{discountCode.category ? discountCategoryLabels[discountCode.category] : "Sin categoría"}</span>

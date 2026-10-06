@@ -28,7 +28,7 @@ export async function loginAdmin(page: Page, email = "ana@nomada.cafe", password
 // Busca un producto en el POS, lo abre y lo agrega con las opciones dadas
 // (nombres de botón exactos del diálogo, ej. ["Grande", "Frío"]).
 export async function addProduct(page: Page, name: string, options: string[] = []) {
-  const search = page.getByPlaceholder("Buscar en todo el menú…");
+  const search = page.getByLabel("Buscar en todo el menú");
   await search.fill(name);
   await page.locator(".aspect-square:visible").filter({ hasText: name }).first().click();
   const dialog = page.getByRole("dialog");

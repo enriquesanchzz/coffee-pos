@@ -48,7 +48,7 @@ export function BusinessForm({ initial }: { initial: BusinessSettings }) {
         <Input
           id="business-address"
           maxLength={200}
-          placeholder="Calle, número, colonia, ciudad"
+          placeholder="Calle y número"
           value={address}
           onChange={(e) => setAddress(e.target.value)}
         />

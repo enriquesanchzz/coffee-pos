@@ -84,7 +84,7 @@ export function PaymentSettingsForm({ initial }: { initial: BusinessSettings }) 
         <Input
           id="cash-bills"
           value={bills}
-          placeholder="20, 50, 100, 200, 500, 1000"
+          placeholder="ej. 50, 100, 200"
           aria-invalid={!billList || undefined}
           onChange={(e) => setBills(e.target.value)}
         />

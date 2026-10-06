@@ -104,7 +104,7 @@ test("venta completa solo con teclado", async ({ page }) => {
   await page.keyboard.press("Enter");
   await expect(page.locator("main#contenido")).toBeFocused();
 
-  await page.getByPlaceholder("Buscar en todo el menú…").focus();
+  await page.getByLabel("Buscar en todo el menú").focus();
   await page.keyboard.type("Latte");
   await page.locator(".aspect-square:visible").filter({ hasText: "Latte" }).first().focus();
   await page.keyboard.press("Enter");

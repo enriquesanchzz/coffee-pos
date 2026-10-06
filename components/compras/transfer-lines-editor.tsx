@@ -42,11 +42,11 @@ export function TransferLinesEditor({
       {lines.map((line) => {
         const ingredient = ingredientById.get(line.ingredientId);
         return (
-          <div key={line.key} className="flex items-center gap-2">
+          <div key={line.key} className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
             <Combobox
-              className="flex-1"
+              className="w-full sm:w-auto sm:flex-1"
               aria-label="Insumo a transferir"
-              placeholder="Busca un insumo…"
+              placeholder="Insumo…"
               value={line.ingredientId || null}
               onChange={(ingredientId) => updateLine(line.key, { ingredientId })}
               options={ingredients.map((i) => ({ value: i.id, label: i.name }))}

@@ -31,7 +31,7 @@ export function SessionBar({
     // en Administración → Apariencia: es un ancla visual constante para
     // identificar quién opera el sistema, no debe cambiar con el tema.
     <footer aria-label="Sesión" className="flex h-12 shrink-0 items-center border-t border-neutral-700 justify-between gap-2 bg-neutral-900 px-3 text-neutral-50 sm:px-4">
-      <p className="min-w-0 truncate text-sm">
+      <p className="min-w-0 truncate text-sm" title={employeeName}>
         <span className="hidden sm:inline">Atendiendo: </span>
         <span className="font-semibold">{employeeName}</span>
       </p>
