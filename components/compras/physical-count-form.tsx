@@ -47,7 +47,7 @@ export function PhysicalCountForm({
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
-      <h1 className="text-lg font-semibold">Nuevo conteo físico</h1>
+      <h2 className="text-lg font-semibold">Nuevo conteo físico</h2>
       <p className="text-sm text-muted-foreground">
         Captura la cantidad real de cada ingrediente. Lo que cambies contra el stock teórico se
         aplicará solo si un segundo empleado aprueba el conteo.

@@ -5,6 +5,7 @@ import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getIngredientsWithTheoreticalStock } from "@/lib/counts";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
+import { ComprasLayout } from "@/components/compras/compras-layout";
 import { PhysicalCountForm } from "@/components/compras/physical-count-form";
 
 export const metadata: Metadata = { title: "Nuevo conteo físico" };
@@ -20,8 +21,10 @@ export default async function NuevoConteoPage() {
   const ingredients = await getIngredientsWithTheoreticalStock();
 
   return (
-    <AuthenticatedShell isAdmin employeeName={employee.name}>
+    <AuthenticatedShell isAdmin employeeName={employee.name} contentClassName="overflow-hidden">
+      <ComprasLayout>
         <PhysicalCountForm employeeId={employee.id} ingredients={ingredients} />
+      </ComprasLayout>
     </AuthenticatedShell>
   );
 }

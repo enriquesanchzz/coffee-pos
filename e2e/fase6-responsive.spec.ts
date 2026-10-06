@@ -53,12 +53,37 @@ test.describe("Textos y validaciones", () => {
     await expect(page.getByText(/Ya existe un cliente con ese teléfono/)).toBeVisible();
   });
 
-  test("Compras usa sub-navegación con la sección activa", async ({ page }) => {
+  test("Compras y Reportes usan la columna de secciones del POS", async ({ page }) => {
     await loginAdmin(page);
     await page.goto("/compras/proveedores");
     const nav = page.getByRole("navigation", { name: "Secciones de Compras" });
     await expect(nav.getByRole("link", { name: "Proveedores" })).toHaveAttribute("aria-current", "page");
     await nav.getByRole("link", { name: "Conteos físicos" }).click();
-    await expect(page.getByRole("heading", { level: 1, name: "Conteos físicos" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Conteos físicos" })).toBeVisible();
+
+    // Las pantallas internas dejan marcada su sección.
+    await page.goto("/compras/nueva");
+    await expect(nav.getByRole("link", { name: "Órdenes", exact: true })).toHaveAttribute("aria-current", "page");
+    await page.goto("/compras/conteos/nuevo");
+    await expect(nav.getByRole("link", { name: "Conteos físicos" })).toHaveAttribute("aria-current", "page");
+
+    await page.goto("/reportes");
+    const reportes = page.getByRole("navigation", { name: "Reportes" });
+    await expect(reportes.getByRole("link", { name: "Utilidad" })).toHaveAttribute("aria-current", "page");
+    await reportes.getByRole("link", { name: "Estadísticas" }).click();
+    await expect(reportes.getByRole("link", { name: "Estadísticas" })).toHaveAttribute("aria-current", "page");
+  });
+
+  test("Promociones y Descuentos filtran por categoría desde la columna", async ({ page }) => {
+    await loginAdmin(page);
+    await page.goto("/promociones");
+    const promo = page.getByRole("navigation", { name: "Categorías de promoción" });
+    await expect(promo.getByRole("button", { name: "Todas" })).toHaveAttribute("aria-pressed", "true");
+    await promo.getByRole("button", { name: "2x1" }).click();
+    await expect(promo.getByRole("button", { name: "2x1" })).toHaveAttribute("aria-pressed", "true");
+
+    await page.goto("/descuentos");
+    const desc = page.getByRole("navigation", { name: "Categorías de código" });
+    await expect(desc.getByRole("button", { name: "Todas" })).toHaveAttribute("aria-pressed", "true");
   });
 });

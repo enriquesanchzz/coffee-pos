@@ -4,6 +4,7 @@ import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
+import { ComprasLayout } from "@/components/compras/compras-layout";
 import { SupplierForm } from "@/components/compras/supplier-form";
 
 export const metadata: Metadata = { title: "Proveedor nuevo" };
@@ -17,8 +18,10 @@ export default async function NuevoProveedorPage() {
   }
 
   return (
-    <AuthenticatedShell isAdmin employeeName={employee.name}>
+    <AuthenticatedShell isAdmin employeeName={employee.name} contentClassName="overflow-hidden">
+      <ComprasLayout>
         <SupplierForm employeeId={employee.id} ingredientOptions={[]} />
+      </ComprasLayout>
     </AuthenticatedShell>
   );
 }

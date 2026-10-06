@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { Sidebar } from "./sidebar";
 import { SessionBar } from "./session-bar";
 import { cn } from "@/lib/utils";
@@ -32,13 +33,18 @@ export function AuthenticatedShell({
         Saltar al contenido
       </a>
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar isAdmin={isAdmin} />
+        {/* Sidebar y SessionBar leen ?view= (useSearchParams). */}
+        <Suspense>
+          <Sidebar isAdmin={isAdmin} />
+        </Suspense>
         <main id="contenido" tabIndex={-1} className={cn("min-w-0 flex-1 focus:outline-none", contentClassName ?? "overflow-y-auto")}>
           {srTitle && <h1 className="sr-only">{srTitle}</h1>}
           {children}
         </main>
       </div>
-      <SessionBar employeeName={employeeName} isAdmin={isAdmin} />
+      <Suspense>
+        <SessionBar employeeName={employeeName} isAdmin={isAdmin} />
+      </Suspense>
     </div>
   );
 }

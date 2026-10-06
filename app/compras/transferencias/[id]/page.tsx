@@ -5,6 +5,7 @@ import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getTransferManifestDetail } from "@/lib/transfers";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
+import { ComprasLayout } from "@/components/compras/compras-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TransferStatusActions } from "@/components/compras/transfer-status-actions";
 import { ReceiveTransferForm } from "@/components/compras/receive-transfer-form";
@@ -34,12 +35,13 @@ export default async function DetalleTransferenciaPage({
     transferStatusLabels[manifest.status as keyof typeof transferStatusLabels] ?? manifest.status;
 
   return (
-    <AuthenticatedShell isAdmin employeeName={employee.name}>
+    <AuthenticatedShell isAdmin employeeName={employee.name} contentClassName="overflow-hidden">
+      <ComprasLayout>
         <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
           <div>
-            <h1 className="text-lg font-semibold">
+            <h2 className="text-lg font-semibold">
               {manifest.fromName} → {manifest.toName}
-            </h1>
+            </h2>
             <p className="text-sm text-muted-foreground">
               {statusLabel} · iniciada por {manifest.initiatedByName} ·{" "}
               {formatDateTime(manifest.sentAt)}
@@ -80,6 +82,7 @@ export default async function DetalleTransferenciaPage({
             <ReceiveTransferForm employeeId={employee.id} manifest={manifest} />
           )}
         </div>
+      </ComprasLayout>
     </AuthenticatedShell>
   );
 }

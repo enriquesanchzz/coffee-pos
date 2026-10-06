@@ -16,9 +16,11 @@ import {
   Tag,
   Percent,
   Lock,
+  type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { NAV_MODULES, type NavIconName } from "@/lib/navigation";
 
 // Los 6 módulos definidos en el ADR / roadmap (ver docs/roadmap.md), más
 // "Clientes" agregado en Fase 4 (no estaba en el ADR original de 6).
@@ -27,20 +29,26 @@ import { Badge } from "@/components/ui/badge";
 // adminOnly: solo visibles para el rol ADMINISTRADOR — ver
 // lib/session.ts resolveRoleName() y "cambios de administración" en
 // docs/CONTINUE.md.
-const modules = [
-  { href: "/pos", label: "Punto de Venta", icon: ShoppingCart, enabled: true, adminOnly: false },
-  { href: "/caja", label: "Caja", icon: Wallet, enabled: true, adminOnly: false },
-  { href: "/administracion", label: "Administración", icon: LayoutDashboard, enabled: true, adminOnly: true, needsPassword: true },
-  { href: "/clientes", label: "Clientes", icon: Users, enabled: true, adminOnly: true },
-  { href: "/descuentos", label: "Códigos de descuento", icon: Tag, enabled: true, adminOnly: true },
-  { href: "/promociones", label: "Promociones", icon: Percent, enabled: true, adminOnly: true },
-  { href: "/reportes", label: "Reportes", icon: BarChart3, enabled: true, adminOnly: true },
-  { href: "/compras", label: "Compras", icon: Truck, enabled: true, adminOnly: true },
-  { href: "/productos", label: "Productos", icon: BookOpen, enabled: true, adminOnly: true },
-  { href: "/inventario", label: "Inventario", icon: Package, enabled: true, adminOnly: true },
-  { href: "/empleados", label: "Empleados", icon: UserCog, enabled: true, adminOnly: true, needsPassword: true },
-  { href: "/configuracion", label: "Configuración", icon: Settings, enabled: true, adminOnly: true, needsPassword: true },
-];
+const ICONS: Record<NavIconName, LucideIcon> = {
+  pos: ShoppingCart,
+  caja: Wallet,
+  administracion: LayoutDashboard,
+  clientes: Users,
+  descuentos: Tag,
+  promociones: Percent,
+  reportes: BarChart3,
+  compras: Truck,
+  productos: BookOpen,
+  inventario: Package,
+  empleados: UserCog,
+  configuracion: Settings,
+};
+
+// Lista única en lib/navigation.ts (también la usa el selector de zona de
+// SessionBar). Las sub-secciones de Compras/Reportes no se repiten aquí:
+// viven en la columna izquierda de cada módulo, igual que las categorías
+// del POS.
+const modules = NAV_MODULES.map((mod) => ({ ...mod, icon: ICONS[mod.icon], enabled: true }));
 
 export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
   const pathname = usePathname();
@@ -83,7 +91,7 @@ export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
                   <Icon className="h-4 w-4" />
                   {mod.label}
                 </span>
-                {"needsPassword" in mod && mod.needsPassword && (
+                {mod.needsPassword && (
                   <Lock className="h-3.5 w-3.5 opacity-60" aria-label="Pide email y password" />
                 )}
                 {!mod.enabled && (

@@ -65,7 +65,7 @@ export function NewTransferForm({
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
-      <h1 className="text-lg font-semibold">Nueva transferencia</h1>
+      <h2 className="text-lg font-semibold">Nueva transferencia</h2>
 
       <Card>
         <CardHeader>

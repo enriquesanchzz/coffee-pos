@@ -10,6 +10,7 @@ import { PromoCard, type PromoCardItem } from "./promo-card";
 import { ComboFormDialog } from "./combo-form-dialog";
 import { PromotionFormDialog } from "./promotion-form-dialog";
 import { matchesSearch } from "@/lib/search";
+import { sectionColumnClass, sectionPillClass } from "@/components/layout/section-nav";
 
 type StatusFilter = "todos" | "activo" | "inactivo";
 type CategoryFilter = "todas" | "PAQUETE" | "DOS_POR_UNO" | "DIA_TEMATICO";
@@ -53,7 +54,7 @@ export function PromocionesWorkspace({
       ...combos.map((combo): PromoCardItem => ({ kind: "combo", combo })),
       ...promotions.map((promotion): PromoCardItem => ({ kind: "promotion", promotion })),
     ],
-    [combos, promotions]
+    [combos, promotions],
   );
 
   const filtered = useMemo(() => {
@@ -93,64 +94,110 @@ export function PromocionesWorkspace({
     setPromotionDialogOpen(true);
   }
 
+  const categoryEntries: { value: CategoryFilter; label: string }[] = [
+    { value: "todas", label: "Todas" },
+    // Etiqueta corta en la columna; la tarjeta conserva la larga.
+    ...Object.entries(CATEGORY_LABELS).map(([value, label]) => ({
+      value: value as CategoryFilter,
+      label: value === "PAQUETE" ? "Paquetes" : label,
+    })),
+  ];
+
+  // Mismo esquema que Inventario/Productos/POS: encabezado arriba, columna
+  // de categorías a la izquierda y contenido a la derecha.
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar promoción…" aria-label="Buscar promoción" className="max-w-xs" />
-        <Select aria-label="Filtrar por estado" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as StatusFilter)} className="w-40">
-          <option value="todos">Todos</option>
-          <option value="activo">Activos</option>
-          <option value="inactivo">Inactivos</option>
-        </Select>
-        <Select aria-label="Filtrar por categoría" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value as CategoryFilter)} className="w-56">
-          <option value="todas">Todas las categorías</option>
-          {Object.entries(CATEGORY_LABELS).map(([v, label]) => (
-            <option key={v} value={v}>
-              {label}
-            </option>
-          ))}
-        </Select>
-        <div className="ml-auto flex gap-2">
-          <Button variant="outline" onClick={openNewCombo}>
+    <div className="flex h-full flex-col">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3">
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold">Promociones</h1>
+          <p className="text-sm text-muted-foreground">
+            Paquetes precio reducido, 2x1 y días temáticos — se aplican solos en el POS.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={openNewCombo}>
             + Paquete
           </Button>
-          <Button variant="outline" onClick={() => openNewPromotion("DOS_POR_UNO")}>
+          <Button variant="outline" size="sm" onClick={() => openNewPromotion("DOS_POR_UNO")}>
             + 2x1
           </Button>
-          <Button variant="outline" onClick={() => openNewPromotion("DIA_TEMATICO")}>
+          <Button variant="outline" size="sm" onClick={() => openNewPromotion("DIA_TEMATICO")}>
             + Día temático
           </Button>
         </div>
       </div>
 
-      {/* Empty state: distinguir "no hay ninguna" de "los filtros no
-          encuentran nada" (mejora D6). */}
-      {filtered.length === 0 &&
-        (items.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Aún no hay promociones. Crea un paquete, un 2x1 o un día temático con los botones de arriba; se aplican solas en el POS.
-          </p>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Ninguna promoción coincide con los filtros.{" "}
+      <div className="flex min-h-0 flex-1">
+        <nav aria-label="Categorías de promoción" className={sectionColumnClass}>
+          {categoryEntries.map((entry) => (
             <button
+              key={entry.value}
               type="button"
-              className="underline"
-              onClick={() => {
-                setQuery("");
-                setStatusFilter("todos");
-                setCategoryFilter("todas");
-              }}
+              aria-pressed={categoryFilter === entry.value}
+              onClick={() => setCategoryFilter(entry.value)}
+              className={sectionPillClass(categoryFilter === entry.value)}
             >
-              Limpiar filtros
+              <span className="truncate">{entry.label}</span>
             </button>
-          </p>
-        ))}
+          ))}
+        </nav>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {filtered.map((item) => (
-          <PromoCard key={item.kind === "combo" ? `combo-${item.combo.id}` : `promo-${item.promotion.id}`} item={item} onSelect={() => openItem(item)} />
-        ))}
+        <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-2 sm:p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar promoción…"
+              aria-label="Buscar promoción"
+              className="max-w-xs rounded-full"
+            />
+            <Select
+              aria-label="Filtrar por estado"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+              className="w-40"
+            >
+              <option value="todos">Todos</option>
+              <option value="activo">Activos</option>
+              <option value="inactivo">Inactivos</option>
+            </Select>
+          </div>
+
+          {/* Empty state: distinguir "no hay ninguna" de "los filtros no
+          encuentran nada" (mejora D6). */}
+          {filtered.length === 0 &&
+            (items.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Aún no hay promociones. Crea un paquete, un 2x1 o un día temático con los botones de arriba; se aplican
+                solas en el POS.
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Ninguna promoción coincide con los filtros.{" "}
+                <button
+                  type="button"
+                  className="underline"
+                  onClick={() => {
+                    setQuery("");
+                    setStatusFilter("todos");
+                    setCategoryFilter("todas");
+                  }}
+                >
+                  Limpiar filtros
+                </button>
+              </p>
+            ))}
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {filtered.map((item) => (
+              <PromoCard
+                key={item.kind === "combo" ? `combo-${item.combo.id}` : `promo-${item.promotion.id}`}
+                item={item}
+                onSelect={() => openItem(item)}
+              />
+            ))}
+          </div>
+        </div>
       </div>
 
       <ComboFormDialog
