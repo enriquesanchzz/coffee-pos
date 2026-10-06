@@ -29,6 +29,61 @@ Claude Code) pueda retomarlo sin arqueología.
 | **Tarjeta de lealtad pública + cupón de bienvenida** (`/lealtad/[code]`, QR, cupón de 10% de un solo uso, link de WhatsApp) | ✅ Construido (rama `tarjeta-lealtad-publica`). Envío real por WhatsApp API y pases nativos de Apple/Google Wallet **no** incluidos — requieren cuentas de terceros que el negocio no tiene. Ver sección dedicada abajo. |
 | Multi-sucursal en UI (Fase 5) | ⚪ No construido. `DEFAULT_BRANCH_ID` fijo en `lib/constants.ts`. |
 
+## Auditoría QA/UX/A11y y plan de acción (octubre 2026, fases 0–6)
+
+Segunda ronda: auditoría senior (tickets QA-001..030, A11Y-01..09, mejoras D/E)
+y su plan de acción, implementados en la rama `claude/cool-maxwell-gud92q`.
+
+**Decisiones de negocio tomadas (D1–D6):**
+
+- **D1 Stock insuficiente**: se advierte y solo se vende con confirmación
+  explícita ("Vender de todos modos"); el inventario puede quedar negativo y
+  se marca en Inventario/Dashboard (`findShortages`/`allowShortage` en
+  `actions/pos.ts`, `lib/stock.ts`).
+- **D2 Celular soportado para cobrar**: en `< md` la cuenta es una hoja
+  inferior con barra fija "Ver cuenta" y "Confirmar venta" fijo al fondo.
+- **D3 Promociones por horario y día**: los horarios pueden cruzar la
+  medianoche (la parte de madrugada cuenta como el día anterior).
+- **D4 Acceso**: todo usa PIN salvo Administración, Empleados y
+  Configuración (candado en el menú; login con email/password y enlace de
+  regreso al POS).
+- **D5 Recuperar password**: lo restablece otro administrador en Empleados
+  (texto en el login). No hay recuperación por email.
+- **D6 Compras por presentación**: `Ingredient.purchasePresentationName/Size`
+  y `PurchaseOrderItem.presentationName/unitsPerPresentation`; se pide y se
+  muestra en la presentación (ej. "2 L") y se recibe al inventario en la
+  unidad base (`lib/units.ts`, `toBaseOrderLine` en `actions/purchases.ts`).
+
+**Convenciones nuevas:**
+
+- **E2E**: `npm run build && npm run test:e2e` (Playwright + axe, base
+  `nomada_pos_test`, puerto 3100; `PW_CHROMIUM_PATH` si el Chromium no es el
+  de Playwright). Cada fase tiene su spec en `e2e/`; `a11y.spec.ts` exige
+  cero violaciones axe críticas/serias, un h1 por pantalla y venta solo con
+  teclado.
+- **Sesión**: `assertSessionEmployee(employeeId)` y `SessionExpiredError`
+  (`lib/session.ts`) — una acción con sesión vencida redirige al login con
+  `?error=sesion`.
+- **Idempotencia**: `Sale.clientRequestId` (único); reintentar un cobro sin
+  respuesta no duplica la venta.
+- **Carrito persistente** en `sessionStorage` por empleado
+  (`cart-store.ts`, `CART_STORAGE_KEY`), se limpia al cambiar de empleado.
+- **Búsqueda**: `matchesSearch` (`lib/search.ts`) ignora acentos y
+  mayúsculas; úsala en cualquier buscador nuevo.
+- **Selectores largos**: `components/ui/combobox.tsx` (ARIA 1.2) en vez de
+  `<select>` con muchas opciones.
+- **Validación**: `lib/validation.ts` (teléfono MX, email, montos, URLs
+  https); emails guardados en minúsculas.
+- **UI**: `PageHeader`/`ComprasNav` (`components/layout/page-header.tsx`),
+  `Alert` (`components/ui/alert.tsx`), `ConfirmDialog`; `CardTitle` es h2
+  por defecto (`as` para cambiarlo); botones-selector con `aria-pressed`;
+  títulos de pestaña con `export const metadata = { title }` por página.
+- **Duplicados**: `UNIQUE_MESSAGES` en `lib/safe-action.ts` traduce P2002
+  por modelo/campo; agrega ahí cualquier `@unique` nuevo.
+
+Migraciones nuevas: `20261006010000_sale_client_request_id`,
+`20261006020000_purchase_presentation`, `20261006030000_lowercase_emails`.
+
 ## Correcciones del QA de octubre 2026
 
 Un QA completo contra el build de producción (`npm run build && npm start`)

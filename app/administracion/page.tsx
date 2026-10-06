@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requirePasswordSession, resolveRoleName } from "@/lib/session";
@@ -10,6 +11,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 import { formatTime, zonedDateKey, zonedEndOfDay, zonedStartOfDay } from "@/lib/time";
+
+export const metadata: Metadata = { title: "Administración" };
 
 // Accesos rápidos — Empleados y Configuración ya viven en sus propias
 // rutas (ver Sidebar); Descuentos/Promociones se agregan aquí cuando
@@ -102,7 +105,7 @@ export default async function AdministracionPage() {
               <p className="text-xs text-muted-foreground">
                 {lowStockItems.length === 0
                   ? "Todo el inventario está en orden."
-                  : "insumo" + (lowStockItems.length === 1 ? "" : "s") + " por debajo del mínimo"}
+                  : "insumo" + (lowStockItems.length === 1 ? "" : "s") + " sin stock o por debajo del mínimo"}
               </p>
             </CardContent>
           </Card>

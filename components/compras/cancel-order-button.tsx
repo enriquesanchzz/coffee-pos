@@ -45,7 +45,7 @@ export function CancelOrderButton({
           Cancelar orden
         </Button>
       )}
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
     </div>
   );
 }

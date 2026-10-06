@@ -144,6 +144,11 @@ export function PromotionFormDialog({
             <Input id="promotion-end" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
           </div>
         </div>
+        <p className="-mt-2 text-xs text-muted-foreground">
+          {startTime && endTime && startTime > endTime
+            ? `Cruza la medianoche: aplica de ${startTime} a ${endTime} del día siguiente.`
+            : "Sin horario = todo el día. Si «Hasta» es menor que «Desde», cruza la medianoche."}
+        </p>
 
         {category === "DIA_TEMATICO" && (
           <div className="flex gap-4">
@@ -182,7 +187,7 @@ export function PromotionFormDialog({
           </label>
         )}
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
         <Button onClick={handleSave} disabled={isPending}>
           {isPending ? "Guardando..." : isEdit ? "Guardar cambios" : "Crear promoción"}

@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentEmployee } from "@/lib/session";
 import { LoginForm } from "@/components/pos/login-form";
+
+export const metadata: Metadata = { title: "Iniciar sesión" };
 
 export default async function HomePage({
   searchParams,

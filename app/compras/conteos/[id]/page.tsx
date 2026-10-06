@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
@@ -9,6 +10,8 @@ import { ApproveCountForm } from "@/components/compras/approve-count-form";
 import { physicalCountStatusLabels, unitLabels } from "@/components/compras/enum-labels";
 import { formatDateTime } from "@/lib/time";
 import { orNotFound } from "@/lib/not-found";
+
+export const metadata: Metadata = { title: "Conteo físico" };
 
 export default async function DetalleConteoPage({
   params,

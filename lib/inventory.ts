@@ -23,6 +23,9 @@ export type InventoryOverviewItem = {
   // estándar (o baseUnit) — ver Ingredient.extraUnitPrice.
   extraUnitPrice: number | null;
   extraPriceUnit: string;
+  // Presentación de compra explícita (ej. "Caja 12 L" = 12000 ml).
+  purchasePresentationName: string | null;
+  purchasePresentationSize: number | null;
   quantity: number;
   reorderThreshold: number | null;
   isLow: boolean;
@@ -59,9 +62,14 @@ export async function getInventoryOverview(
       tracksExpiration: ingredient.tracksExpiration,
       extraUnitPrice: ingredient.extraUnitPrice?.toNumber() ?? null,
       extraPriceUnit: ingredient.standardDoseUnit ?? ingredient.baseUnit,
+      purchasePresentationName: ingredient.purchasePresentationName,
+      purchasePresentationSize: ingredient.purchasePresentationSize?.toNumber() ?? null,
       quantity,
       reorderThreshold,
-      isLow: reorderThreshold !== null && quantity <= reorderThreshold,
+      // Sin stock (o en negativo, posible si se vendió confirmando la
+      // advertencia de insumos insuficientes) siempre cuenta como alerta,
+      // aunque no haya ReorderPoint configurado (QA-003).
+      isLow: quantity <= 0 || (reorderThreshold !== null && quantity <= reorderThreshold),
     };
   });
 }

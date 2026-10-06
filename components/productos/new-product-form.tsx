@@ -105,7 +105,9 @@ export function NewProductForm({
   const [productType, setProductType] = useState<ProductType>("RECETA");
   const [productName, setProductName] = useState("");
   const [imageUrl, setImageUrl] = useState("");
-  const [categoryId, setCategoryId] = useState(categories[0]?.id ?? NEW_CATEGORY_VALUE);
+  // Sin preselección: antes quedaba en la primera categoría ("Bagels") y
+  // un producto nuevo podía terminar ahí sin que nadie lo eligiera (QA-009).
+  const [categoryId, setCategoryId] = useState(categories.length > 0 ? "" : NEW_CATEGORY_VALUE);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryIcon, setNewCategoryIcon] = useState<string | null>(null);
   const [variants, setVariants] = useState<VariantDraft[]>([initialVariant()]);
@@ -130,6 +132,10 @@ export function NewProductForm({
 
     if (!productName.trim()) {
       setError("Captura el nombre del producto.");
+      return;
+    }
+    if (!categoryId) {
+      setError("Elige una categoría.");
       return;
     }
 
@@ -187,6 +193,7 @@ export function NewProductForm({
                 ]
               ).map((opt) => (
                 <button
+                  aria-pressed={productType === opt.value}
                   key={opt.value}
                   type="button"
                   onClick={() => setProductType(opt.value)}
@@ -228,6 +235,9 @@ export function NewProductForm({
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
             >
+              <option value="" disabled>
+                Elige una categoría…
+              </option>
               {standaloneCategories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -321,7 +331,7 @@ export function NewProductForm({
         + Agregar variante
       </Button>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
       <Button onClick={handleSubmit} disabled={isPending}>
         {isPending ? "Guardando..." : "Crear producto"}

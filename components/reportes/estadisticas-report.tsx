@@ -56,7 +56,7 @@ export function EstadisticasReport({
 
       <Card>
         <CardHeader>
-          <CardTitle>Productos más vendidos</CardTitle>
+          <CardTitle as="h3">Productos más vendidos</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
           {report.topProducts.length === 0 && <p className="text-sm text-muted-foreground">No hay ventas en este periodo.</p>}
@@ -75,7 +75,7 @@ export function EstadisticasReport({
 
       <Card>
         <CardHeader>
-          <CardTitle>Ventas por día</CardTitle>
+          <CardTitle as="h3">Ventas por día</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
           {report.dailySales.length === 0 && <p className="text-sm text-muted-foreground">No hay ventas en este periodo.</p>}
@@ -92,7 +92,7 @@ export function EstadisticasReport({
 
       <Card>
         <CardHeader>
-          <CardTitle>Ventas por hora del día</CardTitle>
+          <CardTitle as="h3">Ventas por hora del día</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
           {report.hourlySales.length === 0 && <p className="text-sm text-muted-foreground">No hay ventas en este periodo.</p>}
@@ -109,7 +109,7 @@ export function EstadisticasReport({
 
       <Card>
         <CardHeader>
-          <CardTitle>Ventas por canal</CardTitle>
+          <CardTitle as="h3">Ventas por canal</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
           {report.channelSales.length === 0 && <p className="text-sm text-muted-foreground">No hay ventas en este periodo.</p>}
@@ -126,7 +126,7 @@ export function EstadisticasReport({
 
       <Card>
         <CardHeader>
-          <CardTitle>Detalle de ventas</CardTitle>
+          <CardTitle as="h3">Detalle de ventas</CardTitle>
         </CardHeader>
         <CardContent className="flex max-h-96 flex-col gap-2 overflow-y-auto">
           {report.sales.length === 0 && <p className="text-sm text-muted-foreground">No hay ventas en este periodo.</p>}

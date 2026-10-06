@@ -32,7 +32,7 @@ export function InventarioReport({
 
       <Card>
         <CardHeader>
-          <CardTitle>Valor de stock actual — {formatCurrency(report.totalValue)}</CardTitle>
+          <CardTitle as="h3">Valor de stock actual — {formatCurrency(report.totalValue)}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
           {report.items.map((item) => (
@@ -49,7 +49,7 @@ export function InventarioReport({
 
       <Card>
         <CardHeader>
-          <CardTitle>Movimientos del periodo</CardTitle>
+          <CardTitle as="h3">Movimientos del periodo</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
           {report.movementSummary.length === 0 && (

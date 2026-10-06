@@ -69,6 +69,7 @@ export function ModifierOptionsEditor({
           <div key={row.key} className="flex items-center gap-2">
             <Select
               className="flex-1"
+              aria-label="Ingrediente del extra"
               value={row.ingredientId}
               onChange={(e) => {
                 const ingredientId = e.target.value;
@@ -94,6 +95,7 @@ export function ModifierOptionsEditor({
               min="0"
               step={unitStep(ingredient ? ingredient.standardDoseUnit ?? ingredient.baseUnit : undefined)}
               className="w-20"
+              aria-label="Cantidad del extra"
               value={row.quantity}
               onChange={(e) => updateRow(row.key, { quantity: e.target.value })}
             />
@@ -110,6 +112,7 @@ export function ModifierOptionsEditor({
               step="0.01"
               className="w-24"
               placeholder="Precio"
+              aria-label="Precio extra"
               value={row.priceDelta}
               onChange={(e) => updateRow(row.key, { priceDelta: e.target.value })}
             />

@@ -10,6 +10,7 @@ import { Select } from "@/components/ui/select";
 import { createPurchaseOrder as createPurchaseOrderAction, updatePurchaseOrder as updatePurchaseOrderAction } from "@/actions/purchases";
 import { OrderLinesEditor, initialOrderLine, type OrderLineDraft } from "./order-lines-editor";
 import { withActionErrors } from "@/lib/action-result";
+import { roundQty } from "@/lib/units";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const createPurchaseOrder = withActionErrors(createPurchaseOrderAction);
@@ -37,14 +38,19 @@ export function NewOrderForm({
   const router = useRouter();
   const isEdit = Boolean(existingOrder);
   const [supplierId, setSupplierId] = useState(existingOrder?.supplierId ?? suppliers[0]?.id ?? "");
+  // Las líneas se capturan en la presentación de compra del insumo (ver
+  // lib/units.ts); al editar, lo guardado en baseUnit se convierte de vuelta.
   const [lines, setLines] = useState<OrderLineDraft[]>(
     existingOrder
-      ? existingOrder.items.map((item) => ({
-          key: item.id,
-          ingredientId: item.ingredientId,
-          quantity: String(item.orderedQuantity),
-          estimatedUnitCost: String(item.estimatedUnitCost),
-        }))
+      ? existingOrder.items.map((item) => {
+          const size = ingredients.find((i) => i.id === item.ingredientId)?.presentation?.size ?? 1;
+          return {
+            key: item.id,
+            ingredientId: item.ingredientId,
+            quantity: String(roundQty(item.orderedQuantity / size)),
+            estimatedUnitCost: String(roundQty(item.estimatedUnitCost * size)),
+          };
+        })
       : [initialOrderLine()]
   );
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +98,7 @@ export function NewOrderForm({
           <CardTitle>Proveedor</CardTitle>
         </CardHeader>
         <CardContent>
-          <Select value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+          <Select aria-label="Proveedor" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
             {suppliers.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
@@ -116,7 +122,7 @@ export function NewOrderForm({
         </CardContent>
       </Card>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
       <Button onClick={handleSubmit} disabled={isPending || !supplierId}>
         {isPending ? "Guardando..." : isEdit ? "Guardar cambios" : "Crear orden"}

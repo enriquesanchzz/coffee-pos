@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requirePasswordSession, resolveRoleName } from "@/lib/session";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
@@ -7,6 +8,8 @@ import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SettingsForm } from "@/components/configuracion/settings-form";
 import { AppearanceForm } from "@/components/configuracion/appearance-form";
+
+export const metadata: Metadata = { title: "Configuración" };
 
 // Configuración del sistema — separada de Administración (ahora un
 // dashboard) para que tenga su propia sección de menú, con espacio para

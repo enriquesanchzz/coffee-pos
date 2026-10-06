@@ -166,7 +166,9 @@ export async function getRecipeOverview(): Promise<RecipeOverviewProduct[]> {
     include: {
       category: { include: { parent: true } },
       variants: {
-        orderBy: { name: "asc" },
+        // Por tamaño real y luego temperatura (antes alfabético: Chico,
+        // Grande, Mediano — QA-026).
+        orderBy: [{ sizeOz: { sort: "asc", nulls: "last" } }, { price: "asc" }, { temperature: "asc" }],
         include: {
           recipes: {
             where: { kind: "PRODUCTO_VENDIBLE" },

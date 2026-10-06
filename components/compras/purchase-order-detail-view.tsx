@@ -5,6 +5,7 @@ import type { PurchaseOrderDetail, ActiveSupplierOption, IngredientOption } from
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatUnitCost } from "@/lib/utils";
+import { roundQty } from "@/lib/units";
 import { ReceiveOrderForm } from "./receive-order-form";
 import { NewOrderForm } from "./new-order-form";
 import { CancelOrderButton } from "./cancel-order-button";
@@ -83,7 +84,8 @@ export function PurchaseOrderDetailView({
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
             {order.items.map((item) => {
-              const unitLabel = unitLabels[item.unit as keyof typeof unitLabels] ?? item.unit;
+              const size = item.unitsPerPresentation ?? 1;
+              const unitLabel = item.presentationName ?? unitLabels[item.unit as keyof typeof unitLabels] ?? item.unit;
               return (
                 <div
                   key={item.id}
@@ -92,12 +94,12 @@ export function PurchaseOrderDetailView({
                   <div>
                     <p>{item.ingredientName}</p>
                     <p className="text-xs text-muted-foreground">
-                      pedido {item.orderedQuantity} {unitLabel} · recibido {item.receivedQuantity ?? 0}{" "}
-                      {unitLabel}
+                      pedido {roundQty(item.orderedQuantity / size)} {unitLabel} · recibido{" "}
+                      {roundQty((item.receivedQuantity ?? 0) / size)} {unitLabel}
                     </p>
                   </div>
                   <span className="text-right">
-                    {formatUnitCost(item.actualUnitCost ?? item.estimatedUnitCost)} / {unitLabel}
+                    {formatUnitCost((item.actualUnitCost ?? item.estimatedUnitCost) * size)} / {unitLabel}
                     <span className="block text-xs text-muted-foreground">
                       {formatCurrency(
                         (item.actualUnitCost ?? item.estimatedUnitCost) *

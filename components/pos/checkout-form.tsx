@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { PaymentMethod, DiscountType, ManualDiscountReason } from "@prisma/client";
 import type { DomicilioOrigen } from "@prisma/client";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { cn, formatCurrency, posAccentClass, posAccentBorderClass } from "@/lib/utils";
-import { createSale as createSaleAction, closeTab as closeTabAction, previewSaleTotal as previewSaleTotalAction } from "@/actions/pos";
+import {
+  createSale as createSaleAction,
+  closeTab as closeTabAction,
+  previewSaleTotal as previewSaleTotalAction,
+  type AppliedPromotion,
+  type StockShortage,
+} from "@/actions/pos";
 import { findDiscountCodeByCode as findDiscountCodeByCodeAction, type FoundDiscountCode } from "@/actions/discounts";
 import { updateCustomer as updateCustomerAction } from "@/actions/customers";
 import type { CustomerOption } from "@/lib/customers";
@@ -119,21 +125,37 @@ export function CheckoutForm({
   // si el combo se compone con el total ya acumulado, el servidor igual
   // valida el monto exacto al cobrar y rechaza un desajuste con seguridad.
   const [verifiedDiscountableSubtotal, setVerifiedDiscountableSubtotal] = useState<number | null>(null);
+  const [appliedPromotions, setAppliedPromotions] = useState<AppliedPromotion[]>([]);
+  // Insumos que no alcanzan para esta ronda — se advierte y solo se cobra
+  // si el cajero confirma "vender de todos modos" (QA-003).
+  const [shortages, setShortages] = useState<StockShortage[]>([]);
+  // Id del intento de cobro: se reutiliza en reintentos (p. ej. tras un
+  // corte de red) para que el servidor nunca registre la venta dos veces;
+  // se renueva si cambia la cuenta o después de cobrar.
+  const requestIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    requestIdRef.current = null;
+  }, [lines]);
+  const [allowShortage, setAllowShortage] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
   useEffect(() => {
     if (lines.length === 0) {
       setVerifiedSubtotal(0);
       setVerifiedDiscountableSubtotal(0);
+      setAppliedPromotions([]);
+      setShortages([]);
       return;
     }
     let cancelled = false;
     setIsPreviewLoading(true);
     previewSaleTotal(employeeId, lines.map(cartLineToSaleItemInput))
-      .then(({ subtotal: serverSubtotal, discountableSubtotal }) => {
+      .then(({ subtotal: serverSubtotal, discountableSubtotal, appliedPromotions: promos, shortages: missing }) => {
         if (!cancelled) {
           setVerifiedSubtotal(serverSubtotal);
           setVerifiedDiscountableSubtotal(discountableSubtotal);
+          setAppliedPromotions(promos);
+          setShortages(missing);
         }
       })
       .catch(() => {
@@ -166,6 +188,7 @@ export function CheckoutForm({
   const [tipPercent, setTipPercent] = useState(10);
   const [tipCustom, setTipCustom] = useState("");
   const [cashReceived, setCashReceived] = useState("");
+  const [confirmHighTip, setConfirmHighTip] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -191,6 +214,9 @@ export function CheckoutForm({
         ? Math.max(0, Math.round((Number(tipCustom) || 0) * 100) / 100)
         : 0;
   const totalToCollect = Math.round((total + tipValue) * 100) / 100;
+  // Propina mayor a la mitad de la cuenta: casi siempre es un error de
+  // captura (ej. 100000 en vez de 100) — se pide confirmarla (QA-028).
+  const isHighTip = total > 0 && tipValue > total / 2;
   const cashReceivedCents = Math.round((Number(cashReceived) || 0) * 100);
   const totalToCollectCents = Math.round(totalToCollect * 100);
 
@@ -245,6 +271,13 @@ export function CheckoutForm({
       setError("Busca o crea un cliente arriba antes de cobrar un pedido a domicilio.");
       return;
     }
+    if (orderType === "DOMICILIO" && !domicilioAddress.trim()) {
+      setError("Captura el domicilio de entrega (arriba, junto al cliente).");
+      return;
+    }
+
+    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID();
+    const clientRequestId = requestIdRef.current;
 
     startTransition(async () => {
       try {
@@ -300,6 +333,8 @@ export function CheckoutForm({
             customerId: selectedCustomer?.id,
             discountCodeId,
             manualDiscount,
+            allowShortage,
+            clientRequestId,
           });
         } else {
           const created = await createSale({
@@ -317,6 +352,8 @@ export function CheckoutForm({
             customerId: selectedCustomer?.id,
             discountCodeId,
             manualDiscount,
+            allowShortage,
+            clientRequestId,
           });
           saleId = created.id;
         }
@@ -327,12 +364,15 @@ export function CheckoutForm({
           cashReceived: method === "EFECTIVO" ? cashReceivedCents / 100 : null,
           change: method === "EFECTIVO" ? (cashReceivedCents - totalToCollectCents) / 100 : null,
         };
+        requestIdRef.current = null;
         clear();
+        setAllowShortage(false);
         setDiscountMode("NINGUNO");
         resetDiscountState();
         setTransferNote("");
         setTipMode("NINGUNA");
         setTipCustom("");
+        setConfirmHighTip(false);
         setCashReceived("");
         onConfirmed(receipt);
       } catch (err) {
@@ -368,6 +408,7 @@ export function CheckoutForm({
         <div className="flex gap-2">
           {discountModes.map((mode) => (
             <button
+              aria-pressed={discountMode === mode.value}
               key={mode.value}
               type="button"
               onClick={() => {
@@ -375,7 +416,7 @@ export function CheckoutForm({
                 resetDiscountState();
               }}
               className={cn(
-                "flex-1 rounded-md border border-border px-3 py-2 text-sm",
+                "min-h-11 flex-1 rounded-md border border-border px-3 py-2 text-sm",
                 discountMode === mode.value ? posAccentBorderClass : "hover:bg-muted"
               )}
             >
@@ -404,7 +445,7 @@ export function CheckoutForm({
               {isCheckingCode ? "Validando..." : "Validar"}
             </Button>
           </div>
-          {codeError && <p className="text-sm text-destructive">{codeError}</p>}
+          {codeError && <p role="alert" className="text-sm text-destructive">{codeError}</p>}
           {resolvedCode && (
             <p className="text-sm text-muted-foreground">
               Válido — {discountTypeLabels[resolvedCode.type]}, descuento de {formatCurrency(discountPreview)}
@@ -464,7 +505,7 @@ export function CheckoutForm({
               onChange={(e) => setAuthorizingPin(e.target.value)}
             />
           </div>
-          {manualDiscountError && <p className="text-sm text-destructive">{manualDiscountError}</p>}
+          {manualDiscountError && <p role="alert" className="text-sm text-destructive">{manualDiscountError}</p>}
         </div>
       )}
 
@@ -473,6 +514,12 @@ export function CheckoutForm({
           <span>Subtotal</span>
           <span>{formatCurrency(rawSubtotal)}</span>
         </div>
+        {appliedPromotions.map((promo) => (
+          <div key={promo.name} className="flex items-center justify-between text-emerald-700">
+            <span>Promoción: {promo.name}</span>
+            <span>ya incluye −{formatCurrency(promo.saving)}</span>
+          </div>
+        ))}
         {discountPreview > 0 && (
           <div className="flex items-center justify-between text-muted-foreground">
             <span>Descuento</span>
@@ -495,10 +542,11 @@ export function CheckoutForm({
         <p className="mb-2 text-sm font-medium">Propina</p>
         <div className="flex flex-wrap gap-2">
           <button
+            aria-pressed={tipMode === "NINGUNA"}
             type="button"
             onClick={() => setTipMode("NINGUNA")}
             className={cn(
-              "rounded-md border border-border px-3 py-2 text-sm",
+              "min-h-11 rounded-md border border-border px-3 py-2 text-sm",
               tipMode === "NINGUNA" ? posAccentBorderClass : "hover:bg-muted"
             )}
           >
@@ -506,6 +554,7 @@ export function CheckoutForm({
           </button>
           {[10, 15, 20].map((pct) => (
             <button
+              aria-pressed={tipMode === "PORCENTAJE" && tipPercent === pct}
               key={pct}
               type="button"
               onClick={() => {
@@ -513,7 +562,7 @@ export function CheckoutForm({
                 setTipPercent(pct);
               }}
               className={cn(
-                "rounded-md border border-border px-3 py-2 text-sm",
+                "min-h-11 rounded-md border border-border px-3 py-2 text-sm",
                 tipMode === "PORCENTAJE" && tipPercent === pct ? posAccentBorderClass : "hover:bg-muted"
               )}
             >
@@ -521,10 +570,11 @@ export function CheckoutForm({
             </button>
           ))}
           <button
+            aria-pressed={tipMode === "MONTO"}
             type="button"
             onClick={() => setTipMode("MONTO")}
             className={cn(
-              "rounded-md border border-border px-3 py-2 text-sm",
+              "min-h-11 rounded-md border border-border px-3 py-2 text-sm",
               tipMode === "MONTO" ? posAccentBorderClass : "hover:bg-muted"
             )}
           >
@@ -539,9 +589,22 @@ export function CheckoutForm({
             step="0.01"
             inputMode="decimal"
             placeholder="Monto de la propina"
+            aria-label="Monto de la propina"
             value={tipCustom}
-            onChange={(e) => setTipCustom(e.target.value)}
+            onChange={(e) => {
+              setTipCustom(e.target.value);
+              setConfirmHighTip(false);
+            }}
           />
+        )}
+        {tipMode === "MONTO" && Number(tipCustom) < 0 && (
+          <p role="alert" className="mt-1 text-xs text-destructive">La propina no puede ser negativa.</p>
+        )}
+        {isHighTip && (
+          <label className="mt-2 flex items-center gap-2 text-sm text-destructive">
+            <input type="checkbox" checked={confirmHighTip} onChange={(e) => setConfirmHighTip(e.target.checked)} />
+            Confirmo una propina de {formatCurrency(tipValue)} (más de la mitad de la cuenta)
+          </label>
         )}
       </div>
 
@@ -550,11 +613,12 @@ export function CheckoutForm({
         <div className="flex gap-2">
           {paymentMethods.map((m) => (
             <button
+              aria-pressed={method === m.value}
               key={m.value}
               type="button"
               onClick={() => setMethod(m.value)}
               className={cn(
-                "flex-1 rounded-md border border-border px-3 py-2 text-sm",
+                "min-h-11 flex-1 rounded-md border border-border px-3 py-2 text-sm",
                 method === m.value ? posAccentBorderClass : "hover:bg-muted"
               )}
             >
@@ -568,6 +632,7 @@ export function CheckoutForm({
             value={transferNote}
             onChange={(e) => setTransferNote(e.target.value)}
             placeholder="Nota (banco, referencia, etc.)"
+            aria-label="Nota de la transferencia"
           />
         )}
       </div>
@@ -588,7 +653,13 @@ export function CheckoutForm({
                 onChange={(e) => setCashReceived(e.target.value)}
               />
             </div>
-            <Button type="button" variant="outline" onClick={() => setCashReceived(totalToCollect.toFixed(2))}>
+            <Button
+              type="button"
+              variant="outline"
+              // Mientras se calcula el total "Exacto" capturaría $0.
+              disabled={isPreviewLoading || verifiedSubtotal === null}
+              onClick={() => setCashReceived(totalToCollect.toFixed(2))}
+            >
               Exacto
             </Button>
             <Button type="button" variant="ghost" onClick={() => setCashReceived("")}>
@@ -601,7 +672,7 @@ export function CheckoutForm({
                 key={bill}
                 type="button"
                 onClick={() => setCashReceived(String((Number(cashReceived) || 0) + bill))}
-                className="rounded-md border border-border px-2.5 py-1 text-sm hover:bg-muted"
+                className="min-h-10 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted"
               >
                 +${bill}
               </button>
@@ -618,23 +689,51 @@ export function CheckoutForm({
         </div>
       )}
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
-      <Button
-        className={posAccentClass}
-        onClick={handleConfirm}
-        disabled={
-          isPending ||
-          isPreviewLoading ||
-          verifiedSubtotal === null ||
-          (lines.length === 0 && !activeTabId) ||
-          (discountMode === "CODIGO" && !resolvedCode) ||
-          (discountMode === "MANUAL" && (!authorizingPin || manualDiscountError !== null)) ||
-          (method === "EFECTIVO" && (cashReceived === "" || cashReceivedCents < totalToCollectCents))
-        }
-      >
-        {isPending ? "Procesando..." : isPreviewLoading ? "Calculando total..." : "Confirmar venta"}
-      </Button>
+      {shortages.length > 0 && (
+        <div className="flex flex-col gap-2 rounded-md border border-destructive/50 bg-destructive/5 p-3 text-sm">
+          <p role="alert" className="font-medium text-destructive">Insumos insuficientes según el inventario</p>
+          <ul className="list-disc pl-5 text-muted-foreground">
+            {shortages.map((s) => (
+              <li key={s.ingredientId}>
+                {s.name}: faltan {s.missing} {s.unit}
+              </li>
+            ))}
+          </ul>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={allowShortage}
+              onChange={(e) => setAllowShortage(e.target.checked)}
+            />
+            Vender de todos modos (el inventario quedará en negativo)
+          </label>
+        </div>
+      )}
+
+      {/* Fijo al fondo del panel con scroll: en celular el formulario es
+          más alto que la pantalla y "Confirmar" quedaba fuera de vista. */}
+      <div className="sticky bottom-0 -mx-4 -mb-4 border-t border-border bg-background p-4">
+        <Button
+          className={cn("w-full", posAccentClass)}
+          onClick={handleConfirm}
+          disabled={
+            isPending ||
+            isPreviewLoading ||
+            (shortages.length > 0 && !allowShortage) ||
+            (isHighTip && !confirmHighTip) ||
+            (tipMode === "MONTO" && Number(tipCustom) < 0) ||
+            verifiedSubtotal === null ||
+            (lines.length === 0 && !activeTabId) ||
+            (discountMode === "CODIGO" && !resolvedCode) ||
+            (discountMode === "MANUAL" && (!authorizingPin || manualDiscountError !== null)) ||
+            (method === "EFECTIVO" && (cashReceived === "" || cashReceivedCents < totalToCollectCents))
+          }
+        >
+          {isPending ? "Procesando..." : isPreviewLoading ? "Calculando total..." : "Confirmar venta"}
+        </Button>
+      </div>
     </div>
   );
 }

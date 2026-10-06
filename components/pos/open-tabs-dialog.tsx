@@ -51,7 +51,7 @@ export function OpenTabsDialog({
     <Dialog open={open} onOpenChange={onOpenChange} title="Cuentas abiertas">
       <div className="flex flex-col gap-3">
         {isPending && <p className="text-sm text-muted-foreground">Cargando...</p>}
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {!isPending && !error && tabs.length === 0 && (
           <p className="text-sm text-muted-foreground">No hay cuentas abiertas por ahora.</p>
         )}

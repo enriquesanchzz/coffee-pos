@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
@@ -6,9 +7,12 @@ import { getCustomerDetail } from "@/lib/customers";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CustomerForm } from "@/components/clientes/customer-form";
+import { LoyaltyActions } from "@/components/clientes/loyalty-actions";
 import { formatCurrency } from "@/lib/utils";
 import { formatDateTime } from "@/lib/time";
 import { orNotFound } from "@/lib/not-found";
+
+export const metadata: Metadata = { title: "Detalle de cliente" };
 
 export default async function DetalleClientePage({
   params,
@@ -34,9 +38,24 @@ export default async function DetalleClientePage({
             <CardHeader>
               <CardTitle>Lealtad</CardTitle>
             </CardHeader>
-            <CardContent className="flex items-center justify-between text-sm">
-              <p>{customer.stamps} de 5 sellos</p>
-              <p className="text-muted-foreground">{customer.tierName ?? "sin nivel"}</p>
+            <CardContent className="flex flex-col gap-3 text-sm">
+              <div className="flex items-center justify-between">
+                <p>{customer.stamps} de 5 sellos</p>
+                <p className="text-muted-foreground">{customer.tierName ?? "sin nivel"}</p>
+              </div>
+              {customer.welcomeCoupon && (
+                <p className="text-muted-foreground">
+                  Cupón de bienvenida <span className="font-mono">{customer.welcomeCoupon.code}</span> ·{" "}
+                  {customer.welcomeCoupon.used ? "ya usado" : "disponible"}
+                </p>
+              )}
+              {customer.loyaltyCode && (
+                <LoyaltyActions
+                  phone={customer.phone}
+                  loyaltyCode={customer.loyaltyCode}
+                  welcomeCouponCode={customer.welcomeCoupon && !customer.welcomeCoupon.used ? customer.welcomeCoupon.code : null}
+                />
+              )}
             </CardContent>
           </Card>
 

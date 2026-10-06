@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
@@ -10,6 +11,8 @@ import { ReceiveTransferForm } from "@/components/compras/receive-transfer-form"
 import { transferStatusLabels, unitLabels } from "@/components/compras/enum-labels";
 import { formatDateTime } from "@/lib/time";
 import { orNotFound } from "@/lib/not-found";
+
+export const metadata: Metadata = { title: "Transferencia" };
 
 export default async function DetalleTransferenciaPage({
   params,

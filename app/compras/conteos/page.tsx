@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
@@ -5,9 +6,12 @@ import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getPhysicalCounts } from "@/lib/counts";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
+import { ComprasNav, PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { physicalCountStatusLabels } from "@/components/compras/enum-labels";
 import { formatDate } from "@/lib/time";
+
+export const metadata: Metadata = { title: "Conteos físicos" };
 
 export default async function ConteosPage() {
   const employee = await getCurrentEmployee();
@@ -24,20 +28,9 @@ export default async function ConteosPage() {
   return (
     <AuthenticatedShell isAdmin employeeName={employee.name}>
         <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-lg font-semibold">Conteos físicos</h1>
-              <Link href="/compras" className="text-sm text-muted-foreground hover:underline">
-                ← Compras
-              </Link>
-            </div>
-            <Link
-              href="/compras/conteos/nuevo"
-              className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-            >
-              + Nuevo conteo
-            </Link>
-          </div>
+          <PageHeader title="Conteos físicos" action={{ href: "/compras/conteos/nuevo", label: "+ Nuevo conteo" }}>
+            <ComprasNav active="/compras/conteos" />
+          </PageHeader>
 
           <Card>
             <CardHeader>

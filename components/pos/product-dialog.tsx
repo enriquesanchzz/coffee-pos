@@ -14,12 +14,16 @@ import {
   type VariantTemperature,
 } from "@/lib/catalog";
 import type { CartExtraIngredient, CartModifier } from "./cart-store";
+import { Combobox } from "@/components/ui/combobox";
 
 const temperatureLabels: Record<VariantTemperature, string> = {
   CALIENTE: "Caliente",
   FRIO: "Frío",
   FRAPPE: "Frappé",
 };
+
+// Notas por producto: cortas, se imprimen/leen en barra (QA-014).
+const NOTES_MAX = 140;
 
 export function ProductDialog({
   product,
@@ -51,8 +55,6 @@ export function ProductDialog({
   const [extras, setExtras] = useState<CartExtraIngredient[]>([]);
   const [addingExtraId, setAddingExtraId] = useState("");
   const [addingExtraQty, setAddingExtraQty] = useState("1");
-  const [extraQuery, setExtraQuery] = useState("");
-  const [extraListOpen, setExtraListOpen] = useState(false);
 
   useEffect(() => {
     if (product && open) {
@@ -76,7 +78,6 @@ export function ProductDialog({
       setExtras([]);
       setAddingExtraId("");
       setAddingExtraQty("1");
-      setExtraQuery("");
     }
   }, [product, open]);
 
@@ -113,15 +114,23 @@ export function ProductDialog({
 
   if (!product) return null;
 
-  const filteredExtraOptions = extraQuery.trim()
-    ? extraIngredientOptions.filter((o) => o.name.toLowerCase().includes(extraQuery.toLowerCase()))
-    : extraIngredientOptions;
   const selectedExtraOption = extraIngredientOptions.find((o) => o.id === addingExtraId) ?? null;
+
+  // Cantidad del extra (QA-018): mayor a cero y con un tope razonable — 10
+  // dosis para unidades que se cuentan (shot, pump, pza) o 1000 para ml/g.
+  const extraQtyNumber = Number(addingExtraQty);
+  const extraUnit = selectedExtraOption?.standardDoseUnit ?? selectedExtraOption?.baseUnit;
+  const extraMax = extraUnit && ["ML", "G", "L", "KG"].includes(extraUnit) ? 1000 : 10;
+  const extraQtyError = !selectedExtraOption
+    ? null
+    : !(extraQtyNumber > 0)
+      ? "La cantidad debe ser mayor a cero."
+      : extraQtyNumber > extraMax
+        ? `Máximo ${extraMax} ${unitLabel(extraUnit)} por producto.`
+        : null;
 
   function handleSelectExtraOption(option: ExtraIngredientOption) {
     setAddingExtraId(option.id);
-    setExtraQuery(option.name);
-    setExtraListOpen(false);
     // Dosis estándar (ej. "1 pump" de vainilla, "30 ml" de leche) en vez
     // de "1" del baseUnit crudo — ver Ingredient.standardDoseQuantity.
     setAddingExtraQty(String(option.standardDoseQuantity ?? 1));
@@ -134,8 +143,10 @@ export function ProductDialog({
         if (current.has(option.id)) current.delete(option.id);
         else current.add(option.id);
       } else {
+        // Opción única (ej. Tipo de leche): se comporta como radio, no se
+        // puede quedar sin ninguna elegida (QA-019).
         current.clear();
-        if (!prev[groupId]?.has(option.id)) current.add(option.id);
+        current.add(option.id);
       }
       return { ...prev, [groupId]: current };
     });
@@ -144,7 +155,7 @@ export function ProductDialog({
   function handleAddExtra() {
     const option = extraIngredientOptions.find((i) => i.id === addingExtraId);
     const quantity = Number(addingExtraQty) || 0;
-    if (!option || quantity <= 0) return;
+    if (!option || extraQtyError) return;
     setExtras((prev) => [
       ...prev,
       {
@@ -159,7 +170,6 @@ export function ProductDialog({
     ]);
     setAddingExtraId("");
     setAddingExtraQty("1");
-    setExtraQuery("");
   }
 
   function removeExtra(index: number) {
@@ -205,11 +215,12 @@ export function ProductDialog({
             <div className="flex flex-wrap gap-2">
               {sizes.map((size) => (
                 <button
+                  aria-pressed={sizeLabel === size}
                   key={size}
                   type="button"
                   onClick={() => setSizeLabel(size)}
                   className={cn(
-                    "rounded-md border border-border px-3 py-1.5 text-sm",
+                    "min-h-11 rounded-md border border-border px-3 py-2 text-sm",
                     sizeLabel === size ? posAccentBorderClass : "hover:bg-muted"
                   )}
                 >
@@ -226,11 +237,12 @@ export function ProductDialog({
             <div className="flex flex-wrap gap-2">
               {temperatures.map((temp) => (
                 <button
+                  aria-pressed={temperature === temp}
                   key={temp}
                   type="button"
                   onClick={() => setTemperature(temp)}
                   className={cn(
-                    "rounded-md border border-border px-3 py-1.5 text-sm",
+                    "min-h-11 rounded-md border border-border px-3 py-2 text-sm",
                     temperature === temp ? posAccentBorderClass : "hover:bg-muted"
                   )}
                 >
@@ -242,7 +254,7 @@ export function ProductDialog({
         )}
 
         {!variant && (sizes.length > 0 || temperatures.length > 0) && (
-          <p className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p role="alert" className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             Esta combinación no está disponible.
           </p>
         )}
@@ -258,11 +270,12 @@ export function ProductDialog({
                 const isSelected = selected[group.id]?.has(option.id) ?? false;
                 return (
                   <button
+                    aria-pressed={isSelected}
                     key={option.id}
                     type="button"
                     onClick={() => toggleOption(group.id, option, group.allowMultiple)}
                     className={cn(
-                      "rounded-md border border-border px-3 py-1.5 text-sm",
+                      "min-h-11 rounded-md border border-border px-3 py-2 text-sm",
                       isSelected ? posAccentBorderClass : "hover:bg-muted"
                     )}
                   >
@@ -278,44 +291,27 @@ export function ProductDialog({
         <div>
           <p className="mb-2 text-sm font-medium">Agregar otro ingrediente</p>
           <div className="flex items-end gap-2">
-            <div className="relative flex-1">
-              <Input
-                value={extraQuery}
-                onChange={(e) => {
-                  setExtraQuery(e.target.value);
-                  setAddingExtraId("");
-                  setExtraListOpen(true);
-                }}
-                onFocus={() => setExtraListOpen(true)}
-                onBlur={() => setTimeout(() => setExtraListOpen(false), 150)}
-                placeholder="Buscar ingrediente…"
-                autoComplete="off"
-              />
-              {extraListOpen && filteredExtraOptions.length > 0 && (
-                <ul className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-md border border-border bg-background shadow-md">
-                  {filteredExtraOptions.map((ingredient) => (
-                    <li key={ingredient.id}>
-                      <button
-                        type="button"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => handleSelectExtraOption(ingredient)}
-                        className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
-                      >
-                        {ingredient.name}
-                        <span className="text-muted-foreground">
-                          {" "}
-                          · {unitLabel(ingredient.standardDoseUnit ?? ingredient.baseUnit)} · {formatCurrency(ingredient.unitPrice)}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+            <Combobox
+              className="flex-1"
+              aria-label="Ingrediente extra"
+              placeholder="Buscar ingrediente…"
+              value={addingExtraId || null}
+              onChange={(id) => {
+                const option = extraIngredientOptions.find((o) => o.id === id);
+                if (option) handleSelectExtraOption(option);
+              }}
+              options={extraIngredientOptions.map((ingredient) => ({
+                value: ingredient.id,
+                label: ingredient.name,
+                description: `· ${unitLabel(ingredient.standardDoseUnit ?? ingredient.baseUnit)} · ${formatCurrency(ingredient.unitPrice)}`,
+              }))}
+            />
             <div className="flex items-center gap-1">
               <Input
                 type="number"
                 min="0"
+                aria-label="Cantidad del extra"
+                aria-invalid={extraQtyError ? true : undefined}
                 step={unitStep(
                   selectedExtraOption ? selectedExtraOption.standardDoseUnit ?? selectedExtraOption.baseUnit : undefined
                 )}
@@ -329,10 +325,16 @@ export function ProductDialog({
                 </span>
               )}
             </div>
-            <Button type="button" variant="outline" onClick={handleAddExtra} disabled={!addingExtraId}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleAddExtra}
+              disabled={!addingExtraId || extraQtyError !== null}
+            >
               Agregar
             </Button>
           </div>
+          {extraQtyError && <p role="alert" className="mt-1 text-xs text-destructive">{extraQtyError}</p>}
 
           {extras.length > 0 && (
             <ul className="mt-2 flex flex-col gap-1">
@@ -363,9 +365,14 @@ export function ProductDialog({
             id="item-notes"
             className="min-h-[60px] rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             placeholder="ej. sin azúcar, bien caliente"
+            maxLength={NOTES_MAX}
+            aria-describedby="item-notes-count"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
           />
+          <p id="item-notes-count" className="text-right text-xs text-muted-foreground">
+            {notes.length}/{NOTES_MAX}
+          </p>
         </div>
 
         <div className="sticky bottom-0 -mx-6 -mb-6 mt-2 flex flex-col gap-3 border-t border-border bg-background p-6">

@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getInventoryOverview, getIngredientCategories } from "@/lib/inventory";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { InventoryWorkspace } from "@/components/inventario/inventory-workspace";
+
+export const metadata: Metadata = { title: "Inventario" };
 
 export default async function InventarioPage() {
   const employee = await getCurrentEmployee();

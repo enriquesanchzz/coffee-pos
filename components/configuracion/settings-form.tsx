@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { updateTargetFoodCostPercent as updateTargetFoodCostPercentAction } from "@/actions/settings";
@@ -35,7 +36,7 @@ export function SettingsForm({ targetFoodCostPercent }: { targetFoodCostPercent:
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-end gap-3">
-        <div className="flex w-32 flex-col gap-1">
+        <div className="flex w-48 flex-col gap-1">
           <Label htmlFor="target-food-cost">% de food cost objetivo</Label>
           <Input
             id="target-food-cost"
@@ -55,10 +56,10 @@ export function SettingsForm({ targetFoodCostPercent }: { targetFoodCostPercent:
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">
-        Precio sugerido al crear/editar una receta = costo de ingredientes ÷ este %.
+        Entre 1 y 100. Precio sugerido al crear/editar una receta = costo de ingredientes ÷ este %.
       </p>
-      {error && <p className="text-sm text-destructive">{error}</p>}
-      {saved && !error && <p className="text-sm text-emerald-600">Guardado.</p>}
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {saved && !error && <Alert variant="success">Guardado.</Alert>}
     </div>
   );
 }

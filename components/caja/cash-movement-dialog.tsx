@@ -60,6 +60,7 @@ export function CashMovementDialog({
         <div className="flex gap-2">
           {movementTypes.map((m) => (
             <button
+              aria-pressed={type === m.value}
               key={m.value}
               type="button"
               onClick={() => setType(m.value)}
@@ -97,7 +98,7 @@ export function CashMovementDialog({
           />
         </div>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
         <Button onClick={handleConfirm} disabled={isPending}>
           {isPending ? "Registrando..." : "Registrar movimiento"}

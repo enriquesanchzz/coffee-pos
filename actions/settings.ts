@@ -4,7 +4,7 @@ import { safeAction } from "@/lib/safe-action";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
-import { requirePasswordSession } from "@/lib/session";
+import { requirePasswordSession, SessionExpiredError } from "@/lib/session";
 import { requirePermission } from "@/lib/permissions";
 import { validateThemeSettings, type ThemeSettings } from "@/lib/theme";
 
@@ -15,12 +15,12 @@ import { validateThemeSettings, type ThemeSettings } from "@/lib/theme";
 export const updateTargetFoodCostPercent = safeAction(async function updateTargetFoodCostPercent(percent: number) {
   const actor = await requirePasswordSession();
   if (!actor) {
-    throw new Error("Necesitas iniciar sesión de Administración para hacer esto.");
+    throw new SessionExpiredError("Necesitas iniciar sesión de Administración para hacer esto.", "/administracion/login?error=sesion");
   }
   await requirePermission(actor.id, DEFAULT_BRANCH_ID, "CONFIGURACION_SISTEMA_GESTIONAR");
 
   if (!(percent > 0) || percent > 100) {
-    throw new Error("El % de food cost objetivo debe estar entre 0 y 100.");
+    throw new Error("El % de food cost objetivo debe ser mayor que 0 y hasta 100.");
   }
 
   await prisma.branch.update({
@@ -44,7 +44,7 @@ export const updateAppearanceSettings = safeAction(async function updateAppearan
 }): Promise<ThemeSettings> {
   const actor = await requirePasswordSession();
   if (!actor) {
-    throw new Error("Necesitas iniciar sesión de Administración para hacer esto.");
+    throw new SessionExpiredError("Necesitas iniciar sesión de Administración para hacer esto.", "/administracion/login?error=sesion");
   }
   await requirePermission(actor.id, DEFAULT_BRANCH_ID, "CONFIGURACION_SISTEMA_GESTIONAR");
 

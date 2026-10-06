@@ -167,7 +167,7 @@ export function CustomerForm({
           </Select>
         </div>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
         <Button onClick={handleSubmit} disabled={isPending}>
           {isPending ? "Guardando..." : isEdit ? "Guardar cambios" : "Crear cliente"}

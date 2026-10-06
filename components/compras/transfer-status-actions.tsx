@@ -55,7 +55,7 @@ export function TransferStatusActions({
           Cancelar transferencia
         </Button>
       </div>
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     </div>
   );
 }

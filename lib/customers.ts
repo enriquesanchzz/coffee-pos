@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { matchesSearch } from "./search";
 
 export type CustomerListItem = {
   id: string;
@@ -9,20 +10,47 @@ export type CustomerListItem = {
   tierName: string | null;
 };
 
-export async function getCustomers(): Promise<CustomerListItem[]> {
+// Búsqueda (sin acentos, por nombre/teléfono/email/código de tarjeta) y
+// paginación para la lista de Clientes (QA-020). Se filtra en memoria con
+// matchesSearch para ignorar acentos sin depender de la extensión unaccent
+// de Postgres — a la escala de un café (cientos/miles de clientes) basta.
+export const CUSTOMERS_PAGE_SIZE = 25;
+
+export async function getCustomers(
+  { query = "", page = 1 }: { query?: string; page?: number } = {}
+): Promise<{ items: CustomerListItem[]; total: number; page: number; pageCount: number }> {
   const customers = await prisma.customer.findMany({
     orderBy: { name: "asc" },
     include: { loyaltyCard: { include: { tier: true } } },
   });
 
-  return customers.map((customer) => ({
-    id: customer.id,
-    name: customer.name,
-    phone: customer.phone,
-    email: customer.email,
-    stamps: customer.loyaltyCard?.stamps ?? 0,
-    tierName: customer.loyaltyCard?.tier?.name ?? null,
-  }));
+  const digits = query.replace(/\D/g, "");
+  const filtered = query.trim()
+    ? customers.filter(
+        (c) =>
+          matchesSearch(query, c.name, c.email) ||
+          (digits.length >= 3 && c.phone?.includes(digits)) ||
+          c.loyaltyCard?.code === query.trim()
+      )
+    : customers;
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / CUSTOMERS_PAGE_SIZE));
+  const safePage = Math.min(Math.max(1, page), pageCount);
+  const items = filtered.slice((safePage - 1) * CUSTOMERS_PAGE_SIZE, safePage * CUSTOMERS_PAGE_SIZE);
+
+  return {
+    total: filtered.length,
+    page: safePage,
+    pageCount,
+    items: items.map((customer) => ({
+      id: customer.id,
+      name: customer.name,
+      phone: customer.phone,
+      email: customer.email,
+      stamps: customer.loyaltyCard?.stamps ?? 0,
+      tierName: customer.loyaltyCard?.tier?.name ?? null,
+    })),
+  };
 }
 
 export type CustomerSaleHistoryItem = {
@@ -49,6 +77,10 @@ export type CustomerDetail = {
   gender: string | null;
   stamps: number;
   tierName: string | null;
+  // Para las acciones de lealtad del detalle (ver tarjeta, reenviar por
+  // WhatsApp) y el estado del cupón de bienvenida (QA-020).
+  loyaltyCode: string | null;
+  welcomeCoupon: { code: string; used: boolean } | null;
   sales: CustomerSaleHistoryItem[];
   topProducts: CustomerTopProduct[];
 };
@@ -58,6 +90,7 @@ export async function getCustomerDetail(id: string): Promise<CustomerDetail> {
     where: { id },
     include: {
       loyaltyCard: { include: { tier: true } },
+      discountCodes: { where: { code: { startsWith: "BIENVENIDA-" } }, take: 1 },
       sales: { where: { status: "COMPLETADA" }, orderBy: { createdAt: "desc" }, take: 20 },
     },
   });
@@ -99,6 +132,10 @@ export async function getCustomerDetail(id: string): Promise<CustomerDetail> {
     gender: customer.gender,
     stamps: customer.loyaltyCard?.stamps ?? 0,
     tierName: customer.loyaltyCard?.tier?.name ?? null,
+    loyaltyCode: customer.loyaltyCard?.code ?? null,
+    welcomeCoupon: customer.discountCodes[0]
+      ? { code: customer.discountCodes[0].code, used: customer.discountCodes[0].usedAt !== null }
+      : null,
     sales: customer.sales.map((sale) => ({
       id: sale.id,
       createdAt: sale.createdAt.toISOString(),

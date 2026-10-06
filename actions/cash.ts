@@ -4,7 +4,7 @@ import { safeAction } from "@/lib/safe-action";
 import { revalidatePath } from "next/cache";
 import { CashMovementType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getSessionEmployeeId } from "@/lib/session";
+import { getSessionEmployeeId, assertSessionEmployee } from "@/lib/session";
 import { requirePermission } from "@/lib/permissions";
 
 export type CreateCashMovementInput = {
@@ -16,9 +16,7 @@ export type CreateCashMovementInput = {
 };
 
 export const createCashMovement = safeAction(async function createCashMovement(input: CreateCashMovementInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   if (input.amount <= 0) {
     throw new Error("El monto debe ser mayor a cero.");
   }

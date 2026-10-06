@@ -11,6 +11,7 @@ import { AdjustStockDialog } from "./adjust-stock-dialog";
 import { IngredientFormDialog } from "./ingredient-form-dialog";
 import { CategoryFormDialog } from "./category-form-dialog";
 import { unitLabels } from "./unit-labels";
+import { matchesSearch } from "@/lib/search";
 
 // Mismo flujo de navegación que /pos y /productos (CategoryDrilldown
 // compartido) — categorías de insumo como píldoras a la izquierda,
@@ -52,17 +53,17 @@ export function InventoryWorkspace({
     return (
       <Card key={item.id} className="flex flex-col gap-2 rounded-2xl p-4">
         <div className="flex items-start justify-between gap-2">
-          <p className="text-sm font-medium leading-tight">{item.name}</p>
+          <p className="min-w-0 break-words text-sm font-medium leading-tight">{item.name}</p>
           {item.isLow && (
-            <Badge variant="destructive" className="text-[10px]">
-              stock bajo
+            <Badge variant="destructive" className="flex-shrink-0 text-[10px]">
+              {item.quantity < 0 ? "negativo" : item.quantity === 0 ? "sin stock" : "stock bajo"}
             </Badge>
           )}
         </div>
-        <p className="text-sm text-muted-foreground">
+        <p className={item.quantity < 0 ? "text-sm font-medium text-destructive" : "text-sm text-muted-foreground"}>
           {new Intl.NumberFormat("es-MX").format(item.quantity)} {unitLabels[item.baseUnit] ?? item.baseUnit}
         </p>
-        <div className="mt-1 flex items-center gap-2">
+        <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
           <Button variant="outline" size="sm" onClick={() => setAdjusting(item)}>
             Ajustar
           </Button>
@@ -84,7 +85,7 @@ export function InventoryWorkspace({
         {categoryItems.length === 0 ? (
           <p className="text-sm text-muted-foreground">Sin insumos en esta categoría.</p>
         ) : (
-          <div className="grid auto-rows-min grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-3 pr-1 sm:gap-4">
+          <div className="grid auto-rows-min grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-3 pr-1 sm:gap-4">
             {categoryItems.map(renderIngredientCard)}
           </div>
         )}
@@ -94,12 +95,12 @@ export function InventoryWorkspace({
 
   function renderSearchResults(trimmedQuery: string) {
     const q = trimmedQuery.toLowerCase();
-    const matches = items.filter((item) => item.name.toLowerCase().includes(q));
+    const matches = items.filter((item) => matchesSearch(q, item.name, item.categoryName));
     if (matches.length === 0) {
       return <p className="text-sm text-muted-foreground">Sin resultados para &quot;{trimmedQuery}&quot;.</p>;
     }
     return (
-      <div className="grid auto-rows-min grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-3 pr-1 sm:gap-4">
+      <div className="grid auto-rows-min grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-3 pr-1 sm:gap-4">
         {matches.map(renderIngredientCard)}
       </div>
     );

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { PromoCard, type PromoCardItem } from "./promo-card";
 import { ComboFormDialog } from "./combo-form-dialog";
 import { PromotionFormDialog } from "./promotion-form-dialog";
+import { matchesSearch } from "@/lib/search";
 
 type StatusFilter = "todos" | "activo" | "inactivo";
 type CategoryFilter = "todas" | "PAQUETE" | "DOS_POR_UNO" | "DIA_TEMATICO";
@@ -62,7 +63,7 @@ export function PromocionesWorkspace({
       const isActive = item.kind === "combo" ? item.combo.isActive : item.promotion.isActive;
       const category: CategoryFilter = item.kind === "combo" ? "PAQUETE" : item.promotion.category;
 
-      if (trimmedQuery && !name.toLowerCase().includes(trimmedQuery)) return false;
+      if (trimmedQuery && !matchesSearch(trimmedQuery, name)) return false;
       if (statusFilter === "activo" && !isActive) return false;
       if (statusFilter === "inactivo" && isActive) return false;
       if (categoryFilter !== "todas" && category !== categoryFilter) return false;
@@ -95,13 +96,13 @@ export function PromocionesWorkspace({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
-        <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar promoción…" className="max-w-xs" />
-        <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as StatusFilter)} className="w-40">
+        <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar promoción…" aria-label="Buscar promoción" className="max-w-xs" />
+        <Select aria-label="Filtrar por estado" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as StatusFilter)} className="w-40">
           <option value="todos">Todos</option>
           <option value="activo">Activos</option>
           <option value="inactivo">Inactivos</option>
         </Select>
-        <Select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value as CategoryFilter)} className="w-56">
+        <Select aria-label="Filtrar por categoría" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value as CategoryFilter)} className="w-56">
           <option value="todas">Todas las categorías</option>
           {Object.entries(CATEGORY_LABELS).map(([v, label]) => (
             <option key={v} value={v}>
@@ -122,7 +123,29 @@ export function PromocionesWorkspace({
         </div>
       </div>
 
-      {filtered.length === 0 && <p className="text-sm text-muted-foreground">Ninguna promoción coincide con los filtros.</p>}
+      {/* Empty state: distinguir "no hay ninguna" de "los filtros no
+          encuentran nada" (mejora D6). */}
+      {filtered.length === 0 &&
+        (items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Aún no hay promociones. Crea un paquete, un 2x1 o un día temático con los botones de arriba; se aplican solas en el POS.
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Ninguna promoción coincide con los filtros.{" "}
+            <button
+              type="button"
+              className="underline"
+              onClick={() => {
+                setQuery("");
+                setStatusFilter("todos");
+                setCategoryFilter("todas");
+              }}
+            >
+              Limpiar filtros
+            </button>
+          </p>
+        ))}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {filtered.map((item) => (

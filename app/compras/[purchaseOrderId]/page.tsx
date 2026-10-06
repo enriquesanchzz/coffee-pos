@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
@@ -11,6 +12,8 @@ import {
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { PurchaseOrderDetailView } from "@/components/compras/purchase-order-detail-view";
 import { orNotFound } from "@/lib/not-found";
+
+export const metadata: Metadata = { title: "Orden de compra" };
 
 export default async function DetalleOrdenPage({
   params,

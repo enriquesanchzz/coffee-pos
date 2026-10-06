@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -142,6 +143,8 @@ export function AppearanceForm({ initial }: { initial: ThemeSettings }) {
                 key={s.hex}
                 type="button"
                 title={s.label}
+                aria-label={`Color ${s.label}`}
+                aria-pressed={settings.color.toLowerCase() === s.hex.toLowerCase()}
                 onClick={() => update("color", s.hex)}
                 className="h-7 w-7 rounded-full border border-border"
                 style={{ backgroundColor: s.hex }}
@@ -187,8 +190,8 @@ export function AppearanceForm({ initial }: { initial: ThemeSettings }) {
         <Button onClick={handleSave} disabled={isPending}>
           {isPending ? "Guardando..." : "Guardar apariencia"}
         </Button>
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        {saved && !error && <p className="text-sm text-emerald-600">Guardado.</p>}
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        {saved && !error && <Alert variant="success">Guardado.</Alert>}
       </div>
     </div>
   );

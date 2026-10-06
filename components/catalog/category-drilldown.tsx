@@ -115,6 +115,8 @@ export function CategoryDrilldown({
           return (
             <div key={id} className="group flex items-center gap-1">
               <button
+                type="button"
+                aria-pressed={isActive}
                 onClick={() => selectTop(id)}
                 className={cn(
                   "flex flex-1 items-center gap-2 rounded-full px-3 py-2 text-left text-sm font-medium transition-colors",
@@ -128,10 +130,13 @@ export function CategoryDrilldown({
                 <button
                   type="button"
                   onClick={() => onEditCategory(entry.category)}
-                  className="hidden h-6 w-6 flex-shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted group-hover:flex"
+                  // Siempre presente: en touch y con teclado no hay hover
+                  // (E10). Con mouse se atenúa hasta pasar por encima.
+                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:hover)]:opacity-0"
                   title="Editar categoría"
+                  aria-label={`Editar categoría ${name}`}
                 >
-                  <Pencil className="h-3 w-3" />
+                  <Pencil aria-hidden="true" className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>
@@ -141,11 +146,12 @@ export function CategoryDrilldown({
 
       <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-hidden p-2 sm:gap-4 sm:p-4">
         <div className="relative max-w-sm flex-shrink-0">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
             placeholder={searchPlaceholder}
+            aria-label={searchPlaceholder.replace(/…$/, "")}
             className="rounded-full pl-9"
           />
         </div>
@@ -163,7 +169,18 @@ export function CategoryDrilldown({
                   className="flex aspect-[4/3] cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl p-4 text-center transition-shadow hover:shadow-md"
                   onClick={() => setActiveSubId(child.id)}
                 >
-                  <CategoryIcon icon={child.icon} className="h-8 w-8 text-muted-foreground" />
+                  {child.icon ? (
+                    <CategoryIcon icon={child.icon} className="h-8 w-8 text-muted-foreground" />
+                  ) : (
+                    // Sin ícono: inicial, para que todas las tarjetas tengan
+                    // el mismo peso visual (E7).
+                    <span
+                      aria-hidden="true"
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-sm font-semibold text-muted-foreground"
+                    >
+                      {child.name.charAt(0).toUpperCase()}
+                    </span>
+                  )}
                   <p className="text-sm font-medium leading-tight">{child.name}</p>
                 </Card>
               ))}

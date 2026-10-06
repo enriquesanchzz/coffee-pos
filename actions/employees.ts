@@ -5,11 +5,24 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { hashSecret } from "@/lib/password";
-import { isPinTaken, requirePasswordSession, resolveRoleName } from "@/lib/session";
-import { isValidEmail } from "@/lib/utils";
+import { isPinTaken, requirePasswordSession, resolveRoleName, SessionExpiredError } from "@/lib/session";
+import { normalizeEmail } from "@/lib/validation";
 import { requirePermission } from "@/lib/permissions";
 
 const PIN_PATTERN = /^\d{4,6}$/;
+
+async function assertEmailAvailable(email: string | null, excludeEmployeeId?: string) {
+  if (!email) return;
+  const existing = await prisma.employee.findFirst({
+    where: {
+      email: { equals: email, mode: "insensitive" },
+      ...(excludeEmployeeId ? { id: { not: excludeEmployeeId } } : {}),
+    },
+  });
+  if (existing) {
+    throw new Error(`Ese email ya lo usa ${existing.name}.`);
+  }
+}
 
 const PIN_TAKEN_MESSAGE = "Ese PIN ya lo usa otro empleado activo. Elige uno distinto.";
 
@@ -22,7 +35,7 @@ const PIN_TAKEN_MESSAGE = "Ese PIN ya lo usa otro empleado activo. Elige uno dis
 async function requireEmployeeManager(permission: "EMPLEADO_CREAR" | "EMPLEADO_MODIFICAR") {
   const actor = await requirePasswordSession();
   if (!actor) {
-    throw new Error("Necesitas iniciar sesión de Administración para hacer esto.");
+    throw new SessionExpiredError("Necesitas iniciar sesión de Administración para hacer esto.", "/administracion/login?error=sesion");
   }
   if (resolveRoleName(actor, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") {
     throw new Error("Esta acción es exclusiva del rol ADMINISTRADOR.");
@@ -61,9 +74,8 @@ export const createEmployee = safeAction(async function createEmployee(input: Cr
   if (!input.roleId) {
     throw new Error("Elige un rol.");
   }
-  if (input.email?.trim() && !isValidEmail(input.email.trim())) {
-    throw new Error("El email no es válido.");
-  }
+  const email = normalizeEmail(input.email);
+  await assertEmailAvailable(email);
   if (pin && (await isPinTaken(pin))) {
     throw new Error(PIN_TAKEN_MESSAGE);
   }
@@ -75,7 +87,7 @@ export const createEmployee = safeAction(async function createEmployee(input: Cr
     const employee = await tx.employee.create({
       data: {
         name,
-        email: input.email?.trim() || null,
+        email,
         pin: pinHash,
         passwordHash,
       },
@@ -106,8 +118,33 @@ export type UpdateEmployeeInput = {
   isCashier: boolean;
 };
 
+// Administración (y por lo tanto la gestión de empleados) es exclusiva del
+// rol ADMINISTRADOR: si el único administrador activo pierde el rol o se
+// desactiva, nadie puede volver a entrar a corregirlo desde la app
+// (QA-001). Se valida contra la base, no contra lo que diga el cliente.
+async function assertKeepsAnAdmin(employeeId: string, newRoleId: string, willBeActive: boolean) {
+  const adminRole = await prisma.role.findUnique({ where: { name: "ADMINISTRADOR" } });
+  if (!adminRole) return;
+  const staysAdmin = newRoleId === adminRole.id && willBeActive;
+  if (staysAdmin) return;
+
+  const otherActiveAdmins = await prisma.employeeBranch.count({
+    where: {
+      branchId: DEFAULT_BRANCH_ID,
+      roleId: adminRole.id,
+      employeeId: { not: employeeId },
+      employee: { isActive: true },
+    },
+  });
+  if (otherActiveAdmins === 0) {
+    throw new Error(
+      "Debe quedar al menos un administrador activo. Asigna el rol ADMINISTRADOR a otra persona antes de cambiar este."
+    );
+  }
+}
+
 export const updateEmployee = safeAction(async function updateEmployee(input: UpdateEmployeeInput) {
-  await requireEmployeeManager("EMPLEADO_MODIFICAR");
+  const actor = await requireEmployeeManager("EMPLEADO_MODIFICAR");
 
   const name = input.name.trim();
   if (!name) {
@@ -124,12 +161,12 @@ export const updateEmployee = safeAction(async function updateEmployee(input: Up
   if (!input.roleId) {
     throw new Error("Elige un rol.");
   }
-  if (input.email?.trim() && !isValidEmail(input.email.trim())) {
-    throw new Error("El email no es válido.");
-  }
+  const email = normalizeEmail(input.email);
+  await assertEmailAvailable(email, input.employeeId);
   if (pin && (await isPinTaken(pin, input.employeeId))) {
     throw new Error(PIN_TAKEN_MESSAGE);
   }
+  await assertKeepsAnAdmin(input.employeeId, input.roleId, input.isActive);
 
   const newPinHash = pin ? await hashSecret(pin) : undefined;
   const newPasswordHash = password ? await hashSecret(password) : undefined;
@@ -139,7 +176,7 @@ export const updateEmployee = safeAction(async function updateEmployee(input: Up
       where: { id: input.employeeId },
       data: {
         name,
-        email: input.email?.trim() || null,
+        email,
         isActive: input.isActive,
         ...(newPinHash ? { pin: newPinHash } : {}),
         ...(newPasswordHash ? { passwordHash: newPasswordHash } : {}),
@@ -162,4 +199,7 @@ export const updateEmployee = safeAction(async function updateEmployee(input: Up
   });
 
   revalidatePath("/empleados");
+  // Si alguien se quitó a sí mismo el rol o el acceso, el formulario debe
+  // explicarlo en vez de que la siguiente página lo mande a /pos sin aviso.
+  return { changedOwnAccess: actor?.id === input.employeeId };
 });

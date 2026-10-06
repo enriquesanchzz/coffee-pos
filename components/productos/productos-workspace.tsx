@@ -26,6 +26,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { withActionErrors } from "@/lib/action-result";
+import { matchesSearch } from "@/lib/search";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const fetchVariantRecipeDetail = withActionErrors(fetchVariantRecipeDetailAction);
@@ -69,8 +70,14 @@ export function ProductosWorkspace({
 
   const selectedProduct = products.find((p) => p.id === selectedProductId) ?? null;
 
+  // Los productos inactivos (ej. el catálogo de demo reemplazado por el
+  // menú real) se ocultan por default para no ensuciar la navegación
+  // (QA-027); se pueden mostrar para reactivarlos.
+  const [showInactive, setShowInactive] = useState(false);
+  const visibleProducts = showInactive ? products : products.filter((p) => p.isActive);
+
   const drilldownCategories: DrilldownCategory[] = categories
-    .filter((c) => products.some((p) => p.categoryId === c.id))
+    .filter((c) => visibleProducts.some((p) => p.categoryId === c.id))
     .map((c) => ({ id: c.id, name: c.name, icon: c.icon, parentId: c.parentId, parentName: c.parentName }));
 
   function backToBrowse() {
@@ -138,14 +145,20 @@ export function ProductosWorkspace({
           <h1 className="text-lg font-semibold">Productos</h1>
           <p className="text-sm text-muted-foreground">Bebidas con receta, merch, souvenirs y tarjetas de regalo.</p>
         </div>
-        <Button
-          onClick={() => {
-            setSelectedProductId(null);
-            setMainView("new-product");
-          }}
-        >
-          + Nuevo producto
-        </Button>
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
+            Mostrar inactivos
+          </label>
+          <Button
+            onClick={() => {
+              setSelectedProductId(null);
+              setMainView("new-product");
+            }}
+          >
+            + Nuevo producto
+          </Button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-hidden">
@@ -158,13 +171,13 @@ export function ProductosWorkspace({
             onEditCategory={setEditingCategory}
             renderLeaf={(categoryId) =>
               productGrid(
-                products.filter((p) => p.categoryId === categoryId),
+                visibleProducts.filter((p) => p.categoryId === categoryId),
                 "Sin productos en esta categoría."
               )
             }
             renderSearchResults={(q) =>
               productGrid(
-                products.filter((p) => p.name.toLowerCase().includes(q.toLowerCase())),
+                visibleProducts.filter((p) => matchesSearch(q, p.name)),
                 `Sin resultados para "${q}".`
               )
             }
@@ -200,7 +213,10 @@ export function ProductosWorkspace({
                   Categorías
                 </button>
                 <h2 className="mt-2 text-lg font-semibold">{selectedProduct.name}</h2>
-                <p className="text-sm text-muted-foreground">{selectedProduct.categoryName}</p>
+                {/* Sin el subtítulo cuando repite el nombre ("Latte / Latte", E8). */}
+                {selectedProduct.categoryName.trim().toLowerCase() !== selectedProduct.name.trim().toLowerCase() && (
+                  <p className="text-sm text-muted-foreground">{selectedProduct.categoryName}</p>
+                )}
               </div>
 
               <div className="grid auto-rows-min grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-3 sm:gap-4">
@@ -255,7 +271,7 @@ export function ProductosWorkspace({
               {mainView === "edit-variant" && (
                 <>
                   {isLoadingDetail && <p className="text-sm text-muted-foreground">Cargando…</p>}
-                  {detailError && <p className="text-sm text-destructive">{detailError}</p>}
+                  {detailError && <p role="alert" className="text-sm text-destructive">{detailError}</p>}
                   {editingDetail && !isLoadingDetail && (
                     <EditRecipeForm
                       detail={editingDetail}
@@ -350,7 +366,7 @@ function EditCategoryDialog({
             ))}
           </Select>
         </div>
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <div className="flex gap-2">
           <Button onClick={handleSave} disabled={isPending}>
             {isPending ? "Guardando..." : "Guardar"}

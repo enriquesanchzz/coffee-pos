@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
@@ -9,6 +10,8 @@ import {
 } from "@/lib/recipes";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { ProductosWorkspace } from "@/components/productos/productos-workspace";
+
+export const metadata: Metadata = { title: "Productos" };
 
 export default async function ProductosPage() {
   const employee = await getCurrentEmployee();

@@ -6,6 +6,7 @@ import type { IngredientOption, ComposedRecipeOption, IngredientCategoryOption }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { CreateIngredientDialog } from "./create-ingredient-dialog";
 import { unitLabels } from "./enum-labels";
 import { unitStep } from "@/lib/utils";
@@ -67,11 +68,12 @@ export function RecipeLinesEditor({
 
         return (
           <div key={line.key} className="flex items-center gap-2">
-            <Select
+            <Combobox
               className="flex-1"
-              value={line.ref}
-              onChange={(e) => {
-                const ref = e.target.value;
+              aria-label="Ingrediente de la receta"
+              placeholder="Busca un ingrediente…"
+              value={line.ref || null}
+              onChange={(ref) => {
                 const [refKind, refId] = ref.split(":");
                 const selectedIngredient =
                   refKind === "ingredient" ? ingredientById.get(refId) : undefined;
@@ -92,25 +94,15 @@ export function RecipeLinesEditor({
                     : {}),
                 });
               }}
-            >
-              <option value="">Selecciona un ingrediente…</option>
-              <optgroup label="Ingredientes">
-                {ingredients.map((i) => (
-                  <option key={i.id} value={`ingredient:${i.id}`}>
-                    {i.name}
-                  </option>
-                ))}
-              </optgroup>
-              {composedRecipes.length > 0 && (
-                <optgroup label="Ingredientes compuestos">
-                  {composedRecipes.map((r) => (
-                    <option key={r.id} value={`composed:${r.id}`}>
-                      {r.name}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-            </Select>
+              options={[
+                ...ingredients.map((i) => ({ value: `ingredient:${i.id}`, label: i.name })),
+                ...composedRecipes.map((r) => ({
+                  value: `composed:${r.id}`,
+                  label: r.name,
+                  description: "· compuesto",
+                })),
+              ]}
+            />
 
             <Input
               type="number"

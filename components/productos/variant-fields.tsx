@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import type { ProductType, VariantTemperature } from "@prisma/client";
 import type { IngredientOption, ComposedRecipeOption, IngredientCategoryOption } from "@/lib/recipes";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn, formatCurrency } from "@/lib/utils";
 import { temperatureLabels } from "./enum-labels";
 import { RecipeLinesEditor, type LineDraft } from "./recipe-lines-editor";
@@ -80,6 +82,7 @@ export function VariantFields({
   // precio sugerido debajo de la receta — ver Administración.
   targetFoodCostPercent: number;
 }) {
+  const [confirmingLowerPrice, setConfirmingLowerPrice] = useState(false);
   const recipeCost = computeLinesCost(lines, ingredients, composedRecipes);
   const suggestedPrice = recipeCost > 0 ? recipeCost / (targetFoodCostPercent / 100) : 0;
 
@@ -116,6 +119,7 @@ export function VariantFields({
               <div className="flex gap-2">
                 {TEMPERATURE_CHOICES.map((t) => (
                   <button
+                    aria-pressed={temperature === t}
                     key={t || "ninguna"}
                     type="button"
                     onClick={() => onTemperatureChange(t)}
@@ -124,7 +128,7 @@ export function VariantFields({
                       temperature === t ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted"
                     )}
                   >
-                    {t === "" ? "Sin eje" : temperatureLabels[t]}
+                    {t === "" ? "No aplica" : temperatureLabels[t]}
                   </button>
                 ))}
               </div>
@@ -174,10 +178,30 @@ export function VariantFields({
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => onPriceChange(suggestedPrice.toFixed(2))}
+                  onClick={() => {
+                    // Bajar un precio con un clic es fácil de hacer por
+                    // error (ej. $43 → $23.67): se confirma (mejora D1).
+                    const current = Number(price) || 0;
+                    if (current > suggestedPrice) {
+                      setConfirmingLowerPrice(true);
+                    } else {
+                      onPriceChange(suggestedPrice.toFixed(2));
+                    }
+                  }}
                 >
                   Usar precio sugerido
                 </Button>
+                <ConfirmDialog
+                  open={confirmingLowerPrice}
+                  title="¿Bajar el precio?"
+                  message={`El precio actual (${formatCurrency(Number(price) || 0)}) es mayor que el sugerido (${formatCurrency(suggestedPrice)}). ¿Cambiarlo al sugerido?`}
+                  confirmLabel="Usar precio sugerido"
+                  onConfirm={() => {
+                    onPriceChange(suggestedPrice.toFixed(2));
+                    setConfirmingLowerPrice(false);
+                  }}
+                  onCancel={() => setConfirmingLowerPrice(false)}
+                />
               </>
             ) : (
               <p className="text-muted-foreground">Agrega ingredientes con costo para ver un precio sugerido.</p>

@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import QRCode from "qrcode";
 import { getPublicLoyaltyCard } from "@/lib/loyalty";
 import { orNotFound } from "@/lib/not-found";
+
+export const metadata: Metadata = { title: "Tarjeta de lealtad" };
 
 // Página pública (sin sesión — la única de la app) de la tarjeta de
 // lealtad de un cliente. El link se manda por WhatsApp al registrar al

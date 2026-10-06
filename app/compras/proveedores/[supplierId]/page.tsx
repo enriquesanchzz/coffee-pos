@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
@@ -6,6 +7,8 @@ import { getSupplierDetail, getIngredientOptions } from "@/lib/purchases";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { SupplierForm } from "@/components/compras/supplier-form";
 import { orNotFound } from "@/lib/not-found";
+
+export const metadata: Metadata = { title: "Proveedor" };
 
 export default async function EditarProveedorPage({
   params,

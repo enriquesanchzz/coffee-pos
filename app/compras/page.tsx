@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
@@ -5,11 +6,14 @@ import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getPurchaseOrders } from "@/lib/purchases";
 import { getInventoryOverview } from "@/lib/inventory";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
+import { ComprasNav, PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 import { purchaseOrderStatusLabels } from "@/components/compras/enum-labels";
 import { formatDate } from "@/lib/time";
+
+export const metadata: Metadata = { title: "Compras" };
 
 export default async function ComprasPage() {
   const employee = await getCurrentEmployee();
@@ -22,28 +26,9 @@ export default async function ComprasPage() {
   return (
     <AuthenticatedShell isAdmin employeeName={employee.name}>
       <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-semibold">Compras</h1>
-            <div className="flex gap-3">
-              <Link href="/compras/proveedores" className="text-sm text-muted-foreground hover:underline">
-                Proveedores →
-              </Link>
-              <Link href="/compras/transferencias" className="text-sm text-muted-foreground hover:underline">
-                Transferencias →
-              </Link>
-              <Link href="/compras/conteos" className="text-sm text-muted-foreground hover:underline">
-                Conteos físicos →
-              </Link>
-            </div>
-          </div>
-          <Link
-            href="/compras/nueva"
-            className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            + Nueva orden
-          </Link>
-        </div>
+        <PageHeader title="Compras" action={{ href: "/compras/nueva", label: "+ Nueva orden" }}>
+          <ComprasNav active="/compras" />
+        </PageHeader>
 
         {lowStockItems.length > 0 && (
           <Card>

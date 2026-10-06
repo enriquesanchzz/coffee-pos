@@ -268,7 +268,12 @@ export async function getRecipeCostReport(
       },
       temperature: filters.temperature || undefined,
     },
-    orderBy: [{ product: { name: "asc" } }, { name: "asc" }],
+    orderBy: [
+      { product: { name: "asc" } },
+      { sizeOz: { sort: "asc", nulls: "last" } },
+      { price: "asc" },
+      { temperature: "asc" },
+    ],
     include: {
       product: { include: { category: true } },
       recipes: {

@@ -2,10 +2,12 @@
 
 import { safeAction } from "@/lib/safe-action";
 import { revalidatePath } from "next/cache";
-import type { UnitOfMeasure } from "@prisma/client";
+import { Prisma, type UnitOfMeasure } from "@prisma/client";
+import { resolvePurchasePresentation, roundQty } from "@/lib/units";
+import { assertMoney, normalizeEmail, normalizePhoneMx } from "@/lib/validation";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID, DEFAULT_STOCK_LOCATION_ID } from "@/lib/constants";
-import { getSessionEmployeeId } from "@/lib/session";
+import { getSessionEmployeeId, assertSessionEmployee } from "@/lib/session";
 import { requirePermission, requireAdminRole } from "@/lib/permissions";
 
 // No existe un permiso específico de "proveedores" en el catálogo — se usa
@@ -22,13 +24,12 @@ export type CreateSupplierInput = {
 };
 
 export const createSupplier = safeAction(async function createSupplier(input: CreateSupplierInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   const name = input.name.trim();
   if (!name) {
     throw new Error("El nombre del proveedor es obligatorio.");
   }
+  assertMoney(input.minOrderAmount, "El mínimo de orden");
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "ORDEN_COMPRA_CREAR");
   await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
@@ -37,8 +38,8 @@ export const createSupplier = safeAction(async function createSupplier(input: Cr
     data: {
       name,
       contact: input.contact?.trim() || null,
-      phone: input.phone?.trim() || null,
-      email: input.email?.trim() || null,
+      phone: normalizePhoneMx(input.phone),
+      email: normalizeEmail(input.email),
       minOrderAmount: input.minOrderAmount || null,
       branchId: null, // proveedor global — no hay razón para atarlo a una sucursal todavía
     },
@@ -61,13 +62,12 @@ export type UpdateSupplierInput = {
 };
 
 export const updateSupplier = safeAction(async function updateSupplier(input: UpdateSupplierInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   const name = input.name.trim();
   if (!name) {
     throw new Error("El nombre del proveedor es obligatorio.");
   }
+  assertMoney(input.minOrderAmount, "El mínimo de orden");
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "ORDEN_COMPRA_CREAR");
   await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
@@ -77,8 +77,8 @@ export const updateSupplier = safeAction(async function updateSupplier(input: Up
     data: {
       name,
       contact: input.contact?.trim() || null,
-      phone: input.phone?.trim() || null,
-      email: input.email?.trim() || null,
+      phone: normalizePhoneMx(input.phone),
+      email: normalizeEmail(input.email),
       isActive: input.isActive,
       minOrderAmount: input.minOrderAmount || null,
     },
@@ -103,9 +103,7 @@ export type UpsertIngredientSupplierInput = {
 // costo de receta (ver comentario en IngredientSupplier del schema) — solo
 // un proveedor puede estar seleccionado a la vez por ingrediente.
 export const upsertIngredientSupplier = safeAction(async function upsertIngredientSupplier(input: UpsertIngredientSupplierInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   if (input.cost <= 0) {
     throw new Error("El costo debe ser mayor a cero.");
   }
@@ -150,12 +148,35 @@ export const upsertIngredientSupplier = safeAction(async function upsertIngredie
   revalidatePath(`/compras/proveedores/${input.supplierId}`);
 });
 
+// quantity/estimatedUnitCost llegan en la presentación de compra del
+// insumo cuando tiene una (ej. 2 "Caja 12 L" a $300 c/u) — el servidor la
+// resuelve y convierte a baseUnit (ver toBaseOrderLine). `unit` se ignora
+// a favor del baseUnit real del insumo.
 export type CreatePurchaseOrderLineInput = {
   ingredientId: string;
   quantity: number;
   unit: UnitOfMeasure;
   estimatedUnitCost: number;
 };
+
+async function toBaseOrderLine(tx: Prisma.TransactionClient, line: CreatePurchaseOrderLineInput) {
+  const ingredient = await tx.ingredient.findUniqueOrThrow({ where: { id: line.ingredientId } });
+  const presentation = resolvePurchasePresentation({
+    baseUnit: ingredient.baseUnit,
+    purchaseUnit: ingredient.purchaseUnit,
+    purchasePresentationName: ingredient.purchasePresentationName,
+    purchasePresentationSize: ingredient.purchasePresentationSize?.toNumber() ?? null,
+  });
+  const size = presentation?.size ?? 1;
+  return {
+    ingredientId: line.ingredientId,
+    orderedQuantity: roundQty(line.quantity * size),
+    unit: ingredient.baseUnit,
+    estimatedUnitCost: roundQty(line.estimatedUnitCost / size),
+    presentationName: presentation?.name ?? null,
+    unitsPerPresentation: presentation ? size : null,
+  };
+}
 
 export type CreatePurchaseOrderInput = {
   employeeId: string;
@@ -164,9 +185,7 @@ export type CreatePurchaseOrderInput = {
 };
 
 export const createPurchaseOrder = safeAction(async function createPurchaseOrder(input: CreatePurchaseOrderInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   if (!input.supplierId) {
     throw new Error("Elige un proveedor.");
   }
@@ -191,21 +210,18 @@ export const createPurchaseOrder = safeAction(async function createPurchaseOrder
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "ORDEN_COMPRA_CREAR");
   await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
 
-  const order = await prisma.purchaseOrder.create({
-    data: {
-      branchId: DEFAULT_BRANCH_ID,
-      supplierId: input.supplierId,
-      employeeId: input.employeeId,
-      status: "CREADA",
-      items: {
-        create: input.lines.map((line) => ({
-          ingredientId: line.ingredientId,
-          orderedQuantity: line.quantity,
-          unit: line.unit,
-          estimatedUnitCost: line.estimatedUnitCost,
-        })),
+  const order = await prisma.$transaction(async (tx) => {
+    const items = [];
+    for (const line of input.lines) items.push(await toBaseOrderLine(tx, line));
+    return tx.purchaseOrder.create({
+      data: {
+        branchId: DEFAULT_BRANCH_ID,
+        supplierId: input.supplierId,
+        employeeId: input.employeeId,
+        status: "CREADA",
+        items: { create: items },
       },
-    },
+    });
   });
 
   revalidatePath("/compras");
@@ -240,9 +256,7 @@ export type ReceivePurchaseOrderInput = {
 // proveedor, actualiza IngredientSupplier.cost dejando rastro en
 // IngredientCostHistory.
 export const receivePurchaseOrder = safeAction(async function receivePurchaseOrder(input: ReceivePurchaseOrderInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "COMPRA_REGISTRAR");
   await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
@@ -271,7 +285,21 @@ export const receivePurchaseOrder = safeAction(async function receivePurchaseOrd
 
     const itemsById = new Map(order.items.map((item) => [item.id, item]));
 
-    for (const line of receivedLines) {
+    // La recepción se captura en la misma presentación que la orden (ver
+    // PurchaseOrderItem.unitsPerPresentation): se convierte a baseUnit aquí
+    // y todo lo demás (stock, lotes, costos) sigue en baseUnit.
+    const baseLines = receivedLines.map((line) => {
+      const size = itemsById.get(line.purchaseOrderItemId)?.unitsPerPresentation?.toNumber();
+      return size
+        ? {
+            ...line,
+            receivedQuantity: roundQty(line.receivedQuantity * size),
+            actualUnitCost: roundQty(line.actualUnitCost / size),
+          }
+        : line;
+    });
+
+    for (const line of baseLines) {
       const item = itemsById.get(line.purchaseOrderItemId);
       if (!item) {
         throw new Error("Línea de orden inválida.");
@@ -280,7 +308,9 @@ export const receivePurchaseOrder = safeAction(async function receivePurchaseOrd
       const alreadyReceived = item.receivedQuantity?.toNumber() ?? 0;
       const pending = item.orderedQuantity.toNumber() - alreadyReceived;
       if (line.receivedQuantity > pending) {
-        throw new Error(`${item.ingredient.name}: no puedes recibir más de lo pendiente (quedan ${pending}).`);
+        const size = item.unitsPerPresentation?.toNumber();
+        const shown = size ? `${roundQty(pending / size)} ${item.presentationName}` : `${pending}`;
+        throw new Error(`${item.ingredient.name}: no puedes recibir más de lo pendiente (quedan ${shown}).`);
       }
 
       await tx.inventoryStock.upsert({
@@ -360,7 +390,7 @@ export const receivePurchaseOrder = safeAction(async function receivePurchaseOrd
     // Recalcular contra el estado acumulado real (no solo lo tocado en esta
     // pasada) — un ítem ya completado en una pasada anterior debe seguir
     // contando como completo aunque esta pasada no lo haya tocado.
-    const receivedThisPassByItemId = new Map(receivedLines.map((line) => [line.purchaseOrderItemId, line]));
+    const receivedThisPassByItemId = new Map(baseLines.map((line) => [line.purchaseOrderItemId, line]));
     const allFullyReceived = order.items.every((item) => {
       const receivedThisPass = receivedThisPassByItemId.get(item.id)?.receivedQuantity ?? 0;
       const totalReceived = (item.receivedQuantity?.toNumber() ?? 0) + receivedThisPass;
@@ -394,9 +424,7 @@ export type UpdatePurchaseOrderInput = {
 // está contemplado; para corregir algo ya recibido, la vía es una nueva
 // orden.
 export const updatePurchaseOrder = safeAction(async function updatePurchaseOrder(input: UpdatePurchaseOrderInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   if (!input.supplierId) {
     throw new Error("Elige un proveedor.");
   }
@@ -431,19 +459,11 @@ export const updatePurchaseOrder = safeAction(async function updatePurchaseOrder
     }
 
     await tx.purchaseOrderItem.deleteMany({ where: { purchaseOrderId: order.id } });
+    const items = [];
+    for (const line of input.lines) items.push(await toBaseOrderLine(tx, line));
     await tx.purchaseOrder.update({
       where: { id: order.id },
-      data: {
-        supplierId: input.supplierId,
-        items: {
-          create: input.lines.map((line) => ({
-            ingredientId: line.ingredientId,
-            orderedQuantity: line.quantity,
-            unit: line.unit,
-            estimatedUnitCost: line.estimatedUnitCost,
-          })),
-        },
-      },
+      data: { supplierId: input.supplierId, items: { create: items } },
     });
   });
 
@@ -460,9 +480,7 @@ export type CancelPurchaseOrderInput = {
 // recibido (ni que sea parcial) dejaría el inventario ya aplicado
 // inconsistente con el estado de la orden.
 export const cancelPurchaseOrder = safeAction(async function cancelPurchaseOrder(input: CancelPurchaseOrderInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "ORDEN_COMPRA_CREAR");
   await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);

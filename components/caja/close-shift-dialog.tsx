@@ -82,7 +82,7 @@ export function CloseShiftDialog({
     <Dialog open={open} onOpenChange={onOpenChange} title="Cerrar turno">
       {!preview ? (
         error ? (
-          <p className="text-sm text-destructive">{error}</p>
+          <p role="alert" className="text-sm text-destructive">{error}</p>
         ) : (
           <p className="text-sm text-muted-foreground">Calculando efectivo esperado...</p>
         )
@@ -147,7 +147,7 @@ export function CloseShiftDialog({
 
           {hasDifference && (
             <div className="flex flex-col gap-1">
-              <p className="text-sm text-destructive">
+              <p role="alert" className="text-sm text-destructive">
                 Diferencia de {formatCurrency(difference)} — captura el motivo.
               </p>
               <Label htmlFor="differenceReason">Motivo de la diferencia</Label>
@@ -172,7 +172,7 @@ export function CloseShiftDialog({
             />
           </div>
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
           <Button onClick={handleConfirm} disabled={isPending || !hasCount}>
             {isPending ? "Cerrando..." : "Confirmar cierre"}

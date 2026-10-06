@@ -72,6 +72,7 @@ horaria de la sucursal: `America/Mexico_City` por defecto, configurable con
 | `npm run prisma:studio` | UI de Prisma para explorar/editar datos. |
 | `npm run prisma:seed` | Seed base: roles, permisos, sucursal principal, ubicaciones de stock. |
 | `npm run prisma:seed-demo` | Seed de demo: ingredientes, productos, recetas, empleados, turno abierto, stock inicial. |
+| `npm run test:e2e` | Suite Playwright + axe (requiere `npm run build`; usa la base `nomada_pos_test`, ver `e2e/README.md`). |
 
 ## Estructura del repo
 

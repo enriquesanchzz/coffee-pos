@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { createEmployee as createEmployeeAction, updateEmployee as updateEmployeeAction } from "@/actions/employees";
 import { withActionErrors } from "@/lib/action-result";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const createEmployee = withActionErrors(createEmployeeAction);
@@ -18,9 +19,12 @@ const updateEmployee = withActionErrors(updateEmployeeAction);
 export function EmployeeForm({
   roles,
   employee,
+  currentEmployeeId,
 }: {
   roles: RoleOption[];
   employee?: EmployeeDetail;
+  // Para advertir cuando alguien edita su propio rol/acceso.
+  currentEmployeeId?: string;
 }) {
   const router = useRouter();
   const isEdit = Boolean(employee);
@@ -33,13 +37,27 @@ export function EmployeeForm({
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [confirmingSelfChange, setConfirmingSelfChange] = useState(false);
+  const [lostOwnAccess, setLostOwnAccess] = useState(false);
+
+  const isSelf = Boolean(employee && employee.id === currentEmployeeId);
+  const changesOwnAccess =
+    isSelf && employee && (roleId !== employee.roleId || (employee.isActive && !isActive));
+
+  // Desactivar a alguien le quita el acceso de inmediato: se confirma.
+  const deactivatesSomeone = Boolean(employee?.isActive && !isActive && !isSelf);
 
   function handleSubmit() {
+    if ((changesOwnAccess || deactivatesSomeone) && !confirmingSelfChange) {
+      setConfirmingSelfChange(true);
+      return;
+    }
+    setConfirmingSelfChange(false);
     setError(null);
     startTransition(async () => {
       try {
         if (employee) {
-          await updateEmployee({
+          const result = await updateEmployee({
             employeeId: employee.id,
             name,
             email,
@@ -49,6 +67,12 @@ export function EmployeeForm({
             roleId,
             isCashier,
           });
+          if (result?.changedOwnAccess && changesOwnAccess) {
+            // Ya no tiene acceso a esta pantalla: se le explica en vez de
+            // que la siguiente navegación lo mande a /pos sin aviso.
+            setLostOwnAccess(true);
+            return;
+          }
         } else {
           await createEmployee({
             name,
@@ -64,6 +88,18 @@ export function EmployeeForm({
         setError(err instanceof Error ? err.message : "No se pudo guardar el empleado.");
       }
     });
+  }
+
+  if (lostOwnAccess) {
+    return (
+      <div className="mx-auto flex max-w-xl flex-col gap-4 p-6">
+        <h1 className="text-lg font-semibold">Cambios guardados</h1>
+        <p className="text-sm text-muted-foreground">
+          Cambiaste tu propio rol o acceso, así que ya no puedes entrar a Administración con esta cuenta.
+        </p>
+        <Button onClick={() => router.push("/pos")}>Ir al Punto de Venta</Button>
+      </div>
+    );
   }
 
   return (
@@ -162,11 +198,24 @@ export function EmployeeForm({
         </CardContent>
       </Card>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
       <Button onClick={handleSubmit} disabled={isPending}>
         {isPending ? "Guardando..." : isEdit ? "Guardar cambios" : "Crear empleado"}
       </Button>
+      <ConfirmDialog
+        open={confirmingSelfChange}
+        title={deactivatesSomeone ? `¿Desactivar a ${employee?.name}?` : "¿Cambiar tu propio acceso?"}
+        message={
+          deactivatesSomeone
+            ? "Ya no podrá entrar al POS ni a Administración. Su historial de ventas se conserva y puedes reactivarlo después."
+            : "Estás cambiando tu propio rol o desactivando tu cuenta. Si dejas de ser ADMINISTRADOR, perderás el acceso a Administración en cuanto guardes."
+        }
+        confirmLabel="Sí, guardar"
+        destructive
+        onConfirm={handleSubmit}
+        onCancel={() => setConfirmingSelfChange(false)}
+      />
     </div>
   );
 }

@@ -5,10 +5,11 @@ import { revalidatePath } from "next/cache";
 import { Prisma, ProductType, UnitOfMeasure, VariantTemperature } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
-import { getSessionEmployeeId } from "@/lib/session";
+import { getSessionEmployeeId, assertSessionEmployee, SessionExpiredError } from "@/lib/session";
 import { requirePermission, requireAdminRole } from "@/lib/permissions";
 import { recordRecipeCostSnapshot } from "@/lib/recipe-cost";
 import { getVariantRecipeDetail } from "@/lib/recipes";
+import { assertMoney, normalizeImageUrl } from "@/lib/validation";
 
 export type CreateIngredientInput = {
   employeeId: string;
@@ -19,12 +20,14 @@ export type CreateIngredientInput = {
   // Precio al cliente como extra libre; vacío/undefined = costo ÷ % de
   // food cost objetivo (ver extraPriceDelta en actions/pos.ts).
   extraUnitPrice?: number | null;
+  // Presentación de compra (ver Ingredient.purchasePresentationName); ambos
+  // vacíos = se compra en purchaseUnit/baseUnit.
+  purchasePresentationName?: string | null;
+  purchasePresentationSize?: number | null;
 };
 
 export const createIngredient = safeAction(async function createIngredient(input: CreateIngredientInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   const name = input.name.trim();
   if (!name) {
     throw new Error("El nombre del ingrediente es obligatorio.");
@@ -43,6 +46,11 @@ export const createIngredient = safeAction(async function createIngredient(input
         input.extraUnitPrice === undefined || input.extraUnitPrice === null || input.extraUnitPrice < 0
           ? null
           : input.extraUnitPrice,
+      purchasePresentationName: input.purchasePresentationName?.trim() || null,
+      purchasePresentationSize:
+        input.purchasePresentationName?.trim() && input.purchasePresentationSize && input.purchasePresentationSize > 0
+          ? input.purchasePresentationSize
+          : null,
     },
   });
 
@@ -255,9 +263,7 @@ export type CreateProductWithRecipeInput = {
 // activa + líneas + grupos de modificador opcionales. Si es
 // REVENTA_DIRECTA, la variante se crea sin receta, con talla/color/nota.
 export const createProductWithRecipe = safeAction(async function createProductWithRecipe(input: CreateProductWithRecipeInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
 
   const productName = input.productName.trim();
   if (!productName) {
@@ -276,6 +282,7 @@ export const createProductWithRecipe = safeAction(async function createProductWi
     if (variant.price <= 0) {
       throw new Error(`${variant.name}: el precio debe ser mayor a cero.`);
     }
+    assertMoney(variant.price, `${variant.name}: el precio`);
     if (type === "RECETA") {
       validateLines(variant.lines, variant.name);
     }
@@ -297,7 +304,7 @@ export const createProductWithRecipe = safeAction(async function createProductWi
       : await tx.productCategory.findUniqueOrThrow({ where: { id: input.categoryId } });
 
     const product = await tx.product.create({
-      data: { name: productName, imageUrl: input.imageUrl?.trim() || null, categoryId: category.id, type },
+      data: { name: productName, imageUrl: normalizeImageUrl(input.imageUrl), categoryId: category.id, type },
     });
 
     await tx.branchProduct.create({
@@ -361,9 +368,7 @@ export type AddVariantToProductInput = {
 // Productos") — mismo cuerpo que la parte "por variante" de
 // createProductWithRecipe, pero sin crear el producto.
 export const addVariantToProduct = safeAction(async function addVariantToProduct(input: AddVariantToProductInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
 
   const variant = input.variant;
   if (!variant.name.trim()) {
@@ -372,6 +377,7 @@ export const addVariantToProduct = safeAction(async function addVariantToProduct
   if (variant.price <= 0) {
     throw new Error("El precio debe ser mayor a cero.");
   }
+  assertMoney(variant.price, "El precio");
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "PRODUCTO_CREAR");
   await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
@@ -451,9 +457,7 @@ export type UpdateVariantRecipeInput = {
 // Si el producto es REVENTA_DIRECTA (sin receta), solo actualiza los
 // campos de la variante — no hay líneas ni grupos que tocar.
 export const updateVariantRecipe = safeAction(async function updateVariantRecipe(input: UpdateVariantRecipeInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
 
   const name = input.name.trim();
   if (!name) {
@@ -462,6 +466,7 @@ export const updateVariantRecipe = safeAction(async function updateVariantRecipe
   if (input.price <= 0) {
     throw new Error("El precio debe ser mayor a cero.");
   }
+  assertMoney(input.price, "El precio");
 
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "RECETA_MODIFICAR");
   await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
@@ -485,7 +490,7 @@ export const updateVariantRecipe = safeAction(async function updateVariantRecipe
     if (input.imageUrl !== undefined) {
       await tx.product.update({
         where: { id: updatedVariant.productId },
-        data: { imageUrl: input.imageUrl.trim() || null },
+        data: { imageUrl: normalizeImageUrl(input.imageUrl) },
       });
     }
 
@@ -546,7 +551,7 @@ export const fetchVariantRecipeDetail = safeAction(async function fetchVariantRe
   // Costos de receta: misma regla que la página /productos que lo usa.
   const employeeId = await getSessionEmployeeId();
   if (!employeeId) {
-    throw new Error("Necesitas iniciar sesión para ver la receta.");
+    throw new SessionExpiredError("Necesitas iniciar sesión para ver la receta.");
   }
   await requireAdminRole(employeeId, DEFAULT_BRANCH_ID);
   return getVariantRecipeDetail(variantId);
@@ -565,9 +570,7 @@ export type UpdateProductCategoryInput = {
 // ícono (components/productos/category-icon-picker.tsx) y categoría
 // padre.
 export const updateProductCategory = safeAction(async function updateProductCategory(input: UpdateProductCategoryInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   const name = input.name.trim();
   if (!name) {
     throw new Error("El nombre de la categoría es obligatorio.");

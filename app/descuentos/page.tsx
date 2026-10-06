@@ -1,10 +1,14 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getDiscountCodes } from "@/lib/discounts";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
+import { PageHeader } from "@/components/layout/page-header";
 import { DiscountCodesWorkspace } from "@/components/descuentos/discount-codes-workspace";
+
+export const metadata: Metadata = { title: "Códigos de descuento" };
 
 export default async function DescuentosPage() {
   const employee = await getCurrentEmployee();
@@ -19,10 +23,7 @@ export default async function DescuentosPage() {
   return (
     <AuthenticatedShell isAdmin employeeName={employee.name}>
       <div className="mx-auto flex max-w-4xl flex-col gap-4 p-6">
-        <div>
-          <h1 className="text-lg font-semibold">Códigos de descuento</h1>
-          <p className="text-sm text-muted-foreground">Para clientes específicos, campañas o empleados.</p>
-        </div>
+        <PageHeader title="Códigos de descuento" description="Para clientes específicos, campañas o empleados." />
 
         <DiscountCodesWorkspace codes={codes} employeeId={employee.id} />
       </div>

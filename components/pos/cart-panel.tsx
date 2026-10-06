@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label";
 import { cn, formatCurrency, posAccentClass, unitLabel } from "@/lib/utils";
 import { CustomerPicker } from "./customer-picker";
 import { CheckoutForm, type SaleReceipt } from "./checkout-form";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { isShortageError } from "@/lib/stock";
 import type { CustomerOption } from "@/lib/customers";
 import { withActionErrors } from "@/lib/action-result";
 
@@ -102,28 +104,39 @@ export function CartPanel({
     setActiveTabId(null);
   }
 
-  function handleLeaveOpen() {
+  // Advertencia de insumos insuficientes al dejar/agregar a una cuenta
+  // abierta: el servidor la rechaza con un mensaje que empieza con
+  // SHORTAGE_ERROR_PREFIX y aquí se ofrece reintentar confirmando.
+  const [shortageMessage, setShortageMessage] = useState<string | null>(null);
+
+  function handleLeaveOpen(allowShortage = false) {
     setTabError(null);
+    setShortageMessage(null);
     if (lines.length === 0) return;
 
     startSavingTab(async () => {
       try {
         const items = lines.map(cartLineToSaleItemInput);
         if (activeTabId) {
-          await addItemsToTab({ saleId: activeTabId, branchId, shiftId, employeeId, items });
+          await addItemsToTab({ saleId: activeTabId, branchId, shiftId, employeeId, items, allowShortage });
         } else {
           if (!tableNumber.trim()) {
             setTabError("Captura el número de mesa.");
             return;
           }
-          await openTab({ branchId, shiftId, employeeId, tableNumber, items });
+          await openTab({ branchId, shiftId, employeeId, tableNumber, items, allowShortage });
         }
         useCartStore.getState().clear();
         setActiveTabId(null);
         setTableNumber("");
         onTabChanged();
       } catch (err) {
-        setTabError(err instanceof Error ? err.message : "No se pudo dejar la cuenta abierta.");
+        const message = err instanceof Error ? err.message : "No se pudo dejar la cuenta abierta.";
+        if (isShortageError(message)) {
+          setShortageMessage(message);
+        } else {
+          setTabError(message);
+        }
       }
     });
   }
@@ -155,36 +168,46 @@ export function CartPanel({
     }
   }
 
-  if (view === "checkout") {
-    return (
-      <div className="flex h-full flex-col overflow-y-auto border-t border-border md:border-l md:border-t-0">
-        <CheckoutForm
-          branchId={branchId}
-          shiftId={shiftId}
-          employeeId={employeeId}
-          activeTabBaseTotal={activeTabSummary?.total}
-          selectedCustomer={selectedCustomer}
-          domicilioAddress={domicilioAddress}
-          domicilioOrigen={domicilioOrigen}
-          onConfirmed={handleConfirmed}
-          onCancel={() => setView("cart")}
-        />
-      </div>
-    );
-  }
-
+  // El cobro y la cuenta se montan juntos y solo se oculta el que no está
+  // en uso: así "← Atrás" no borra lo capturado en el cobro (recibido,
+  // propina, descuento — QA-028).
   return (
-    <div className="flex h-full min-h-0 flex-col border-t border-border md:border-l md:border-t-0">
+    <div className="h-full min-h-0">
+      <div
+        className={cn(
+          "h-full flex-col overflow-y-auto border-t border-border md:border-l md:border-t-0",
+          view === "checkout" ? "flex" : "hidden"
+        )}
+      >
+        <CheckoutForm
+            branchId={branchId}
+            shiftId={shiftId}
+            employeeId={employeeId}
+            activeTabBaseTotal={activeTabSummary?.total}
+            selectedCustomer={selectedCustomer}
+            domicilioAddress={domicilioAddress}
+            domicilioOrigen={domicilioOrigen}
+            onConfirmed={handleConfirmed}
+            onCancel={() => setView("cart")}
+          />
+      </div>
+    <div
+      className={cn(
+        "h-full min-h-0 flex-col border-t border-border md:border-l md:border-t-0",
+        view === "cart" ? "flex" : "hidden"
+      )}
+    >
       <div className="flex flex-col gap-3 border-b border-border p-4">
         <p className="font-semibold">Cuenta actual</p>
         <div className="flex gap-1.5">
           {orderTypes.map((type) => (
             <button
+              aria-pressed={orderType === type.value}
               key={type.value}
               type="button"
               onClick={() => setOrderType(type.value)}
               className={cn(
-                "flex-1 rounded-full border border-border px-2 py-1.5 text-xs font-medium",
+                "min-h-10 flex-1 rounded-full border border-border px-2 py-2 text-xs font-medium",
                 orderType === type.value ? posAccentClass : "hover:bg-muted"
               )}
             >
@@ -255,7 +278,7 @@ export function CartPanel({
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Ya registrado en la cuenta — revisa con el cliente antes de cobrar
             </p>
-            {registeredError && <p className="text-xs text-destructive">{registeredError}</p>}
+            {registeredError && <p role="alert" className="text-xs text-destructive">{registeredError}</p>}
             {activeTabSummary.items.length === 0 && (
               <p className="text-xs text-muted-foreground">
                 Todavía no hay nada registrado (se quitó todo) — la cuenta sigue abierta.
@@ -267,7 +290,7 @@ export function CartPanel({
                 return (
                   <li key={item.id} className="rounded-xl border border-border p-3">
                     <div className="flex items-start justify-between gap-2">
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-sm font-medium">
                           {item.productName} · {item.productVariantName}
                           {item.temperature && ` · ${temperatureLabels[item.temperature]}`}
@@ -275,12 +298,16 @@ export function CartPanel({
                         {item.modifierNames.length > 0 && (
                           <p className="text-xs text-muted-foreground">{item.modifierNames.join(", ")}</p>
                         )}
-                        {item.notes && <p className="text-xs italic text-muted-foreground">“{item.notes}”</p>}
+                        {item.notes && (
+                          <p className="line-clamp-2 break-words text-xs italic text-muted-foreground" title={item.notes}>
+                            “{item.notes}”
+                          </p>
+                        )}
                       </div>
                       <button
                         onClick={() => handleRemoveRegistered(item.id)}
                         disabled={isPending}
-                        className="text-muted-foreground hover:text-destructive disabled:opacity-50"
+                        className="flex-shrink-0 text-muted-foreground hover:text-destructive disabled:opacity-50"
                         aria-label="Quitar"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -291,7 +318,7 @@ export function CartPanel({
                         <Button
                           size="icon"
                           variant="outline"
-                          className="h-7 w-7 rounded-full"
+                          className="h-10 w-10 rounded-full"
                           disabled={isPending}
                           onClick={() => handleAdjustRegistered(item.id, item.quantity - 1)}
                         >
@@ -301,7 +328,7 @@ export function CartPanel({
                         <Button
                           size="icon"
                           variant="outline"
-                          className="h-7 w-7 rounded-full"
+                          className="h-10 w-10 rounded-full"
                           disabled={isPending}
                           onClick={() => handleAdjustRegistered(item.id, item.quantity + 1)}
                         >
@@ -341,9 +368,9 @@ export function CartPanel({
                 )}
               </div>
 
-              <div className="flex flex-1 flex-col gap-2">
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
                 <div className="flex items-start justify-between gap-2">
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-sm font-medium">
                       {line.productName} · {line.variantName}
                     </p>
@@ -356,12 +383,14 @@ export function CartPanel({
                       </p>
                     )}
                     {line.notes && (
-                      <p className="text-xs italic text-muted-foreground">“{line.notes}”</p>
+                      <p className="line-clamp-2 break-words text-xs italic text-muted-foreground" title={line.notes}>
+                        “{line.notes}”
+                      </p>
                     )}
                   </div>
                   <button
                     onClick={() => removeLine(line.lineId)}
-                    className="text-muted-foreground hover:text-destructive"
+                    className="flex-shrink-0 text-muted-foreground hover:text-destructive"
                     aria-label="Quitar"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -373,7 +402,7 @@ export function CartPanel({
                     <Button
                       size="icon"
                       variant="outline"
-                      className="h-7 w-7 rounded-full"
+                      className="h-10 w-10 rounded-full"
                       onClick={() => decrementLine(line.lineId)}
                     >
                       <Minus className="h-3 w-3" />
@@ -382,7 +411,7 @@ export function CartPanel({
                     <Button
                       size="icon"
                       variant="outline"
-                      className="h-7 w-7 rounded-full"
+                      className="h-10 w-10 rounded-full"
                       onClick={() => incrementLine(line.lineId)}
                     >
                       <Plus className="h-3 w-3" />
@@ -403,14 +432,14 @@ export function CartPanel({
           <span className="text-sm font-medium">Total{activeTabSummary && " (esta ronda)"}</span>
           <span className="text-2xl font-bold">{formatCurrency(subtotal())}</span>
         </div>
-        {tabError && <p className="mb-2 text-xs text-destructive">{tabError}</p>}
+        {tabError && <p role="alert" className="mb-2 text-xs text-destructive">{tabError}</p>}
         <div className="flex gap-2">
           {orderType === "CONSUMO_LOCAL" && (
             <Button
               variant="outline"
               className="flex-1"
               disabled={lines.length === 0 || isSavingTab}
-              onClick={handleLeaveOpen}
+              onClick={() => handleLeaveOpen()}
             >
               {isSavingTab ? "Guardando..." : activeTabId ? "Agregar a la cuenta" : "Dejar cuenta abierta"}
             </Button>
@@ -427,6 +456,20 @@ export function CartPanel({
           </Button>
         </div>
       </div>
+      <ConfirmDialog
+        open={shortageMessage !== null}
+        title="Insumos insuficientes"
+        message={
+          <>
+            <p>{shortageMessage}</p>
+            <p className="mt-2">Si continúas, el inventario de esos insumos quedará en negativo.</p>
+          </>
+        }
+        confirmLabel="Registrar de todos modos"
+        onConfirm={() => handleLeaveOpen(true)}
+        onCancel={() => setShortageMessage(null)}
+      />
+    </div>
     </div>
   );
 }

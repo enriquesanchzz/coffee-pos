@@ -3,7 +3,7 @@
 import type { IngredientOption } from "@/lib/purchases";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { unitLabels } from "./enum-labels";
 
 export type TransferLineDraft = {
@@ -43,24 +43,21 @@ export function TransferLinesEditor({
         const ingredient = ingredientById.get(line.ingredientId);
         return (
           <div key={line.key} className="flex items-center gap-2">
-            <Select
+            <Combobox
               className="flex-1"
-              value={line.ingredientId}
-              onChange={(e) => updateLine(line.key, { ingredientId: e.target.value })}
-            >
-              <option value="">Selecciona un ingrediente…</option>
-              {ingredients.map((i) => (
-                <option key={i.id} value={i.id}>
-                  {i.name}
-                </option>
-              ))}
-            </Select>
+              aria-label="Insumo a transferir"
+              placeholder="Busca un insumo…"
+              value={line.ingredientId || null}
+              onChange={(ingredientId) => updateLine(line.key, { ingredientId })}
+              options={ingredients.map((i) => ({ value: i.id, label: i.name }))}
+            />
 
             <Input
               type="number"
               min="0"
               step="0.01"
               className="w-24"
+              aria-label="Cantidad a transferir"
               value={line.quantity}
               onChange={(e) => updateLine(line.key, { quantity: e.target.value })}
             />

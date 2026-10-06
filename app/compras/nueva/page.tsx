@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
@@ -6,6 +7,8 @@ import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getActiveSuppliers, getIngredientOptions, getSupplierCostMap } from "@/lib/purchases";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { NewOrderForm } from "@/components/compras/new-order-form";
+
+export const metadata: Metadata = { title: "Nueva orden de compra" };
 
 export default async function NuevaOrdenPage() {
   const employee = await getCurrentEmployee();

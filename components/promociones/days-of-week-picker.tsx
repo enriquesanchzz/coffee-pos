@@ -27,6 +27,7 @@ export function DaysOfWeekPicker({
       <div className="flex gap-1">
         {DAY_LABELS.map((label, day) => (
           <button
+            aria-pressed={value.includes(day)}
             key={day}
             type="button"
             onClick={() => toggle(day)}

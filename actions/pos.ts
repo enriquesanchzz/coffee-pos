@@ -14,9 +14,11 @@ import {
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID, DEFAULT_STOCK_LOCATION_ID } from "@/lib/constants";
-import { getSessionEmployeeId, findEmployeeByPin } from "@/lib/session";
+import { getSessionEmployeeId, findEmployeeByPin, assertSessionEmployee, SessionExpiredError } from "@/lib/session";
 import { requirePermission } from "@/lib/permissions";
 import { zonedClock } from "@/lib/time";
+import { unitLabel } from "@/lib/utils";
+import { SHORTAGE_ERROR_PREFIX } from "@/lib/stock";
 
 export type CreateSaleExtraIngredientInput = {
   ingredientId: string;
@@ -41,6 +43,12 @@ export type ManualDiscountInput = {
 };
 
 export type CreateSaleInput = {
+  // Id del intento de cobro (ver Sale.clientRequestId): un reintento con
+  // el mismo id regresa la venta ya registrada en vez de duplicarla.
+  clientRequestId?: string;
+  // El cajero ya vio la advertencia de insumos insuficientes y decidió
+  // vender de todos modos (ver findShortages).
+  allowShortage?: boolean;
   branchId: string;
   shiftId: string;
   employeeId: string;
@@ -184,25 +192,48 @@ function isPromotionActiveNow(
 ): boolean {
   // Día y hora de la sucursal, no del servidor (ver lib/time.ts).
   const clock = zonedClock(now);
-  if (daysOfWeek.length > 0 && !daysOfWeek.includes(clock.weekday)) return false;
-  if (startTime || endTime) {
-    const toMinutes = (t: string) => {
-      const [h, m] = t.split(":").map(Number);
-      return h * 60 + m;
-    };
-    const minutesNow = clock.hour * 60 + clock.minute;
-    const start = startTime ? toMinutes(startTime) : 0;
-    const end = endTime ? toMinutes(endTime) : 23 * 60 + 59;
-    if (minutesNow < start || minutesNow > end) return false;
+  const toMinutes = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + m;
+  };
+  const minutesNow = clock.hour * 60 + clock.minute;
+  const start = startTime ? toMinutes(startTime) : 0;
+  const end = endTime ? toMinutes(endTime) : 23 * 60 + 59;
+
+  // Horario que cruza la medianoche (ej. 18:00 → 02:00, QA-007): activo
+  // desde `start` hasta el fin del día y de 00:00 a `end`. La parte de
+  // madrugada pertenece al día en que empezó la promoción (viernes 18:00 →
+  // sábado 02:00 cuenta como "viernes" para daysOfWeek).
+  const crossesMidnight = start > end;
+  let weekday = clock.weekday;
+  if (crossesMidnight) {
+    const inLateWindow = minutesNow >= start;
+    const inEarlyWindow = minutesNow <= end;
+    if (!inLateWindow && !inEarlyWindow) return false;
+    if (inEarlyWindow && !inLateWindow) weekday = (weekday + 6) % 7;
+  } else if (minutesNow < start || minutesNow > end) {
+    return false;
   }
-  return true;
+
+  return daysOfWeek.length === 0 || daysOfWeek.includes(weekday);
 }
+
+// Promoción automática aplicada en una ronda — se regresa al POS para que
+// el cajero vea por qué cambió el total (antes el subtotal bajaba o subía
+// sin ninguna explicación).
+export type AppliedPromotion = { name: string; saving: number };
 
 async function applyPromotions(
   tx: Prisma.TransactionClient,
   saleItemsData: ResolvedSaleItem[],
   now: Date
-): Promise<Prisma.Decimal> {
+): Promise<{ discountableSubtotal: Prisma.Decimal; applied: AppliedPromotion[] }> {
+  const savings = new Map<string, Prisma.Decimal>();
+  function recordSaving(name: string, saving: Prisma.Decimal) {
+    if (saving.lessThanOrEqualTo(0)) return;
+    savings.set(name, (savings.get(name) ?? new Prisma.Decimal(0)).add(saving));
+  }
+
   // Una línea "modificada" no califica (combo/2x1/día temático), pero un
   // grupo de modificadores como "Tipo de leche" con su opción base
   // seleccionada (ej. "Entera", priceDelta=0, sin sustituir ingrediente)
@@ -222,15 +253,19 @@ async function applyPromotions(
     where: { isActive: true },
     include: { items: { include: { productVariant: true } } },
   });
-  const activeCombos = combos.filter((c) => isPromotionActiveNow(c.daysOfWeek, c.startTime, c.endTime, now));
-
-  function comboDiscount(combo: (typeof activeCombos)[number]) {
+  function comboDiscount(combo: (typeof combos)[number]) {
     const normalTotal = combo.items.reduce(
       (sum, item) => sum.add(item.productVariant.price.mul(item.quantity)),
       new Prisma.Decimal(0)
     );
     return normalTotal.sub(combo.price);
   }
+  // Un paquete solo se aplica si de verdad abarata: uno guardado con
+  // precio >= a sus productos por separado (posible antes de validar al
+  // crearlo) cobraba DE MÁS automáticamente sin que el cajero lo notara.
+  const activeCombos = combos.filter(
+    (c) => isPromotionActiveNow(c.daysOfWeek, c.startTime, c.endTime, now) && comboDiscount(c).greaterThan(0)
+  );
   activeCombos.sort((a, b) => comboDiscount(b).sub(comboDiscount(a)).toNumber());
 
   for (const combo of activeCombos) {
@@ -259,6 +294,8 @@ async function applyPromotions(
       (sum, idx) => sum.add(saleItemsData[idx].lineTotal),
       new Prisma.Decimal(0)
     );
+    if (originalTotal.lessThanOrEqualTo(combo.price)) continue;
+    recordSaving(combo.name, originalTotal.sub(combo.price));
     let assigned = new Prisma.Decimal(0);
     matchedIndices.forEach((idx, i) => {
       const isLast = i === matchedIndices.length - 1;
@@ -280,13 +317,21 @@ async function applyPromotions(
   const activeDosPorUno = dosPorUnoPromotions.filter((p) =>
     isPromotionActiveNow(p.daysOfWeek, p.startTime, p.endTime, now)
   );
-  const dosPorUnoVariantIds = new Set(activeDosPorUno.flatMap((p) => p.variants.map((v) => v.productVariantId)));
+  const dosPorUnoByVariantId = new Map<string, (typeof activeDosPorUno)[number]>();
+  for (const promo of activeDosPorUno) {
+    for (const v of promo.variants) {
+      if (!dosPorUnoByVariantId.has(v.productVariantId)) dosPorUnoByVariantId.set(v.productVariantId, promo);
+    }
+  }
 
   for (const item of saleItemsData) {
     if (!isEligible(item)) continue;
-    if (!dosPorUnoVariantIds.has(item.productVariantId)) continue;
+    const promo = dosPorUnoByVariantId.get(item.productVariantId);
+    if (!promo) continue;
     const chargeableQuantity = Math.ceil(item.quantity / 2);
-    item.lineTotal = item.unitPrice.mul(chargeableQuantity);
+    const newTotal = item.unitPrice.mul(chargeableQuantity);
+    recordSaving(promo.name, item.lineTotal.sub(newTotal));
+    item.lineTotal = newTotal;
     item.hasAutomaticPromotion = true;
   }
 
@@ -314,16 +359,20 @@ async function applyPromotions(
     const promo = diaTematicoByVariantId.get(item.productVariantId);
     if (!promo || !promo.discountType || !promo.discountValue) continue;
     const discount = computeDiscount(promo.discountType, promo.discountValue, item.lineTotal);
-    item.lineTotal = Prisma.Decimal.max(0, item.lineTotal.sub(discount));
+    const newTotal = Prisma.Decimal.max(0, item.lineTotal.sub(discount));
+    recordSaving(promo.name, item.lineTotal.sub(newTotal));
+    item.lineTotal = newTotal;
     item.hasAutomaticPromotion = true;
   }
 
   // Subtotal "descontable" por DiscountCode/ManualDiscount — excluye las
   // líneas que ya recibieron una promoción automática, para que no se
   // apilen dos descuentos sobre la misma línea.
-  return saleItemsData
+  const discountableSubtotal = saleItemsData
     .filter((item) => !item.hasAutomaticPromotion)
     .reduce((sum, item) => sum.add(item.lineTotal), new Prisma.Decimal(0));
+  const applied = [...savings].map(([name, saving]) => ({ name, saving: saving.toNumber() }));
+  return { discountableSubtotal, applied };
 }
 
 async function resolveSaleItems(
@@ -334,6 +383,7 @@ async function resolveSaleItems(
   consumption: Map<string, Prisma.Decimal>;
   subtotal: Prisma.Decimal;
   discountableSubtotal: Prisma.Decimal;
+  appliedPromotions: AppliedPromotion[];
 }> {
   const ingredientInfoCache = new Map<string, { baseUnit: UnitOfMeasure; categoryId: string }>();
   const consumption = new Map<string, Prisma.Decimal>();
@@ -529,10 +579,65 @@ async function resolveSaleItems(
     }
   }
 
-  const discountableSubtotal = await applyPromotions(tx, saleItemsData, new Date());
+  const { discountableSubtotal, applied: appliedPromotions } = await applyPromotions(
+    tx,
+    saleItemsData,
+    new Date()
+  );
   const subtotal = saleItemsData.reduce((sum, item) => sum.add(item.lineTotal), new Prisma.Decimal(0));
 
-  return { saleItemsData, consumption, subtotal, discountableSubtotal };
+  return { saleItemsData, consumption, subtotal, discountableSubtotal, appliedPromotions };
+}
+
+// Insumos que no alcanzan para una ronda: consumo (en baseUnit) contra el
+// stock actual de la ubicación por defecto. Antes se vendía sin revisar y
+// el stock quedaba en negativo sin que nadie lo notara (QA-003). Política
+// acordada: advertir y permitir solo si el cajero lo confirma.
+export type StockShortage = { ingredientId: string; name: string; unit: string; missing: number };
+
+async function findShortages(
+  tx: Prisma.TransactionClient,
+  consumption: Map<string, Prisma.Decimal>
+): Promise<StockShortage[]> {
+  const ids = [...consumption.keys()];
+  if (ids.length === 0) return [];
+  const [ingredients, stocks] = await Promise.all([
+    tx.ingredient.findMany({ where: { id: { in: ids } } }),
+    tx.inventoryStock.findMany({
+      where: { ingredientId: { in: ids }, stockLocationId: DEFAULT_STOCK_LOCATION_ID },
+    }),
+  ]);
+  const stockById = new Map(stocks.map((s) => [s.ingredientId, s.quantity]));
+  const shortages: StockShortage[] = [];
+  for (const ingredient of ingredients) {
+    const required = consumption.get(ingredient.id) ?? new Prisma.Decimal(0);
+    const available = stockById.get(ingredient.id) ?? new Prisma.Decimal(0);
+    if (required.greaterThan(available)) {
+      shortages.push({
+        ingredientId: ingredient.id,
+        name: ingredient.name,
+        unit: unitLabel(ingredient.baseUnit),
+        missing: required.sub(Prisma.Decimal.max(available, 0)).toDecimalPlaces(2).toNumber(),
+      });
+    }
+  }
+  return shortages;
+}
+
+function describeShortages(shortages: StockShortage[]) {
+  return shortages.map((s) => `${s.name} (faltan ${s.missing} ${s.unit})`).join(", ");
+}
+
+async function assertStockOrAllowed(
+  tx: Prisma.TransactionClient,
+  consumption: Map<string, Prisma.Decimal>,
+  allowShortage: boolean | undefined
+) {
+  if (allowShortage) return;
+  const shortages = await findShortages(tx, consumption);
+  if (shortages.length > 0) {
+    throw new Error(`${SHORTAGE_ERROR_PREFIX} ${describeShortages(shortages)}.`);
+  }
 }
 
 // Crea los SaleItem (+ modificadores + extras libres) de una ronda de
@@ -632,6 +737,11 @@ async function applyLoyaltyStamp(tx: Prisma.TransactionClient, customerId: strin
   });
 }
 
+async function findSaleByClientRequestId(clientRequestId: string | undefined) {
+  if (!clientRequestId) return null;
+  return prisma.sale.findUnique({ where: { clientRequestId } });
+}
+
 function serializeSale(sale: {
   id: string;
   subtotal: Prisma.Decimal;
@@ -669,27 +779,36 @@ function serializeSale(sale: {
 export const previewSaleTotal = safeAction(async function previewSaleTotal(
   employeeId: string,
   items: CreateSaleItemInput[]
-): Promise<{ subtotal: number; discountableSubtotal: number }> {
-  if (employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+): Promise<{
+  subtotal: number;
+  discountableSubtotal: number;
+  appliedPromotions: AppliedPromotion[];
+  shortages: StockShortage[];
+}> {
+  await assertSessionEmployee(employeeId);
   if (items.length === 0) {
-    return { subtotal: 0, discountableSubtotal: 0 };
+    return { subtotal: 0, discountableSubtotal: 0, appliedPromotions: [], shortages: [] };
   }
 
-  const { subtotal, discountableSubtotal } = await resolveSaleItems(prisma, items);
-  return { subtotal: subtotal.toNumber(), discountableSubtotal: discountableSubtotal.toNumber() };
+  const { subtotal, discountableSubtotal, appliedPromotions, consumption } = await resolveSaleItems(prisma, items);
+  return {
+    subtotal: subtotal.toNumber(),
+    discountableSubtotal: discountableSubtotal.toNumber(),
+    appliedPromotions,
+    shortages: await findShortages(prisma, consumption),
+  };
 });
 
 export const createSale = safeAction(async function createSale(input: CreateSaleInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   if (input.items.length === 0) {
     throw new Error("La venta no tiene productos.");
   }
 
   await requirePermission(input.employeeId, input.branchId, "VENTA_REALIZAR");
+
+  const alreadyRegistered = await findSaleByClientRequestId(input.clientRequestId);
+  if (alreadyRegistered) return serializeSale(alreadyRegistered);
 
   const sale = await prisma.$transaction(async (tx) => {
     const shift = await tx.shift.findUnique({ where: { id: input.shiftId } });
@@ -698,6 +817,21 @@ export const createSale = safeAction(async function createSale(input: CreateSale
     }
 
     const { saleItemsData, consumption, subtotal, discountableSubtotal } = await resolveSaleItems(tx, input.items);
+    await assertStockOrAllowed(tx, consumption, input.allowShortage);
+
+    // A domicilio: sin cliente con dirección no hay a dónde entregar
+    // (QA-012). El POS guarda la dirección capturada antes de cobrar.
+    if (input.orderType === "DOMICILIO") {
+      const customer = input.customerId
+        ? await tx.customer.findUnique({ where: { id: input.customerId } })
+        : null;
+      if (!customer) {
+        throw new Error("Un pedido a domicilio necesita un cliente.");
+      }
+      if (!customer.address?.trim()) {
+        throw new Error("Captura el domicilio de entrega del cliente.");
+      }
+    }
 
     // Descuento: código o manual, nunca ambos a la vez.
     if (input.discountCodeId && input.manualDiscount) {
@@ -768,6 +902,7 @@ export const createSale = safeAction(async function createSale(input: CreateSale
         discountTotal,
         total,
         tipAmount,
+        clientRequestId: input.clientRequestId || null,
         ...(manualDiscountData ? { manualDiscount: { create: manualDiscountData } } : {}),
         payments: {
           create: input.payments.map((p) => ({ method: p.method, amount: p.amount, note: p.note?.trim() || null })),
@@ -803,6 +938,9 @@ export const createSale = safeAction(async function createSale(input: CreateSale
 // -----------------------------------------------------------------------
 
 export type OpenTabInput = {
+  // El cajero ya vio la advertencia de insumos insuficientes y decidió
+  // vender de todos modos (ver findShortages).
+  allowShortage?: boolean;
   branchId: string;
   shiftId: string;
   employeeId: string;
@@ -812,9 +950,7 @@ export type OpenTabInput = {
 };
 
 export const openTab = safeAction(async function openTab(input: OpenTabInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   if (input.items.length === 0) {
     throw new Error("La cuenta no tiene productos.");
   }
@@ -847,6 +983,7 @@ export const openTab = safeAction(async function openTab(input: OpenTabInput) {
     }
 
     const { saleItemsData, consumption, subtotal } = await resolveSaleItems(tx, input.items);
+    await assertStockOrAllowed(tx, consumption, input.allowShortage);
 
     const createdSale = await tx.sale.create({
       data: {
@@ -908,6 +1045,9 @@ async function loadOpenTab(tx: Prisma.TransactionClient, saleId: string, branchI
 }
 
 export type AddItemsToTabInput = {
+  // El cajero ya vio la advertencia de insumos insuficientes y decidió
+  // vender de todos modos (ver findShortages).
+  allowShortage?: boolean;
   saleId: string;
   branchId: string;
   shiftId: string;
@@ -916,9 +1056,7 @@ export type AddItemsToTabInput = {
 };
 
 export const addItemsToTab = safeAction(async function addItemsToTab(input: AddItemsToTabInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   if (input.items.length === 0) {
     throw new Error("La ronda no tiene productos.");
   }
@@ -928,6 +1066,7 @@ export const addItemsToTab = safeAction(async function addItemsToTab(input: AddI
   const sale = await prisma.$transaction(async (tx) => {
     const existing = await loadOpenTab(tx, input.saleId, input.branchId, input.shiftId);
     const { saleItemsData, consumption, subtotal } = await resolveSaleItems(tx, input.items);
+    await assertStockOrAllowed(tx, consumption, input.allowShortage);
 
     await persistSaleItems(tx, existing.id, saleItemsData);
     await applyConsumption(tx, consumption, {
@@ -951,6 +1090,12 @@ export const addItemsToTab = safeAction(async function addItemsToTab(input: AddI
 });
 
 export type CloseTabInput = {
+  // Id del intento de cobro (ver Sale.clientRequestId): un reintento con
+  // el mismo id regresa la venta ya registrada en vez de duplicarla.
+  clientRequestId?: string;
+  // El cajero ya vio la advertencia de insumos insuficientes y decidió
+  // vender de todos modos (ver findShortages).
+  allowShortage?: boolean;
   saleId: string;
   branchId: string;
   shiftId: string;
@@ -965,17 +1110,21 @@ export type CloseTabInput = {
 };
 
 export const closeTab = safeAction(async function closeTab(input: CloseTabInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
 
   await requirePermission(input.employeeId, input.branchId, "VENTA_REALIZAR");
+
+  // Reintento de un cobro que sí se registró (la respuesta se perdió): la
+  // cuenta ya está COMPLETADA con este mismo id — se regresa tal cual.
+  const alreadyClosed = await findSaleByClientRequestId(input.clientRequestId);
+  if (alreadyClosed && alreadyClosed.id === input.saleId) return serializeSale(alreadyClosed);
 
   const sale = await prisma.$transaction(async (tx) => {
     let existing = await loadOpenTab(tx, input.saleId, input.branchId, input.shiftId);
 
     if (input.items && input.items.length > 0) {
       const { saleItemsData, consumption, subtotal: roundSubtotal } = await resolveSaleItems(tx, input.items);
+      await assertStockOrAllowed(tx, consumption, input.allowShortage);
       await persistSaleItems(tx, existing.id, saleItemsData);
       await applyConsumption(tx, consumption, {
         branchId: input.branchId,
@@ -1055,6 +1204,7 @@ export const closeTab = safeAction(async function closeTab(input: CloseTabInput)
       where: { id: existing.id },
       data: {
         status: "COMPLETADA",
+        clientRequestId: input.clientRequestId || null,
         discountTotal,
         total,
         tipAmount,
@@ -1089,7 +1239,7 @@ export type OpenTabSummary = {
 export const listOpenTabs = safeAction(async function listOpenTabs(branchId: string): Promise<OpenTabSummary[]> {
   const employeeId = await getSessionEmployeeId();
   if (!employeeId) {
-    throw new Error("Necesitas iniciar sesión para ver las cuentas abiertas.");
+    throw new SessionExpiredError("Necesitas iniciar sesión para ver las cuentas abiertas.");
   }
 
   const sales = await prisma.sale.findMany({
@@ -1132,7 +1282,7 @@ export type OpenTabDetail = {
 // cliente que todo esté bien.
 export const getTabDetail = safeAction(async function getTabDetail(saleId: string): Promise<OpenTabDetail> {
   if (!(await getSessionEmployeeId())) {
-    throw new Error("Necesitas iniciar sesión para ver la cuenta.");
+    throw new SessionExpiredError("Necesitas iniciar sesión para ver la cuenta.");
   }
   const sale = await prisma.sale.findUniqueOrThrow({
     where: { id: saleId },
@@ -1268,9 +1418,7 @@ export type RemoveTabItemInput = {
 // mientras la cuenta sigue ABIERTA; una venta ya cobrada no se corrige
 // aquí (existe VENTA_CANCELAR para eso).
 export const removeTabItem = safeAction(async function removeTabItem(input: RemoveTabItemInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   await requirePermission(input.employeeId, input.branchId, "VENTA_REALIZAR");
 
   const sale = await prisma.$transaction(async (tx) => {
@@ -1326,9 +1474,7 @@ export type UpdateTabItemQuantityInput = {
 // confusa). Solo se ajusta el inventario por la diferencia exacta entre
 // la cantidad vieja y la nueva.
 export const updateTabItemQuantity = safeAction(async function updateTabItemQuantity(input: UpdateTabItemQuantityInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   if (input.quantity <= 0) {
     throw new Error("La cantidad debe ser mayor a cero — para quitar el producto, usa \"Quitar\".");
   }
@@ -1399,9 +1545,7 @@ export type CancelSaleInput = {
 // La venta queda CANCELADA (no se borra): reportes, corte de caja y
 // lealtad ya filtran por COMPLETADA, así que deja de contar en todos.
 export const cancelSale = safeAction(async function cancelSale(input: CancelSaleInput) {
-  if (input.employeeId !== (await getSessionEmployeeId())) {
-    throw new Error("El empleado no coincide con la sesión activa.");
-  }
+  await assertSessionEmployee(input.employeeId);
   const reason = input.reason.trim();
   if (!reason) {
     throw new Error("Captura el motivo de la anulación.");

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { getCatalog, getOpenShift, getExtraIngredientOptions, getTopSellingProductIds } from "@/lib/catalog";
@@ -6,6 +7,8 @@ import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { PosWorkspace } from "@/components/pos/pos-workspace";
 import { ShiftOpenForm } from "@/components/pos/shift-open-form";
+
+export const metadata: Metadata = { title: "Punto de Venta" };
 
 export default async function PosPage() {
   const employee = await getCurrentEmployee();
@@ -21,7 +24,7 @@ export default async function PosPage() {
   ]);
 
   return (
-    <AuthenticatedShell isAdmin={isAdmin} employeeName={employee.name} contentClassName="overflow-hidden">
+    <AuthenticatedShell isAdmin={isAdmin} employeeName={employee.name} contentClassName="overflow-hidden" srTitle="Punto de Venta">
       {shift ? (
         <PosWorkspace
           catalog={catalog}

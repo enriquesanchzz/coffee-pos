@@ -34,7 +34,7 @@ export function UtilidadReport({ report, fromStr, toStr }: { report: ProfitRepor
 
       <Card>
         <CardHeader>
-          <CardTitle>Por producto</CardTitle>
+          <CardTitle as="h3">Por producto</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
           {report.lines.length === 0 && <p className="text-sm text-muted-foreground">No hay ventas en este periodo.</p>}
