@@ -59,7 +59,8 @@ export function ShiftOpenForm({
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <p className="text-sm text-muted-foreground">
             No hay un turno abierto en esta sucursal. Se requiere el PIN de un
-            segundo empleado para autorizar la apertura.
+            segundo empleado para autorizar la apertura; uno de los dos debe
+            ser gerente o administrador.
           </p>
           <div className="flex flex-col gap-1">
             <Label htmlFor="type">Tipo de turno</Label>
