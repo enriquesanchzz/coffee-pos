@@ -72,7 +72,10 @@ export function CategoryDrilldown({
   categories,
   query,
   onQueryChange,
-  searchPlaceholder = "Buscar en todo el menú…",
+  searchPlaceholder = "Buscar…",
+  // Nombre accesible del buscador (el placeholder es corto para que quepa
+  // en celular y tablet).
+  searchLabel = "Buscar en todo el menú",
   renderLeaf,
   renderSearchResults,
   onEditCategory,
@@ -81,6 +84,7 @@ export function CategoryDrilldown({
   query: string;
   onQueryChange: (q: string) => void;
   searchPlaceholder?: string;
+  searchLabel?: string;
   renderLeaf: (categoryId: string) => React.ReactNode;
   renderSearchResults: (query: string) => React.ReactNode;
   /** Si se da, cada píldora de nivel 1 gana un botón de editar (solo /productos). */
@@ -124,7 +128,7 @@ export function CategoryDrilldown({
                 )}
               >
                 <CategoryIcon icon={icon} className="h-4 w-4 flex-shrink-0" />
-                <span className="truncate">{name}</span>
+                <span className="min-w-0 break-words leading-snug">{name}</span>
               </button>
               {onEditCategory && entry.kind === "standalone" && (
                 <button
@@ -151,7 +155,7 @@ export function CategoryDrilldown({
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
             placeholder={searchPlaceholder}
-            aria-label={searchPlaceholder.replace(/…$/, "")}
+            aria-label={searchLabel}
             className="rounded-full pl-9"
           />
         </div>

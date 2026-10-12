@@ -100,3 +100,66 @@ test.describe("Textos y validaciones", () => {
     await expect(page.getByRole("button", { name: "Guardar apariencia" })).toBeVisible();
   });
 });
+
+// Ningún texto visible ni placeholder se corta, incluso con la letra más
+// grande y la tipografía "Redondeada" (Configuración → Apariencia).
+test.describe("Textos completos en cualquier ancho", () => {
+  const ROUTES = [
+    "/pos",
+    "/caja",
+    "/clientes",
+    "/compras/nueva",
+    "/compras/transferencias/nueva",
+    "/descuentos",
+    "/promociones",
+    "/inventario",
+    "/configuracion",
+    "/configuracion/cobro",
+    "/configuracion/lealtad",
+    "/configuracion/inventario",
+  ];
+
+  test.beforeAll(async () => {
+    await db.branch.update({ where: { id: "branch-principal" }, data: { themeFontFamily: "rounded", themeFontSize: "lg" } });
+  });
+  test.afterAll(async () => {
+    await db.branch.update({ where: { id: "branch-principal" }, data: { themeFontFamily: null, themeFontSize: null } });
+  });
+
+  for (const width of [390, 1024, 1333]) {
+    test(`sin textos cortados a ${width}px`, async ({ page }) => {
+      test.setTimeout(180_000);
+      await page.setViewportSize({ width, height: 880 });
+      await loginAdmin(page);
+      const problems: string[] = [];
+      for (const route of ROUTES) {
+        await page.goto(route);
+        await page.waitForLoadState("load");
+        const found = await page.evaluate(() => {
+          const res: string[] = [];
+          const ctx = document.createElement("canvas").getContext("2d")!;
+          for (const el of Array.from(document.querySelectorAll<HTMLElement>("body *"))) {
+            const cs = getComputedStyle(el);
+            if (!el.offsetParent && cs.position !== "fixed") continue;
+            // Solo para lectores de pantalla (sr-only) o recortes intencionales.
+            if (el.closest(".sr-only, [class*='line-clamp'], footer")) continue;
+            if (el instanceof HTMLInputElement && el.placeholder && !el.value) {
+              ctx.font = cs.font;
+              const avail = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+              if (ctx.measureText(el.placeholder).width > avail + 1) res.push(`placeholder "${el.placeholder}"`);
+              continue;
+            }
+            const hasText = Array.from(el.childNodes).some((n) => n.nodeType === 3 && n.textContent!.trim());
+            if (!hasText) continue;
+            if (el.scrollWidth > el.clientWidth + 1 && (cs.overflowX !== "visible" || cs.textOverflow === "ellipsis")) {
+              res.push(`"${(el.textContent || "").trim().slice(0, 40)}"`);
+            }
+          }
+          return [...new Set(res)];
+        });
+        for (const f of found) problems.push(`${route}: ${f}`);
+      }
+      expect(problems, problems.join("\n")).toEqual([]);
+    });
+  }
+});

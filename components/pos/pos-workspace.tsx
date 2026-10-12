@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { CatalogCategory, CatalogProduct, ExtraIngredientOption } from "@/lib/catalog";
 import type { CustomerOption } from "@/lib/customers";
 import { CatalogBrowser } from "./catalog-browser";
 import { CartPanel } from "./cart-panel";
 import { ProductDialog } from "./product-dialog";
-import { FavoritesBar } from "./favorites-bar";
 import { OpenTabsDialog } from "./open-tabs-dialog";
 import { useCartStore } from "./cart-store";
 import { getTabDetail as getTabDetailAction, type OpenTabDetail } from "@/actions/pos";
@@ -24,7 +23,6 @@ export function PosWorkspace({
   employee,
   customers,
   extraIngredientOptions,
-  favoriteProductIds,
 }: {
   catalog: CatalogCategory[];
   branchId: string;
@@ -32,7 +30,6 @@ export function PosWorkspace({
   employee: { id: string; name: string };
   customers: CustomerOption[];
   extraIngredientOptions: ExtraIngredientOption[];
-  favoriteProductIds: string[];
 }) {
   const [selectedProduct, setSelectedProduct] = useState<CatalogProduct | null>(null);
   const [productDialogOpen, setProductDialogOpen] = useState(false);
@@ -76,10 +73,6 @@ export function PosWorkspace({
     return () => window.removeEventListener("beforeunload", warn);
   }, [hasLines]);
 
-  const favoriteProducts = useMemo(() => {
-    const byId = new Map(catalog.flatMap((c) => c.products).map((p) => [p.id, p]));
-    return favoriteProductIds.map((id) => byId.get(id)).filter((p): p is CatalogProduct => Boolean(p));
-  }, [catalog, favoriteProductIds]);
 
   // Cuenta abierta retomada (ver open-tabs-dialog.tsx) — se recarga su
   // resumen cada vez que cambia el id activo, o después de agregarle una
@@ -121,13 +114,6 @@ export function PosWorkspace({
             Movimiento de caja
           </button>
         </div>
-        <FavoritesBar
-          products={favoriteProducts}
-          onSelectProduct={(product) => {
-            setSelectedProduct(product);
-            setProductDialogOpen(true);
-          }}
-        />
         <div className="flex-1 overflow-hidden">
           <CatalogBrowser
             catalog={catalog}

@@ -131,7 +131,7 @@ export function CustomerPicker({
       <Label htmlFor="customer">Cliente {orderType === "DOMICILIO" ? "(obligatorio)" : "(opcional)"}</Label>
       <Combobox
         id="customer"
-        placeholder="Buscar por nombre, teléfono o código de tarjeta…"
+        placeholder="Nombre, teléfono o tarjeta…"
         value={selectedCustomer?.id ?? null}
         onChange={(id) => {
           const customer = allCustomers.find((c) => c.id === id);

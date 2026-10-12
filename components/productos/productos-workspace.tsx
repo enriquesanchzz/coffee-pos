@@ -167,7 +167,8 @@ export function ProductosWorkspace({
             categories={drilldownCategories}
             query={query}
             onQueryChange={setQuery}
-            searchPlaceholder="Buscar producto…"
+            searchPlaceholder="Buscar…"
+            searchLabel="Buscar producto"
             onEditCategory={setEditingCategory}
             renderLeaf={(categoryId) =>
               productGrid(

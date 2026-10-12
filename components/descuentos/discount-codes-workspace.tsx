@@ -76,7 +76,7 @@ export function DiscountCodesWorkspace({ codes, employeeId }: { codes: DiscountC
               onClick={() => setCategoryFilter(entry.value)}
               className={sectionPillClass(categoryFilter === entry.value)}
             >
-              <span className="truncate">{entry.label}</span>
+              <span className="min-w-0 break-words leading-snug">{entry.label}</span>
             </button>
           ))}
         </nav>

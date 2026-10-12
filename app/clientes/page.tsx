@@ -38,13 +38,14 @@ export default async function ClientesPage({
           <Input
             name="q"
             defaultValue={query}
-            placeholder="Buscar por nombre, teléfono, email o código de tarjeta…"
+            placeholder="Buscar cliente…"
             aria-label="Buscar clientes"
           />
           <Button type="submit" variant="outline">
             Buscar
           </Button>
         </form>
+        <p className="-mt-2 text-xs text-muted-foreground">Por nombre, teléfono, email o código de tarjeta.</p>
 
         <Card>
           <CardHeader>

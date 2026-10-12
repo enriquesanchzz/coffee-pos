@@ -71,9 +71,9 @@ export function OrderLinesEditor({
         return (
           <div key={line.key} className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
             <Combobox
-              className="min-w-[10rem] flex-1"
+              className="w-full sm:w-auto sm:min-w-[10rem] sm:flex-1"
               aria-label="Insumo"
-              placeholder="Busca un insumo…"
+              placeholder="Insumo…"
               value={line.ingredientId || null}
               onChange={(ingredientId) => {
                 // El costo cotizado está por unidad base; se pasa al

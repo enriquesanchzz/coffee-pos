@@ -137,7 +137,8 @@ export function InventoryWorkspace({
             categories={drilldownCategories}
             query={query}
             onQueryChange={setQuery}
-            searchPlaceholder="Buscar insumo…"
+            searchPlaceholder="Buscar…"
+            searchLabel="Buscar insumo"
             renderLeaf={renderLeaf}
             renderSearchResults={renderSearchResults}
             onEditCategory={(c) => setEditingCategory(categories.find((cat) => cat.id === c.id) ?? null)}

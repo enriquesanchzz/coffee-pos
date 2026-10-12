@@ -4,7 +4,7 @@ import { addProduct, db, loginPin, PIN } from "./helpers";
 test.describe("Fase 4 UX", () => {
   test("la búsqueda del POS ignora acentos", async ({ page }) => {
     await loginPin(page, PIN.ana);
-    await page.getByPlaceholder("Buscar en todo el menú…").fill("clasico");
+    await page.getByLabel("Buscar en todo el menú").fill("clasico");
     await expect(page.locator(".aspect-square:visible").filter({ hasText: "Capuccino Clásico" }).first()).toBeVisible();
   });
 

@@ -26,14 +26,14 @@ test.describe.serial("Apertura de caja", () => {
     await closeOpenShifts();
     await loginPin(page, PIN.ana);
     await openShift(page, PIN.luis);
-    await expect(page.getByPlaceholder("Buscar en todo el menú…")).toBeVisible();
+    await expect(page.getByLabel("Buscar en todo el menú")).toBeVisible();
   });
 
   test("un barista abre con autorización de la administradora", async ({ page }) => {
     await closeOpenShifts();
     await loginPin(page, PIN.luis);
     await openShift(page, PIN.ana);
-    await expect(page.getByPlaceholder("Buscar en todo el menú…")).toBeVisible();
+    await expect(page.getByLabel("Buscar en todo el menú")).toBeVisible();
   });
 
   test("dos baristas solos no pueden abrir, con un mensaje claro", async ({ page }) => {
@@ -57,6 +57,6 @@ test.describe.serial("Apertura de caja", () => {
     ).toBeVisible();
 
     await openShift(page, PIN.ana);
-    await expect(page.getByPlaceholder("Buscar en todo el menú…")).toBeVisible();
+    await expect(page.getByLabel("Buscar en todo el menú")).toBeVisible();
   });
 });

@@ -101,7 +101,7 @@ export function ReorderThresholdsEditor({ rows }: { rows: ThresholdRow[] }) {
             return (
               <li key={row.ingredientId} className="grid grid-cols-[1fr_auto] items-center gap-2 py-2 text-sm sm:grid-cols-[1fr_8rem_9rem]">
                 <div className="min-w-0">
-                  <p className="truncate">{row.name}</p>
+                  <p className="break-words">{row.name}</p>
                   <p className="text-xs text-muted-foreground">{row.categoryName}</p>
                 </div>
                 <span className={cn("hidden text-right sm:block", isLow && "font-medium text-destructive")}>
