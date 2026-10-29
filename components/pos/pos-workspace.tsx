@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { CatalogCategory, CatalogProduct, ExtraIngredientOption } from "@/lib/catalog";
 import type { CustomerOption } from "@/lib/customers";
+import Link from "next/link";
 import { CatalogBrowser } from "./catalog-browser";
 import { CartPanel } from "./cart-panel";
 import { ProductDialog } from "./product-dialog";
@@ -113,6 +114,13 @@ export function PosWorkspace({
           >
             Movimiento de caja
           </button>
+          <Link
+            href={`/caja/turno/${shiftId}/apertura`}
+            target="_blank"
+            className="text-sm text-muted-foreground hover:underline"
+          >
+            Comprobante de apertura
+          </Link>
         </div>
         <div className="flex-1 overflow-hidden">
           <CatalogBrowser

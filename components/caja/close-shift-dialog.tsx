@@ -2,6 +2,7 @@
 
 import { useBusinessSettings } from "@/components/layout/business-settings-context";
 import { useEffect, useState, useTransition } from "react";
+import Link from "next/link";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +44,10 @@ export function CloseShiftDialog({
   const [confirmingPin, setConfirmingPin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  // Una vez cerrado el turno, se queda este diálogo abierto con el enlace
+  // para imprimir el corte — antes se cerraba solo y esa oportunidad se
+  // perdía (no había otra forma de llegar al comprobante).
+  const [closed, setClosed] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -51,6 +56,7 @@ export function CloseShiftDialog({
     setDifferenceReason("");
     setConfirmingPin("");
     setError(null);
+    setClosed(false);
     previewShiftClose(shiftId)
       .then(setPreview)
       .catch((err) => setError(err instanceof Error ? err.message : "No se pudo calcular el corte."));
@@ -74,7 +80,7 @@ export function CloseShiftDialog({
           differenceReason: hasDifference ? differenceReason : undefined,
           confirmingPin,
         });
-        onOpenChange(false);
+        setClosed(true);
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo cerrar el turno.");
       }
@@ -83,7 +89,23 @@ export function CloseShiftDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} title="Cerrar turno">
-      {!preview ? (
+      {closed ? (
+        <div className="flex flex-col gap-4">
+          <p className="text-sm">Turno cerrado correctamente.</p>
+          <div className="flex gap-2">
+            <Link
+              href={`/caja/turno/${shiftId}/cierre`}
+              target="_blank"
+              className="flex flex-1 items-center justify-center rounded-md border border-border text-sm font-medium hover:bg-muted"
+            >
+              Imprimir corte de caja
+            </Link>
+            <Button className="flex-1" onClick={() => onOpenChange(false)} autoFocus>
+              Cerrar
+            </Button>
+          </div>
+        </div>
+      ) : !preview ? (
         error ? (
           <p role="alert" className="text-sm text-destructive">{error}</p>
         ) : (
