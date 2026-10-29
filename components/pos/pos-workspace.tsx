@@ -8,13 +8,14 @@ import { CartPanel } from "./cart-panel";
 import { ProductDialog } from "./product-dialog";
 import { OpenTabsDialog } from "./open-tabs-dialog";
 import { useCartStore } from "./cart-store";
-import { getTabDetail as getTabDetailAction, type OpenTabDetail } from "@/actions/pos";
+import { getTabDetail as getTabDetailAction, listOpenTabs as listOpenTabsAction, type OpenTabDetail } from "@/actions/pos";
 import { CashMovementDialog } from "@/components/caja/cash-movement-dialog";
 import { withActionErrors } from "@/lib/action-result";
 import { cn, formatCurrency, posAccentClass } from "@/lib/utils";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const getTabDetail = withActionErrors(getTabDetailAction);
+const listOpenTabs = withActionErrors(listOpenTabsAction);
 
 export function PosWorkspace({
   catalog,
@@ -36,6 +37,21 @@ export function PosWorkspace({
   const [movementOpen, setMovementOpen] = useState(false);
   const [openTabsDialogOpen, setOpenTabsDialogOpen] = useState(false);
   const [activeTabSummary, setActiveTabSummary] = useState<OpenTabDetail | null>(null);
+  // Cuántas mesas hay abiertas ahora mismo — para que no se le olvide al
+  // cajero que hay cuentas sin cobrar (QA de octubre 2026). Se refresca al
+  // montar, al dejar/agregar a una cuenta y al cerrar el diálogo.
+  const [openTabsCount, setOpenTabsCount] = useState(0);
+
+  function refreshOpenTabsCount() {
+    listOpenTabs(branchId)
+      .then((tabs) => setOpenTabsCount(tabs.length))
+      .catch(() => {});
+  }
+
+  useEffect(() => {
+    refreshOpenTabsCount();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branchId]);
   const addLine = useCartStore((s) => s.addLine);
   const activeTabId = useCartStore((s) => s.activeTabId);
   const hasLines = useCartStore((s) => s.lines.length > 0);
@@ -101,10 +117,15 @@ export function PosWorkspace({
         <div className="flex items-center justify-end gap-4 border-b border-border px-3 py-2 sm:px-5 sm:py-3">
           <button
             type="button"
-            className="text-sm text-muted-foreground hover:underline"
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:underline"
             onClick={() => setOpenTabsDialogOpen(true)}
           >
-            Cuentas abiertas
+            Mesas abiertas
+            {openTabsCount > 0 && (
+              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-xs font-semibold text-primary-foreground">
+                {openTabsCount}
+              </span>
+            )}
           </button>
           <button
             type="button"
@@ -179,6 +200,7 @@ export function PosWorkspace({
               if (activeTabId) {
                 getTabDetail(activeTabId).then(setActiveTabSummary).catch(() => setActiveTabSummary(null));
               }
+              refreshOpenTabsCount();
             }}
           />
         </div>
@@ -192,7 +214,14 @@ export function PosWorkspace({
         onAdd={addLine}
       />
 
-      <OpenTabsDialog open={openTabsDialogOpen} onOpenChange={setOpenTabsDialogOpen} branchId={branchId} />
+      <OpenTabsDialog
+        open={openTabsDialogOpen}
+        onOpenChange={(next) => {
+          setOpenTabsDialogOpen(next);
+          if (!next) refreshOpenTabsCount();
+        }}
+        branchId={branchId}
+      />
 
       <CashMovementDialog
         open={movementOpen}
