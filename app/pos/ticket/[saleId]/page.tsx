@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentEmployee } from "@/lib/session";
 import { getSaleReceiptDetail } from "@/lib/receipt";
 import { getBusinessSettings } from "@/lib/settings";
-import { PAYMENT_METHOD_LABELS } from "@/lib/settings-shared";
+import { DEFAULT_TICKET_FOOTER_MESSAGE, PAYMENT_METHOD_LABELS } from "@/lib/settings-shared";
 import { formatCurrency } from "@/lib/utils";
 import { formatDateTime } from "@/lib/time";
 import { TicketPaper, TicketDivider, TicketRow } from "@/components/receipts/ticket-paper";
@@ -29,7 +29,13 @@ export default async function SaleTicketPage({ params }: { params: Promise<{ sal
       <TicketActions backHref="/pos" />
       <TicketPaper>
         <div className="text-center">
+          {settings.logoUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={settings.logoUrl} alt={settings.businessName} className="mx-auto mb-1 h-12 w-auto object-contain" />
+          )}
           <p className="text-sm font-bold">{settings.businessName}</p>
+          {settings.razonSocial && <p>{settings.razonSocial}</p>}
+          {settings.rfc && <p>RFC: {settings.rfc}</p>}
           {settings.address && <p>{settings.address}</p>}
           {settings.phone && <p>Tel. {settings.phone}</p>}
         </div>
@@ -72,7 +78,17 @@ export default async function SaleTicketPage({ params }: { params: Promise<{ sal
         ))}
 
         <TicketDivider />
-        <p className="text-center">¡Gracias por su compra!</p>
+        <p className="text-center">{settings.ticketFooterMessage || DEFAULT_TICKET_FOOTER_MESSAGE}</p>
+        {settings.ticketPromoMessage && <p className="mt-1 text-center">{settings.ticketPromoMessage}</p>}
+        {settings.wifiNetwork && (
+          <>
+            <TicketDivider />
+            <p className="text-center">
+              Wifi: {settings.wifiNetwork}
+              {settings.wifiPassword && ` · ${settings.wifiPassword}`}
+            </p>
+          </>
+        )}
       </TicketPaper>
     </div>
   );

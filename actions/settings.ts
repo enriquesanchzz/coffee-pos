@@ -8,7 +8,7 @@ import { requirePasswordSession, SessionExpiredError } from "@/lib/session";
 import { requirePermission } from "@/lib/permissions";
 import { validateThemeSettings, type ThemeSettings } from "@/lib/theme";
 import { setAppTimeZone } from "@/lib/time";
-import { normalizePhoneMx } from "@/lib/validation";
+import { normalizePhoneMx, normalizeRfc, normalizeImageUrl } from "@/lib/validation";
 import { DEFAULT_SETTINGS, isValidTimeZone, type ShortagePolicy, type TaxMode } from "@/lib/settings-shared";
 import type { PaymentMethod } from "@prisma/client";
 
@@ -133,6 +133,49 @@ export const updateBusinessInfo = safeAction(async function updateBusinessInfo(i
   setAppTimeZone(input.timeZone);
   // Nombre (título, menú, logins) y zona horaria afectan toda la app.
   revalidatePath("/", "layout");
+});
+
+// Lo que aparece impreso en el ticket (lib/receipt.ts) además de
+// businessName/phone/address, que ya se configuran en Negocio: datos
+// fiscales, logo, wifi del local y un mensaje promocional.
+export const updateTicketSettings = safeAction(async function updateTicketSettings(input: {
+  razonSocial: string;
+  rfc: string;
+  logoUrl: string;
+  ticketFooterMessage: string;
+  ticketPromoMessage: string;
+  wifiNetwork: string;
+  wifiPassword: string;
+}) {
+  await requireConfigActor();
+
+  const razonSocial = input.razonSocial.trim();
+  if (razonSocial.length > 120) throw new Error("La razón social puede tener hasta 120 caracteres.");
+  const rfc = normalizeRfc(input.rfc);
+  const logoUrl = normalizeImageUrl(input.logoUrl);
+  const ticketFooterMessage = input.ticketFooterMessage.trim();
+  if (ticketFooterMessage.length > 120) throw new Error("La frase del pie puede tener hasta 120 caracteres.");
+  const ticketPromoMessage = input.ticketPromoMessage.trim();
+  if (ticketPromoMessage.length > 160) throw new Error("El mensaje promocional puede tener hasta 160 caracteres.");
+  const wifiNetwork = input.wifiNetwork.trim();
+  if (wifiNetwork.length > 60) throw new Error("El nombre de la red puede tener hasta 60 caracteres.");
+  const wifiPassword = input.wifiPassword.trim();
+  if (wifiPassword.length > 60) throw new Error("La contraseña del wifi puede tener hasta 60 caracteres.");
+
+  await prisma.branch.update({
+    where: { id: DEFAULT_BRANCH_ID },
+    data: {
+      razonSocial: razonSocial || null,
+      rfc,
+      logoUrl,
+      ticketFooterMessage: ticketFooterMessage || null,
+      ticketPromoMessage: ticketPromoMessage || null,
+      wifiNetwork: wifiNetwork || null,
+      wifiPassword: wifiPassword || null,
+    },
+  });
+
+  revalidatePath("/configuracion/ticket");
 });
 
 const PAYMENT_METHODS: PaymentMethod[] = ["EFECTIVO", "TARJETA", "TRANSFERENCIA"];
