@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -79,9 +80,20 @@ export function ReceiptDialog({
           </div>
         </div>
 
-        <Button className="w-full" onClick={onClose} autoFocus>
-          Cerrar
-        </Button>
+        <div className="flex gap-2">
+          {saleReceipt && (
+            <Link
+              href={`/pos/ticket/${saleReceipt.saleId}`}
+              target="_blank"
+              className="flex flex-1 items-center justify-center rounded-md border border-border text-sm font-medium hover:bg-muted"
+            >
+              Imprimir ticket
+            </Link>
+          )}
+          <Button className="flex-1" onClick={onClose} autoFocus>
+            Cerrar
+          </Button>
+        </div>
       </div>
     </Dialog>
   );
