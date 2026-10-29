@@ -249,6 +249,15 @@ model Branch {
   businessName String?
   phone        String?
   timeZone     String?
+  // Datos fiscales y de marca para el ticket impreso — no se usan en
+  // ningún otro lado del sistema (lib/receipt.ts).
+  razonSocial          String? // nombre fiscal, si es distinto al comercial (businessName)
+  rfc                  String?
+  logoUrl              String? // link https:// — no hay storage de archivos propio
+  ticketFooterMessage  String? // ej. "¡Gracias por tu visita!" — null = frase por default
+  ticketPromoMessage   String? // ej. "10% en tu próxima visita con este ticket"
+  wifiNetwork          String?
+  wifiPassword         String?
   // Cobro
   tipPercents             Int[]           @default([10, 15, 20])
   highTipThresholdPercent Int             @default(50) // % del total arriba del cual se confirma la propina

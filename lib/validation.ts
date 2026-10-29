@@ -38,6 +38,18 @@ export function assertMoney(value: number | null | undefined, label: string, { m
   }
 }
 
+// RFC mexicano: 12 dígitos (persona moral) o 13 (persona física). No se
+// valida la homoclave de verdad (haría falta el algoritmo completo del
+// SAT) — solo la forma, para atrapar errores de captura obvios.
+export function normalizeRfc(rfc: string | undefined | null): string | null {
+  const raw = rfc?.trim().toUpperCase().replace(/[\s-]/g, "");
+  if (!raw) return null;
+  if (!/^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/.test(raw)) {
+    throw new Error("El RFC no tiene un formato válido (ej. XAXX010101000).");
+  }
+  return raw;
+}
+
 // URL de imagen: vacía o https:// (no hay storage de archivos propio).
 export function normalizeImageUrl(url: string | undefined | null): string | null {
   const value = url?.trim();

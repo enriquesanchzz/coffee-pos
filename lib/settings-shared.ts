@@ -49,7 +49,17 @@ export type BusinessSettings = {
   sessionHours: number;
   taxMode: TaxMode;
   taxRatePercent: number;
+  // Ticket impreso (lib/receipt.ts) — ver Configuración → Ticket.
+  razonSocial: string | null;
+  rfc: string | null;
+  logoUrl: string | null;
+  ticketFooterMessage: string | null;
+  ticketPromoMessage: string | null;
+  wifiNetwork: string | null;
+  wifiPassword: string | null;
 };
+
+export const DEFAULT_TICKET_FOOTER_MESSAGE = "¡Gracias por su compra!";
 
 // Mismos valores que los @default del schema (y que el comportamiento
 // anterior, cuando eran constantes).
@@ -75,6 +85,13 @@ export const DEFAULT_SETTINGS: BusinessSettings = {
   sessionHours: 12,
   taxMode: "NINGUNO",
   taxRatePercent: 16,
+  razonSocial: null,
+  rfc: null,
+  logoUrl: null,
+  ticketFooterMessage: null,
+  ticketPromoMessage: null,
+  wifiNetwork: null,
+  wifiPassword: null,
 };
 
 // IVA contenido en un total con impuesto incluido: total − total ÷ (1 + tasa).

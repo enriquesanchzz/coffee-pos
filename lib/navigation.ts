@@ -62,6 +62,7 @@ export const CONFIGURACION_SECTIONS: NavChild[] = [
   { href: "/configuracion/costos", label: "Costos y precios" },
   { href: "/configuracion/seguridad", label: "Seguridad" },
   { href: "/configuracion/apariencia", label: "Apariencia" },
+  { href: "/configuracion/ticket", label: "Ticket" },
 ];
 
 export const NAV_MODULES: NavModule[] = [

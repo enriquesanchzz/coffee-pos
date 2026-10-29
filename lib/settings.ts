@@ -44,6 +44,13 @@ export async function getBusinessSettings(): Promise<BusinessSettings> {
     sessionHours: branch.sessionHours,
     taxMode: TAX_MODES.includes(branch.taxMode as TaxMode) ? (branch.taxMode as TaxMode) : d.taxMode,
     taxRatePercent: branch.taxRatePercent.toNumber(),
+    razonSocial: branch.razonSocial?.trim() || null,
+    rfc: branch.rfc?.trim() || null,
+    logoUrl: branch.logoUrl?.trim() || null,
+    ticketFooterMessage: branch.ticketFooterMessage?.trim() || null,
+    ticketPromoMessage: branch.ticketPromoMessage?.trim() || null,
+    wifiNetwork: branch.wifiNetwork?.trim() || null,
+    wifiPassword: branch.wifiPassword?.trim() || null,
   };
 }
 
