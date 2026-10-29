@@ -11,7 +11,7 @@ function productGrid(products: CatalogProduct[], onSelectProduct: (p: CatalogPro
     return <p className="text-sm text-muted-foreground">{emptyText}</p>;
   }
   return (
-    <div className="grid auto-rows-min grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-3 pr-1 sm:gap-4">
+    <div className="grid auto-rows-min grid-cols-[repeat(auto-fill,minmax(8.5rem,10rem))] gap-3 pr-1 sm:gap-4">
       {products.map((product) => (
         <ProductCard key={product.id} product={product} onSelectProduct={onSelectProduct} />
       ))}

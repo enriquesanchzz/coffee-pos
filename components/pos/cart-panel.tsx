@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CheckCircle2, Coffee, Minus, Plus, Trash2, X } from "lucide-react";
+import { Coffee, Minus, Plus, Trash2 } from "lucide-react";
 import type { SaleOrderType, DomicilioOrigen } from "@prisma/client";
 import { useCartStore, lineUnitPrice, cartLineToSaleItemInput } from "./cart-store";
 import { openTab as openTabAction, addItemsToTab as addItemsToTabAction, removeTabItem as removeTabItemAction, updateTabItemQuantity as updateTabItemQuantityAction, type OpenTabDetail } from "@/actions/pos";
@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { cn, formatCurrency, posAccentClass, unitLabel } from "@/lib/utils";
 import { CustomerPicker } from "./customer-picker";
 import { CheckoutForm, type SaleReceipt } from "./checkout-form";
+import { ReceiptDialog, type TabConfirmation } from "./receipt-dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { isShortageError } from "@/lib/stock";
 import type { CustomerOption } from "@/lib/customers";
@@ -89,19 +90,30 @@ export function CartPanel({
     setSelectedCustomer(customer);
   }
 
-  // Resumen de la última venta cobrada — se queda visible (sobre todo el
-  // cambio a entregar) hasta que el cajero lo cierra o cobra otra venta.
+  // Confirmación de la última acción — venta cobrada o cuenta dejada
+  // abierta — como popup modal (antes la venta se quedaba como un aviso
+  // fijo en la lista que había que cerrar a mano, y dejar una cuenta
+  // abierta no avisaba nada, QA de octubre 2026).
   const [lastReceipt, setLastReceipt] = useState<SaleReceipt | null>(null);
+  const [tabConfirmation, setTabConfirmation] = useState<TabConfirmation | null>(null);
 
-  function handleConfirmed(receipt: SaleReceipt) {
-    setLastReceipt(receipt);
-    setView("cart");
+  function resetOrderState() {
     setSelectedCustomer(null);
     setDomicilioAddress("");
     setDomicilioOrigen("TELEFONO");
     setOrderType("PARA_LLEVAR");
     setTableNumber("");
     setActiveTabId(null);
+  }
+
+  function handleConfirmed(receipt: SaleReceipt) {
+    setTabConfirmation(null);
+    setLastReceipt(receipt);
+    setView("cart");
+    resetOrderState();
+    // Si se cobró una cuenta de Mesa, ya no está abierta — refresca el
+    // contador de "Mesas abiertas".
+    onTabChanged();
   }
 
   // Advertencia de insumos insuficientes al dejar/agregar a una cuenta
@@ -117,6 +129,10 @@ export function CartPanel({
     startSavingTab(async () => {
       try {
         const items = lines.map(cartLineToSaleItemInput);
+        const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
+        const isNewTab = !activeTabId;
+        const total = (activeTabSummary?.total ?? 0) + subtotal();
+        const resolvedTableNumber = tableNumber;
         if (activeTabId) {
           await addItemsToTab({ saleId: activeTabId, branchId, shiftId, employeeId, items, allowShortage });
         } else {
@@ -127,8 +143,9 @@ export function CartPanel({
           await openTab({ branchId, shiftId, employeeId, tableNumber, items, allowShortage });
         }
         useCartStore.getState().clear();
-        setActiveTabId(null);
-        setTableNumber("");
+        setLastReceipt(null);
+        setTabConfirmation({ tableNumber: resolvedTableNumber, itemCount, total, isNewTab });
+        resetOrderState();
         onTabChanged();
       } catch (err) {
         const message = err instanceof Error ? err.message : "No se pudo dejar la cuenta abierta.";
@@ -242,40 +259,6 @@ export function CartPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto p-3">
-        {lastReceipt && (
-          <div
-            role="status"
-            className="mb-3 flex items-start gap-3 rounded-xl border border-emerald-600/40 bg-emerald-600/10 p-3"
-          >
-            <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-emerald-700" />
-            <div className="flex flex-1 flex-col gap-0.5 text-sm">
-              <p className="font-semibold">Venta registrada · {formatCurrency(lastReceipt.total)}</p>
-              {lastReceipt.taxIncluded > 0 && (
-                <p className="text-xs text-muted-foreground">Incluye IVA {formatCurrency(lastReceipt.taxIncluded)}</p>
-              )}
-              {lastReceipt.change !== null ? (
-                <>
-                  <p className="text-muted-foreground">
-                    Recibido {formatCurrency(lastReceipt.cashReceived ?? 0)}
-                  </p>
-                  <p className="text-lg font-bold">Cambio a entregar: {formatCurrency(lastReceipt.change)}</p>
-                </>
-              ) : (
-                <p className="text-muted-foreground">
-                  Pagado con {lastReceipt.method === "TARJETA" ? "tarjeta" : "transferencia"}.
-                </p>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => setLastReceipt(null)}
-              className="text-muted-foreground hover:text-foreground"
-              aria-label="Cerrar resumen de venta"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        )}
         {activeTabSummary && (
           <div className="mb-4 flex flex-col gap-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -452,6 +435,7 @@ export function CartPanel({
             disabled={lines.length === 0 && !activeTabId}
             onClick={() => {
               setLastReceipt(null);
+              setTabConfirmation(null);
               setView("checkout");
             }}
           >
@@ -459,6 +443,14 @@ export function CartPanel({
           </Button>
         </div>
       </div>
+      <ReceiptDialog
+        saleReceipt={lastReceipt}
+        tabConfirmation={tabConfirmation}
+        onClose={() => {
+          setLastReceipt(null);
+          setTabConfirmation(null);
+        }}
+      />
       <ConfirmDialog
         open={shortageMessage !== null}
         title="Insumos insuficientes"

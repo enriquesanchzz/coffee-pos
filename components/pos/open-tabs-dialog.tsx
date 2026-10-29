@@ -35,7 +35,7 @@ export function OpenTabsDialog({
       try {
         setTabs(await listOpenTabs(branchId));
       } catch (err) {
-        setError(err instanceof Error ? err.message : "No se pudieron cargar las cuentas abiertas.");
+        setError(err instanceof Error ? err.message : "No se pudieron cargar las mesas abiertas.");
       }
     });
   }, [open, branchId]);
@@ -48,12 +48,12 @@ export function OpenTabsDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="Cuentas abiertas">
+    <Dialog open={open} onOpenChange={onOpenChange} title="Mesas abiertas">
       <div className="flex flex-col gap-3">
         {isPending && <p className="text-sm text-muted-foreground">Cargando...</p>}
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {!isPending && !error && tabs.length === 0 && (
-          <p className="text-sm text-muted-foreground">No hay cuentas abiertas por ahora.</p>
+          <p className="text-sm text-muted-foreground">No hay mesas abiertas por ahora.</p>
         )}
         <ul className="flex flex-col gap-2">
           {tabs.map((tab) => (
