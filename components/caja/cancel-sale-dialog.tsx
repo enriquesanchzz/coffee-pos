@@ -10,6 +10,7 @@ import { formatCurrency } from "@/lib/utils";
 import type { ShiftSaleRow } from "@/lib/shift";
 import { cancelSale as cancelSaleAction } from "@/actions/pos";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const cancelSale = withActionErrors(cancelSaleAction);
@@ -34,6 +35,7 @@ export function CancelSaleDialog({
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const notify = useToast();
 
   useEffect(() => {
     setReason("");
@@ -56,6 +58,7 @@ export function CancelSaleDialog({
         });
         onOpenChange(false);
         router.refresh();
+        notify(isOpenTab ? "Cuenta cancelada." : "Venta anulada.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo anular la venta.");
       }

@@ -12,6 +12,7 @@ import { createDiscountCode as createDiscountCodeAction, updateDiscountCode as u
 import { discountTypeLabels, discountCategoryLabels } from "./enum-labels";
 import { withActionErrors } from "@/lib/action-result";
 import { zonedDateKey } from "@/lib/time";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const createDiscountCode = withActionErrors(createDiscountCodeAction);
@@ -46,6 +47,7 @@ export function DiscountCodeFormDialog({
   const [isActive, setIsActive] = useState(discountCode?.isActive ?? true);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const notify = useToast();
 
   useEffect(() => {
     if (!open) return;
@@ -86,6 +88,7 @@ export function DiscountCodeFormDialog({
         }
         onSaved();
         onOpenChange(false);
+        notify(isEdit ? "Código actualizado." : "Código creado.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo guardar el código.");
       }

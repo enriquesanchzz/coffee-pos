@@ -12,6 +12,7 @@ import { type LineDraft } from "./recipe-lines-editor";
 import { modifierOptionsToInput, type ModifierOptionDraft } from "./modifier-options-editor";
 import { VariantFields } from "./variant-fields";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const updateVariantRecipe = withActionErrors(updateVariantRecipeAction);
@@ -70,6 +71,7 @@ export function EditRecipeForm({
   const [ingredients, setIngredients] = useState(ingredientOptions.ingredients);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const notify = useToast();
 
   function handleSubmit() {
     setError(null);
@@ -105,6 +107,7 @@ export function EditRecipeForm({
           note: note || undefined,
         });
         onSaved();
+        notify("Cambios guardados.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo guardar la receta.");
       }

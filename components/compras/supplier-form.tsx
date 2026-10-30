@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { createSupplier as createSupplierAction, updateSupplier as updateSupplierAction } from "@/actions/purchases";
 import { SupplierIngredientCostsEditor } from "./supplier-ingredient-costs-editor";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const createSupplier = withActionErrors(createSupplierAction);
@@ -36,6 +37,7 @@ export function SupplierForm({
   const [isActive, setIsActive] = useState(supplier?.isActive ?? true);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const notify = useToast();
 
   function handleSubmit() {
     setError(null);
@@ -53,6 +55,7 @@ export function SupplierForm({
             minOrderAmount: minOrderAmount ? Number(minOrderAmount) : undefined,
           });
           router.refresh();
+          notify("Proveedor actualizado.");
         } else {
           const result = await createSupplier({
             employeeId,
@@ -63,6 +66,7 @@ export function SupplierForm({
             minOrderAmount: minOrderAmount ? Number(minOrderAmount) : undefined,
           });
           router.push(`/compras/proveedores/${result.id}`);
+          notify("Proveedor creado.");
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo guardar el proveedor.");

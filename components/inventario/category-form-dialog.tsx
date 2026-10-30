@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { CategoryIconPicker } from "@/components/productos/category-icon-picker";
 import { createIngredientCategory as createIngredientCategoryAction, updateIngredientCategory as updateIngredientCategoryAction, deleteIngredientCategory as deleteIngredientCategoryAction } from "@/actions/inventory";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const createIngredientCategory = withActionErrors(createIngredientCategoryAction);
@@ -34,6 +35,7 @@ export function CategoryFormDialog({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const notify = useToast();
 
   // Mismo motivo que IngredientFormDialog: este diálogo queda montado de
   // forma permanente con `open`/`category` cambiando por prop, así que hay
@@ -68,6 +70,7 @@ export function CategoryFormDialog({
         }
         onSaved();
         handleOpenChange(false);
+        notify(isEdit ? "Categoría actualizada." : "Categoría creada.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo guardar la categoría.");
       }
@@ -82,6 +85,7 @@ export function CategoryFormDialog({
         await deleteIngredientCategory({ employeeId, categoryId: category.id });
         onSaved();
         handleOpenChange(false);
+        notify("Categoría eliminada.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo borrar la categoría.");
         setConfirmingDelete(false);

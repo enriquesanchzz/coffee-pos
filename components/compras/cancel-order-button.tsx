@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { cancelPurchaseOrder as cancelPurchaseOrderAction } from "@/actions/purchases";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const cancelPurchaseOrder = withActionErrors(cancelPurchaseOrderAction);
@@ -20,6 +21,7 @@ export function CancelOrderButton({
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const notify = useToast();
 
   function handleCancel() {
     setError(null);
@@ -27,6 +29,7 @@ export function CancelOrderButton({
       try {
         await cancelPurchaseOrder({ employeeId, purchaseOrderId });
         router.refresh();
+        notify("Orden cancelada.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo cancelar la orden.");
         setConfirming(false);

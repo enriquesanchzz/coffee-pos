@@ -12,6 +12,7 @@ import { createIngredient as createIngredientAction } from "@/actions/recipes";
 import { updateIngredient as updateIngredientAction, deleteIngredient as deleteIngredientAction } from "@/actions/inventory";
 import { unitLabels } from "./unit-labels";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const createIngredient = withActionErrors(createIngredientAction);
@@ -55,6 +56,7 @@ export function IngredientFormDialog({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const notify = useToast();
 
   // Los dos diálogos (crear/editar) quedan montados de forma permanente en
   // InventoryWorkspace, con `open`/`ingredient`/`defaultCategoryId` cambiando
@@ -119,6 +121,7 @@ export function IngredientFormDialog({
         }
         onSaved();
         handleOpenChange(false);
+        notify(isEdit ? "Insumo actualizado." : "Insumo creado.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo guardar el insumo.");
       }
@@ -133,6 +136,7 @@ export function IngredientFormDialog({
         await deleteIngredient({ employeeId, ingredientId: ingredient.id });
         onSaved();
         handleOpenChange(false);
+        notify("Insumo eliminado.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo borrar el insumo.");
         setConfirmingDelete(false);

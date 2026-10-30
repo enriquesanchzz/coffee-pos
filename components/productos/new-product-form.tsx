@@ -15,6 +15,7 @@ import { modifierOptionsToInput, type ModifierOptionDraft } from "./modifier-opt
 import { VariantFields } from "./variant-fields";
 import { CategoryIconPicker } from "./category-icon-picker";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const createProductWithRecipe = withActionErrors(createProductWithRecipeAction);
@@ -114,6 +115,7 @@ export function NewProductForm({
   const [ingredients, setIngredients] = useState(ingredientOptions.ingredients);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const notify = useToast();
 
   const standaloneCategories = categories.filter((c) => !c.parentId);
   const categoriesByParent = new Map<string, ProductCategoryOption[]>();
@@ -163,6 +165,7 @@ export function NewProductForm({
           })),
         });
         onSaved(created.id);
+        notify("Producto creado.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo crear el producto.");
       }

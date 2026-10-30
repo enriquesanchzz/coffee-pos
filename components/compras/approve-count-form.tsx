@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { approvePhysicalCount as approvePhysicalCountAction } from "@/actions/counts";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const approvePhysicalCount = withActionErrors(approvePhysicalCountAction);
@@ -17,6 +18,7 @@ export function ApproveCountForm({ physicalCountId }: { physicalCountId: string 
   const [confirmingPin, setConfirmingPin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const notify = useToast();
 
   function handleDecision(decision: "APROBADO" | "RECHAZADO") {
     setError(null);
@@ -24,6 +26,7 @@ export function ApproveCountForm({ physicalCountId }: { physicalCountId: string 
       try {
         await approvePhysicalCount({ physicalCountId, confirmingPin, decision });
         router.refresh();
+        notify(decision === "APROBADO" ? "Conteo aprobado." : "Conteo rechazado.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo procesar la aprobación.");
       }

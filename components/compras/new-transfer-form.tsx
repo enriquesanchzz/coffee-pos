@@ -17,6 +17,7 @@ import {
   type TransferLineDraft,
 } from "./transfer-lines-editor";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const createTransferManifest = withActionErrors(createTransferManifestAction);
@@ -37,6 +38,7 @@ export function NewTransferForm({
   const [lines, setLines] = useState<TransferLineDraft[]>([initialTransferLine()]);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const notify = useToast();
 
   const ingredientById = new Map(ingredients.map((i) => [i.id, i]));
 
@@ -57,6 +59,7 @@ export function NewTransferForm({
           })),
         });
         router.push(`/compras/transferencias/${result.id}`);
+        notify("Transferencia creada.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo crear la transferencia.");
       }

@@ -10,6 +10,7 @@ import { emptyLine, type LineDraft } from "./recipe-lines-editor";
 import { modifierOptionsToInput, type ModifierOptionDraft } from "./modifier-options-editor";
 import { VariantFields } from "./variant-fields";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const addVariantToProduct = withActionErrors(addVariantToProductAction);
@@ -47,6 +48,7 @@ export function AddVariantForm({
   const [ingredients, setIngredients] = useState(ingredientOptions.ingredients);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const notify = useToast();
 
   function handleSubmit() {
     setError(null);
@@ -82,6 +84,7 @@ export function AddVariantForm({
           },
         });
         onSaved();
+        notify("Variante agregada.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo agregar la variante.");
       }
