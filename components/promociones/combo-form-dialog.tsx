@@ -11,6 +11,7 @@ import { createCombo as createComboAction, updateCombo as updateComboAction } fr
 import { DaysOfWeekPicker } from "./days-of-week-picker";
 import { ComboItemsEditor, type ComboItemDraft, initialComboItems } from "./combo-items-editor";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const createCombo = withActionErrors(createComboAction);
@@ -61,6 +62,7 @@ export function ComboFormDialog({
   const [isActive, setIsActive] = useState(combo?.isActive ?? true);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const notify = useToast();
 
   useEffect(() => {
     if (!open) return;
@@ -97,6 +99,7 @@ export function ComboFormDialog({
         }
         onSaved();
         onOpenChange(false);
+        notify(isEdit ? "Paquete actualizado." : "Paquete creado.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo guardar el paquete.");
       }

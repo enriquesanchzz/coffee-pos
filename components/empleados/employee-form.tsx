@@ -11,6 +11,7 @@ import { Select } from "@/components/ui/select";
 import { createEmployee as createEmployeeAction, updateEmployee as updateEmployeeAction } from "@/actions/employees";
 import { withActionErrors } from "@/lib/action-result";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const createEmployee = withActionErrors(createEmployeeAction);
@@ -39,6 +40,7 @@ export function EmployeeForm({
   const [isPending, startTransition] = useTransition();
   const [confirmingSelfChange, setConfirmingSelfChange] = useState(false);
   const [lostOwnAccess, setLostOwnAccess] = useState(false);
+  const notify = useToast();
 
   const isSelf = Boolean(employee && employee.id === currentEmployeeId);
   const changesOwnAccess =
@@ -84,6 +86,7 @@ export function EmployeeForm({
           });
         }
         router.push("/empleados");
+        notify(isEdit ? "Empleado actualizado." : "Empleado creado.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo guardar el empleado.");
       }

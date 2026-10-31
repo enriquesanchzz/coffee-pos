@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { receiveTransfer as receiveTransferAction } from "@/actions/transfers";
 import { unitLabels } from "./enum-labels";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const receiveTransfer = withActionErrors(receiveTransferAction);
@@ -37,6 +38,7 @@ export function ReceiveTransferForm({
   );
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const notify = useToast();
 
   function updateLine(id: string, patch: Partial<LineState>) {
     setLines((prev) => prev.map((line) => (line.transferLineId === id ? { ...line, ...patch } : line)));
@@ -56,6 +58,7 @@ export function ReceiveTransferForm({
           })),
         });
         router.refresh();
+        notify("Recepción registrada.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo registrar la recepción.");
       }

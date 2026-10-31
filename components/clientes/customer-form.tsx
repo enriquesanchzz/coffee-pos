@@ -13,6 +13,7 @@ import { Select } from "@/components/ui/select";
 import { createCustomer as createCustomerAction, updateCustomer as updateCustomerAction } from "@/actions/customers";
 import { buildWhatsAppLoyaltyLink, cn } from "@/lib/utils";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const createCustomer = withActionErrors(createCustomerAction);
@@ -43,6 +44,7 @@ export function CustomerForm({
   const [gender, setGender] = useState<CustomerGender | "">((customer?.gender as CustomerGender) ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const notify = useToast();
   // Tras crear (no editar) un cliente nuevo, se queda en esta pantalla
   // para poder mandarle la tarjeta por WhatsApp antes de navegar.
   const [created, setCreated] = useState<{
@@ -68,6 +70,7 @@ export function CustomerForm({
             gender: gender || null,
           });
           router.refresh();
+          notify("Cliente actualizado.");
         } else {
           const result = await createCustomer({
             employeeId,

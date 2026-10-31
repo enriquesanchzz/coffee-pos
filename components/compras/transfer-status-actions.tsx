@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { markTransferInTransit as markTransferInTransitAction, cancelTransferManifest as cancelTransferManifestAction } from "@/actions/transfers";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const markTransferInTransit = withActionErrors(markTransferInTransitAction);
@@ -20,6 +21,7 @@ export function TransferStatusActions({
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const notify = useToast();
 
   function handleMarkInTransit() {
     setError(null);
@@ -27,6 +29,7 @@ export function TransferStatusActions({
       try {
         await markTransferInTransit({ employeeId, transferManifestId });
         router.refresh();
+        notify("Transferencia marcada en tránsito.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo marcar en tránsito.");
       }
@@ -39,6 +42,7 @@ export function TransferStatusActions({
       try {
         await cancelTransferManifest({ employeeId, transferManifestId });
         router.refresh();
+        notify("Transferencia cancelada.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo cancelar.");
       }

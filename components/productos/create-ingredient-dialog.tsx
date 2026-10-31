@@ -11,6 +11,7 @@ import { Select } from "@/components/ui/select";
 import { createIngredient as createIngredientAction } from "@/actions/recipes";
 import { unitLabels } from "./enum-labels";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const createIngredient = withActionErrors(createIngredientAction);
@@ -36,6 +37,7 @@ export function CreateIngredientDialog({
   const [purchaseUnit, setPurchaseUnit] = useState<UnitOfMeasure>(units[0]);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const notify = useToast();
 
   function handleConfirm() {
     setError(null);
@@ -51,6 +53,7 @@ export function CreateIngredientDialog({
         onCreated(ingredient);
         setName("");
         onOpenChange(false);
+        notify("Ingrediente creado.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo crear el ingrediente.");
       }

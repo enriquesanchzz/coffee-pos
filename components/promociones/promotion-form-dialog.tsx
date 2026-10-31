@@ -12,6 +12,7 @@ import { createPromotion as createPromotionAction, updatePromotion as updateProm
 import { DaysOfWeekPicker } from "./days-of-week-picker";
 import { VariantMultiPicker } from "./variant-multi-picker";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const createPromotion = withActionErrors(createPromotionAction);
@@ -62,6 +63,7 @@ export function PromotionFormDialog({
   const [isActive, setIsActive] = useState(promotion?.isActive ?? true);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const notify = useToast();
 
   useEffect(() => {
     if (!open) return;
@@ -100,6 +102,7 @@ export function PromotionFormDialog({
         }
         onSaved();
         onOpenChange(false);
+        notify(isEdit ? "Promoción actualizada." : "Promoción creada.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo guardar la promoción.");
       }

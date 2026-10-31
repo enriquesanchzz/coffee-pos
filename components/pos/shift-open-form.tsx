@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { withActionErrors } from "@/lib/action-result";
 import { zonedClock } from "@/lib/time";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const openShift = withActionErrors(openShiftAction);
@@ -34,6 +35,7 @@ export function ShiftOpenForm({
   const [confirmingPin, setConfirmingPin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const notify = useToast();
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -47,6 +49,7 @@ export function ShiftOpenForm({
           openingCash: Number(openingCash) || 0,
           confirmingPin,
         });
+        notify("Turno abierto.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo abrir el turno.");
       }

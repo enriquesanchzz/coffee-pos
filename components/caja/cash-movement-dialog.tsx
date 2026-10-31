@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createCashMovement as createCashMovementAction } from "@/actions/cash";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const createCashMovement = withActionErrors(createCashMovementAction);
@@ -33,6 +34,7 @@ export function CashMovementDialog({
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const notify = useToast();
 
   function handleConfirm() {
     setError(null);
@@ -48,6 +50,7 @@ export function CashMovementDialog({
         setAmount("0");
         setReason("");
         onOpenChange(false);
+        notify(type === "RETIRO" ? "Retiro registrado." : "Ingreso registrado.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo registrar el movimiento.");
       }

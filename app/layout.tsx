@@ -5,6 +5,7 @@ import { FONT_VARIABLE_CLASSES } from "@/lib/fonts";
 import { cn } from "@/lib/utils";
 import { TimeZoneSync } from "@/components/layout/time-zone-sync";
 import { BusinessSettingsProvider } from "@/components/layout/business-settings-context";
+import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
 
 // Nombre del negocio desde Configuración → Negocio (antes fijo).
@@ -35,7 +36,9 @@ export default async function RootLayout({
     >
       <body>
         <TimeZoneSync timeZone={timeZone} />
-        <BusinessSettingsProvider value={settings}>{children}</BusinessSettingsProvider>
+        <BusinessSettingsProvider value={settings}>
+          <ToastProvider>{children}</ToastProvider>
+        </BusinessSettingsProvider>
       </body>
     </html>
   );

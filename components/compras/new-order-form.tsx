@@ -11,6 +11,7 @@ import { createPurchaseOrder as createPurchaseOrderAction, updatePurchaseOrder a
 import { OrderLinesEditor, initialOrderLine, type OrderLineDraft } from "./order-lines-editor";
 import { withActionErrors } from "@/lib/action-result";
 import { roundQty } from "@/lib/units";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const createPurchaseOrder = withActionErrors(createPurchaseOrderAction);
@@ -55,6 +56,7 @@ export function NewOrderForm({
   );
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const notify = useToast();
 
   const supplierCosts = new Map(Object.entries(supplierCostsBySupplier[supplierId] ?? {}));
   const ingredientById = new Map(ingredients.map((i) => [i.id, i]));
@@ -79,9 +81,11 @@ export function NewOrderForm({
             lines: linesInput,
           });
           onSaved?.();
+          notify("Orden actualizada.");
         } else {
           const result = await createPurchaseOrder({ employeeId, supplierId, lines: linesInput });
           router.push(`/compras/${result.id}`);
+          notify("Orden de compra creada.");
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo guardar la orden.");

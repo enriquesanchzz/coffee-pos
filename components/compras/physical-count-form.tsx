@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { createPhysicalCount as createPhysicalCountAction } from "@/actions/counts";
 import { unitLabels } from "./enum-labels";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const createPhysicalCount = withActionErrors(createPhysicalCountAction);
@@ -26,6 +27,7 @@ export function PhysicalCountForm({
   );
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const notify = useToast();
 
   function handleSubmit() {
     setError(null);
@@ -39,6 +41,7 @@ export function PhysicalCountForm({
           })),
         });
         router.push(`/compras/conteos/${result.id}`);
+        notify("Conteo enviado a aprobación.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo crear el conteo.");
       }

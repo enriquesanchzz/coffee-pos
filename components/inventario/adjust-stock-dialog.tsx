@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { adjustInventoryStock as adjustInventoryStockAction } from "@/actions/inventory";
 import { unitLabels } from "./unit-labels";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const adjustInventoryStock = withActionErrors(adjustInventoryStockAction);
@@ -26,6 +27,7 @@ export function AdjustStockDialog({
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const notify = useToast();
 
   useEffect(() => {
     if (item) {
@@ -47,6 +49,7 @@ export function AdjustStockDialog({
           reason,
         });
         onOpenChange(false);
+        notify("Ajuste de stock guardado.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo registrar el ajuste.");
       }

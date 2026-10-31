@@ -12,6 +12,7 @@ import { roundQty } from "@/lib/units";
 import { receivePurchaseOrder as receivePurchaseOrderAction } from "@/actions/purchases";
 import { unitLabels } from "./enum-labels";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const receivePurchaseOrder = withActionErrors(receivePurchaseOrderAction);
@@ -46,6 +47,7 @@ export function ReceiveOrderForm({
   );
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const notify = useToast();
 
   function updateLine(id: string, patch: Partial<LineState>) {
     setLines((prev) => prev.map((line) => (line.purchaseOrderItemId === id ? { ...line, ...patch } : line)));
@@ -66,6 +68,7 @@ export function ReceiveOrderForm({
           })),
         });
         router.refresh();
+        notify("Recepción registrada.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo registrar la recepción.");
       }

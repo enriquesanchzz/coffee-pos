@@ -27,6 +27,7 @@ import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { withActionErrors } from "@/lib/action-result";
 import { matchesSearch } from "@/lib/search";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const fetchVariantRecipeDetail = withActionErrors(fetchVariantRecipeDetailAction);
@@ -327,6 +328,7 @@ function EditCategoryDialog({
   const [parentId, setParentId] = useState(category.parentId ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const notify = useToast();
 
   const parentOptions = categories.filter((c) => c.id !== category.id && !c.parentId);
 
@@ -342,6 +344,7 @@ function EditCategoryDialog({
           parentId: parentId || undefined,
         });
         onSaved();
+        notify("Categoría actualizada.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo guardar la categoría.");
       }
