@@ -70,7 +70,10 @@ function previewDiscountAmount(type: DiscountType, value: number, subtotal: numb
 export type SaleReceipt = {
   saleId: string;
   total: number;
-  method: PaymentMethod;
+  // Uno o varios métodos (pago dividido, D8) — amount de cada uno.
+  payments: { method: PaymentMethod; amount: number }[];
+  // Solo tiene sentido si se pagó completo en efectivo (sin dividir) —
+  // en pago dividido se asume monto exacto por método, sin cambio.
   cashReceived: number | null;
   change: number | null;
   // IVA contenido (Configuración → Impuestos); 0 si no se desglosa.
@@ -110,6 +113,15 @@ export function CheckoutForm({
   const paymentMethods = settings.paymentMethods.map((value) => ({ value, label: PAYMENT_METHOD_LABELS[value] }));
   const [method, setMethod] = useState<PaymentMethod>(settings.paymentMethods[0] ?? "EFECTIVO");
   const [transferNote, setTransferNote] = useState("");
+  // Pago dividido (D8, "split-payment flow") — por default la cuenta se
+  // cobra completa con un solo método, como siempre; "Dividir el pago"
+  // cambia a una lista de método+monto que debe sumar exacto al total.
+  // En modo dividido no se calcula cambio por renglón (se asume monto
+  // exacto por método) — simplificación deliberada frente a calcular
+  // cambio de efectivo combinado con otros métodos a la vez.
+  type SplitRow = { id: string; method: PaymentMethod; amount: string };
+  const [splitRows, setSplitRows] = useState<SplitRow[] | null>(null);
+  const isSplit = splitRows !== null;
 
   // El subtotal "de verdad" de esta ronda — lo que sumaría quantity×precio
   // del lado del cliente NO refleja Paquetes/2x1/Día temático (esas
@@ -240,6 +252,11 @@ export function CheckoutForm({
   const taxIncluded = includedTax(total, settings);
   const cashReceivedCents = Math.round((Number(cashReceived) || 0) * 100);
   const totalToCollectCents = Math.round(totalToCollect * 100);
+  const splitAssignedCents = (splitRows ?? []).reduce(
+    (sum, row) => sum + Math.round((Number(row.amount) || 0) * 100),
+    0
+  );
+  const splitRemainingCents = totalToCollectCents - splitAssignedCents;
 
   // Mismas reglas que valida computeDiscount en el servidor — aquí solo
   // para avisar antes de intentar cobrar (antes se podía capturar 150% y
@@ -267,6 +284,24 @@ export function CheckoutForm({
     setCodeError(null);
     setManualValue("0");
     setAuthorizingPin("");
+  }
+
+  function startSplitPayment() {
+    setSplitRows([
+      { id: randomId(), method, amount: totalToCollect > 0 ? totalToCollect.toFixed(2) : "" },
+    ]);
+  }
+  function cancelSplitPayment() {
+    setSplitRows(null);
+  }
+  function addSplitRow() {
+    setSplitRows((prev) => [...(prev ?? []), { id: randomId(), method: paymentMethods[0]?.value ?? "EFECTIVO", amount: "" }]);
+  }
+  function updateSplitRow(id: string, patch: Partial<SplitRow>) {
+    setSplitRows((prev) => (prev ?? []).map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  }
+  function removeSplitRow(id: string) {
+    setSplitRows((prev) => (prev ?? []).filter((r) => r.id !== id));
   }
 
   function handleCheckCode() {
@@ -322,13 +357,15 @@ export function CheckoutForm({
           });
         }
 
-        const payments = [
-          {
-            method,
-            amount: totalToCollect,
-            note: method === "TRANSFERENCIA" ? transferNote.trim() || undefined : undefined,
-          },
-        ];
+        const payments = isSplit
+          ? splitRows!.map((row) => ({ method: row.method, amount: Number(row.amount) || 0 }))
+          : [
+              {
+                method,
+                amount: totalToCollect,
+                note: method === "TRANSFERENCIA" ? transferNote.trim() || undefined : undefined,
+              },
+            ];
         const discountCodeId = discountMode === "CODIGO" ? resolvedCode?.id : undefined;
         const manualDiscount =
           discountMode === "MANUAL"
@@ -384,9 +421,9 @@ export function CheckoutForm({
         const receipt: SaleReceipt = {
           saleId,
           total: totalToCollect,
-          method,
-          cashReceived: method === "EFECTIVO" ? cashReceivedCents / 100 : null,
-          change: method === "EFECTIVO" ? (cashReceivedCents - totalToCollectCents) / 100 : null,
+          payments,
+          cashReceived: !isSplit && method === "EFECTIVO" ? cashReceivedCents / 100 : null,
+          change: !isSplit && method === "EFECTIVO" ? (cashReceivedCents - totalToCollectCents) / 100 : null,
           taxIncluded,
         };
         requestIdRef.current = null;
@@ -399,6 +436,7 @@ export function CheckoutForm({
         setTipCustom("");
         setConfirmHighTip(false);
         setCashReceived("");
+        setSplitRows(null);
         onConfirmed(receipt);
         setOfflineRetry(false);
       } catch (err) {
@@ -426,8 +464,37 @@ export function CheckoutForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [offlineRetry]);
 
+  // Misma condición que deshabilita el botón — se reutiliza para Enter
+  // (ver handleKeyDown) en vez de duplicarla y arriesgar que se desfasen.
+  const confirmDisabled =
+    isPending ||
+    isPreviewLoading ||
+    (shortages.length > 0 && !allowShortage) ||
+    (isHighTip && !confirmHighTip) ||
+    (tipMode === "MONTO" && Number(tipCustom) < 0) ||
+    verifiedSubtotal === null ||
+    (lines.length === 0 && !activeTabId) ||
+    (discountMode === "CODIGO" && !resolvedCode) ||
+    (discountMode === "MANUAL" && (!authorizingPin || manualDiscountError !== null)) ||
+    (isSplit
+      ? splitRows!.length === 0 || splitRows!.some((r) => !(Number(r.amount) > 0)) || splitRemainingCents !== 0
+      : method === "EFECTIVO" && (cashReceived === "" || cashReceivedCents < totalToCollectCents));
+
+  // Enter confirma el cobro en cuanto el formulario ya es válido — salvo
+  // dentro de un <textarea> (ahí Enter es un salto de línea) o mientras se
+  // escribe el código de descuento (ahí Enter valida el código, ver su
+  // propio onKeyDown más abajo).
+  function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key !== "Enter") return;
+    const target = e.target as HTMLElement;
+    if (target.tagName === "TEXTAREA") return;
+    if (confirmDisabled) return;
+    e.preventDefault();
+    handleConfirm();
+  }
+
   return (
-    <div className="flex flex-col gap-4 p-4">
+    <div className="flex flex-col gap-4 p-4" onKeyDown={handleKeyDown}>
       <div className="flex items-center justify-between">
         <button
           type="button"
@@ -443,7 +510,7 @@ export function CheckoutForm({
 
       {activeTabId && (
         <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
-          Cerrando cuenta de Mesa {tableNumber || "—"} · ya registrado: {formatCurrency(activeTabBaseTotal ?? 0)}
+          Cerrando {orderType === "CONSUMO_LOCAL" ? `cuenta de Mesa ${tableNumber || "—"}` : `pedido en espera${tableNumber ? ` (${tableNumber})` : ""}`} · ya registrado: {formatCurrency(activeTabBaseTotal ?? 0)}
           {lines.length > 0 && ` + esta ronda: ${formatCurrency(subtotal())}`}
         </p>
       )}
@@ -482,6 +549,15 @@ export function CheckoutForm({
                 onChange={(e) => {
                   setCodeInput(e.target.value);
                   setResolvedCode(null);
+                }}
+                onKeyDown={(e) => {
+                  // Enter aquí valida el código, no intenta cobrar — por
+                  // eso se detiene antes de llegar al onKeyDown del panel.
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!isCheckingCode && codeInput) handleCheckCode();
+                  }
                 }}
                 placeholder="ej. VERANO10"
               />
@@ -660,35 +736,109 @@ export function CheckoutForm({
       </div>
 
       <div>
-        <p className="mb-2 text-sm font-medium">Método de pago</p>
-        <div className="flex gap-2">
-          {paymentMethods.map((m) => (
-            <button
-              aria-pressed={method === m.value}
-              key={m.value}
-              type="button"
-              onClick={() => setMethod(m.value)}
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-sm font-medium">Método de pago</p>
+          {paymentMethods.length > 1 &&
+            (isSplit ? (
+              <button type="button" className="text-xs text-muted-foreground underline" onClick={cancelSplitPayment}>
+                Un solo método
+              </button>
+            ) : (
+              <button type="button" className="text-xs text-muted-foreground underline" onClick={startSplitPayment}>
+                Dividir el pago
+              </button>
+            ))}
+        </div>
+
+        {!isSplit ? (
+          <>
+            <div className="flex gap-2">
+              {paymentMethods.map((m) => (
+                <button
+                  aria-pressed={method === m.value}
+                  key={m.value}
+                  type="button"
+                  onClick={() => setMethod(m.value)}
+                  className={cn(
+                    "min-h-11 flex-1 rounded-md border border-border px-3 py-2 text-sm",
+                    method === m.value ? posAccentBorderClass : "hover:bg-muted"
+                  )}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+            {method === "TRANSFERENCIA" && (
+              <Input
+                className="mt-2"
+                value={transferNote}
+                onChange={(e) => setTransferNote(e.target.value)}
+                placeholder="Nota (banco, referencia, etc.)"
+                aria-label="Nota de la transferencia"
+              />
+            )}
+          </>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {splitRows!.map((row) => (
+              <div key={row.id} className="flex items-center gap-2">
+                <Select
+                  aria-label="Método de este pago"
+                  className="flex-1"
+                  value={row.method}
+                  onChange={(e) => updateSplitRow(row.id, { method: e.target.value as PaymentMethod })}
+                >
+                  {paymentMethods.map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))}
+                </Select>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  className="w-28"
+                  aria-label={`Monto de este pago (${PAYMENT_METHOD_LABELS[row.method]})`}
+                  placeholder="0.00"
+                  value={row.amount}
+                  onChange={(e) => updateSplitRow(row.id, { amount: e.target.value })}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={splitRows!.length === 1}
+                  onClick={() => removeSplitRow(row.id)}
+                >
+                  Quitar
+                </Button>
+              </div>
+            ))}
+            <Button type="button" variant="outline" size="sm" onClick={addSplitRow}>
+              + Agregar método
+            </Button>
+            <div
               className={cn(
-                "min-h-11 flex-1 rounded-md border border-border px-3 py-2 text-sm",
-                method === m.value ? posAccentBorderClass : "hover:bg-muted"
+                "flex items-center justify-between text-sm font-medium",
+                splitRemainingCents === 0 ? "text-emerald-700" : "text-destructive"
               )}
             >
-              {m.label}
-            </button>
-          ))}
-        </div>
-        {method === "TRANSFERENCIA" && (
-          <Input
-            className="mt-2"
-            value={transferNote}
-            onChange={(e) => setTransferNote(e.target.value)}
-            placeholder="Nota (banco, referencia, etc.)"
-            aria-label="Nota de la transferencia"
-          />
+              <span>
+                {splitRemainingCents === 0
+                  ? "Suma exacta"
+                  : splitRemainingCents > 0
+                    ? "Falta por asignar"
+                    : "Sobra asignado"}
+              </span>
+              <span>{formatCurrency(Math.abs(splitRemainingCents) / 100)}</span>
+            </div>
+          </div>
         )}
       </div>
 
-      {method === "EFECTIVO" && (
+      {!isSplit && method === "EFECTIVO" && (
         <div className="flex flex-col gap-2 rounded-md border border-border p-3">
           <div className="flex items-end gap-2">
             <div className="flex flex-1 flex-col gap-1">
@@ -782,18 +932,7 @@ export function CheckoutForm({
         <Button
           className={cn("w-full", posAccentClass)}
           onClick={handleConfirm}
-          disabled={
-            isPending ||
-            isPreviewLoading ||
-            (shortages.length > 0 && !allowShortage) ||
-            (isHighTip && !confirmHighTip) ||
-            (tipMode === "MONTO" && Number(tipCustom) < 0) ||
-            verifiedSubtotal === null ||
-            (lines.length === 0 && !activeTabId) ||
-            (discountMode === "CODIGO" && !resolvedCode) ||
-            (discountMode === "MANUAL" && (!authorizingPin || manualDiscountError !== null)) ||
-            (method === "EFECTIVO" && (cashReceived === "" || cashReceivedCents < totalToCollectCents))
-          }
+          disabled={confirmDisabled}
         >
           {isPending ? "Procesando..." : isPreviewLoading ? "Calculando total..." : "Confirmar venta"}
         </Button>

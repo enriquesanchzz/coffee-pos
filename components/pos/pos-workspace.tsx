@@ -121,7 +121,7 @@ export function PosWorkspace({
             className="flex items-center gap-1.5 text-sm text-muted-foreground hover:underline"
             onClick={() => setOpenTabsDialogOpen(true)}
           >
-            Mesas abiertas
+            Cuentas en espera
             {openTabsCount > 0 && (
               <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-xs font-semibold text-primary-foreground">
                 {openTabsCount}
@@ -205,8 +205,18 @@ export function PosWorkspace({
             customers={customers}
             activeTabSummary={activeTabSummary}
             onTabChanged={() => {
-              if (activeTabId) {
-                getTabDetail(activeTabId).then(setActiveTabSummary).catch(() => setActiveTabSummary(null));
+              // Se lee el id activo del store al momento (no del render):
+              // tras "Agregar a la cuenta" el panel ya lo limpió, y usar el
+              // valor viejo volvía a mostrar la cuenta como si siguiera activa.
+              const currentId = useCartStore.getState().activeTabId;
+              if (currentId) {
+                getTabDetail(currentId)
+                  .then((detail) => {
+                    if (useCartStore.getState().activeTabId === currentId) setActiveTabSummary(detail);
+                  })
+                  .catch(() => setActiveTabSummary(null));
+              } else {
+                setActiveTabSummary(null);
               }
               refreshOpenTabsCount();
             }}

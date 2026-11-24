@@ -103,6 +103,10 @@ type CartState = {
   incrementLine: (lineId: string) => void;
   decrementLine: (lineId: string) => void;
   removeLine: (lineId: string) => void;
+  // "Deshacer" tras quitar una línea por error (ver cart-panel.tsx) — no
+  // pasa por addLine porque eso agrupa por receta/nota idéntica; esto
+  // repone la línea removida tal cual, sin intentar fusionarla con otra.
+  restoreLine: (line: CartLine) => void;
   clear: () => void;
   subtotal: () => number;
   // Dueño del carrito guardado ("empleado:turno") — si cambia el empleado o
@@ -191,6 +195,11 @@ export const useCartStore = create<CartState>()(
     set((state) => ({
       lines: state.lines.filter((line) => line.lineId !== lineId),
     })),
+
+  restoreLine: (line) =>
+    set((state) =>
+      state.lines.some((l) => l.lineId === line.lineId) ? state : { lines: [...state.lines, line] }
+    ),
 
   clear: () => set({ lines: [] }),
 
