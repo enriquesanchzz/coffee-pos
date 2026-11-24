@@ -71,7 +71,13 @@ const sessionOptions: SessionOptions = {
   cookieOptions: {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    // "Secure" exige HTTPS — en un despliegue en red local sin TLS (ej. la
+    // Mac del café sirviendo por http://192.168.x.x:3000) el navegador
+    // descarta la cookie en silencio y la sesión nunca se guarda, aunque
+    // el PIN sea correcto. SESSION_COOKIE_SECURE=false en .env lo
+    // desactiva para ese caso; por default sigue exigiendo HTTPS en
+    // producción (ej. un deploy en la nube con TLS).
+    secure: process.env.NODE_ENV === "production" && process.env.SESSION_COOKIE_SECURE !== "false",
     // 12h — cubre un turno; se renueva al reabrir sesión.
     maxAge: 60 * 60 * 12,
   },
