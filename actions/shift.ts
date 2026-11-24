@@ -106,7 +106,7 @@ async function computeExpectedCash(
     tx.salePayment.groupBy({
       by: ["method"],
       where: { sale: { shiftId, status: "COMPLETADA" } },
-      _sum: { amount: true },
+      _sum: { amount: true, tipAmount: true },
     }),
     tx.cashMovement.aggregate({
       where: { shiftId, type: "RETIRO" },
@@ -123,13 +123,18 @@ async function computeExpectedCash(
   const ingresosTotal = ingresos._sum.amount?.toNumber() ?? 0;
 
   const paymentsByMethod: Record<PaymentMethod, number> = { EFECTIVO: 0, TARJETA: 0, TRANSFERENCIA: 0 };
+  // Propinas por método — las de tarjeta/transferencia no están en la
+  // caja y normalmente se le pagan al personal en efectivo.
+  const tipsByMethod: Record<PaymentMethod, number> = { EFECTIVO: 0, TARJETA: 0, TRANSFERENCIA: 0 };
   for (const row of paymentsByMethodRows) {
     paymentsByMethod[row.method] = row._sum.amount?.toNumber() ?? 0;
+    tipsByMethod[row.method] = row._sum.tipAmount?.toNumber() ?? 0;
   }
 
   return {
     salesTotal: sales._sum.total?.toNumber() ?? 0,
     tipsTotal: sales._sum.tipAmount?.toNumber() ?? 0,
+    tipsByMethod,
     cashSalesTotal,
     paymentsByMethod,
     retirosTotal,
@@ -148,6 +153,7 @@ export const previewShiftClose = safeAction(async function previewShiftClose(shi
   const {
     salesTotal,
     tipsTotal,
+    tipsByMethod,
     cashSalesTotal,
     paymentsByMethod,
     retirosTotal,
@@ -159,6 +165,7 @@ export const previewShiftClose = safeAction(async function previewShiftClose(shi
     openingCash,
     salesTotal,
     tipsTotal,
+    tipsByMethod,
     cashSalesTotal,
     paymentsByMethod,
     retirosTotal,

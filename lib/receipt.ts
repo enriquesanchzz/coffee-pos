@@ -105,6 +105,8 @@ export type ShiftTicketData = {
   differenceReason: string | null;
   salesTotal: number;
   tipsTotal: number;
+  // Propinas por método (ver SalePayment.tipAmount).
+  tipsByMethod: Record<PaymentMethod, number>;
   paymentsByMethod: Record<PaymentMethod, number>;
   retirosTotal: number;
   ingresosTotal: number;
@@ -124,15 +126,17 @@ export async function getShiftTicketData(shiftId: string): Promise<ShiftTicketDa
     prisma.salePayment.groupBy({
       by: ["method"],
       where: { sale: { shiftId, status: "COMPLETADA" } },
-      _sum: { amount: true },
+      _sum: { amount: true, tipAmount: true },
     }),
     prisma.cashMovement.aggregate({ where: { shiftId, type: "RETIRO" }, _sum: { amount: true } }),
     prisma.cashMovement.aggregate({ where: { shiftId, type: "INGRESO" }, _sum: { amount: true } }),
   ]);
 
   const paymentsByMethod: Record<PaymentMethod, number> = { EFECTIVO: 0, TARJETA: 0, TRANSFERENCIA: 0 };
+  const tipsByMethod: Record<PaymentMethod, number> = { EFECTIVO: 0, TARJETA: 0, TRANSFERENCIA: 0 };
   for (const row of paymentsByMethodRows) {
     paymentsByMethod[row.method] = row._sum.amount?.toNumber() ?? 0;
+    tipsByMethod[row.method] = row._sum.tipAmount?.toNumber() ?? 0;
   }
 
   return {
@@ -152,6 +156,7 @@ export async function getShiftTicketData(shiftId: string): Promise<ShiftTicketDa
     differenceReason: shift.differenceReason,
     salesTotal: sales._sum.total?.toNumber() ?? 0,
     tipsTotal: sales._sum.tipAmount?.toNumber() ?? 0,
+    tipsByMethod,
     paymentsByMethod,
     retirosTotal: retiros._sum.amount?.toNumber() ?? 0,
     ingresosTotal: ingresos._sum.amount?.toNumber() ?? 0,

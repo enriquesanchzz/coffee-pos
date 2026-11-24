@@ -68,7 +68,12 @@ export function ReceiptDialog({
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Pagado con</p>
                     {saleReceipt.payments.map((p, i) => (
                       <p key={i} className="flex justify-between gap-4">
-                        <span>{PAYMENT_METHOD_LABELS[p.method]}</span>
+                        <span>
+                          {PAYMENT_METHOD_LABELS[p.method]}
+                          {p.tipAmount ? (
+                            <span className="text-muted-foreground"> · propina {formatCurrency(p.tipAmount)}</span>
+                          ) : null}
+                        </span>
                         <span className="font-medium">{formatCurrency(p.amount)}</span>
                       </p>
                     ))}

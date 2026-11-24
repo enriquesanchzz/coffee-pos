@@ -55,7 +55,7 @@ export type CreateSaleInput = {
   shiftId: string;
   employeeId: string;
   items: CreateSaleItemInput[];
-  payments: { method: PaymentMethod; amount: number; note?: string }[];
+  payments: PaymentInput[];
   // Propina en pesos — se cobra con los pagos pero no cuenta como venta.
   tipAmount?: number;
   orderType: SaleOrderType;
@@ -76,6 +76,40 @@ function validateTipAmount(tip: number | undefined): Prisma.Decimal {
     throw new Error("La propina no puede ser negativa.");
   }
   return new Prisma.Decimal(tip).toDecimalPlaces(2);
+}
+
+export type PaymentInput = {
+  method: PaymentMethod;
+  // Incluye tipAmount.
+  amount: number;
+  note?: string;
+  // Propina que dejó quien pagó este renglón (pago dividido: cada quien la
+  // suya). Si no se manda, con un solo pago la propina de la venta es suya.
+  tipAmount?: number;
+};
+
+// Reparte la propina de la venta entre los pagos (ver SalePayment.tipAmount)
+// — así el corte puede separar propinas en efectivo vs tarjeta/transferencia.
+function resolvePaymentTips(payments: PaymentInput[], saleTip: Prisma.Decimal) {
+  const anySpecified = payments.some((p) => p.tipAmount !== undefined);
+  if (!anySpecified) {
+    if (payments.length > 1 && saleTip.greaterThan(0)) {
+      throw new Error("Con pago dividido, indica la propina de cada pago.");
+    }
+    return payments.map((p) => ({ ...p, tipAmount: payments.length === 1 ? saleTip.toNumber() : 0 }));
+  }
+  let sum = 0;
+  const resolved = payments.map((p) => {
+    const tip = p.tipAmount ?? 0;
+    if (!Number.isFinite(tip) || tip < 0) throw new Error("La propina no puede ser negativa.");
+    if (tip > p.amount + 0.005) throw new Error("La propina de un pago no puede ser mayor a lo que se paga.");
+    sum += tip;
+    return { ...p, tipAmount: Math.round(tip * 100) / 100 };
+  });
+  if (Math.abs(sum - saleTip.toNumber()) > 0.01) {
+    throw new Error("La suma de las propinas por pago no coincide con la propina de la venta.");
+  }
+  return resolved;
 }
 
 // PORCENTAJE -> % del subtotal; MONTO_FIJO -> monto directo; PRECIO_FINAL
@@ -985,7 +1019,12 @@ export const createSale = safeAction(async function createSale(input: CreateSale
         clientRequestId: input.clientRequestId || null,
         ...(manualDiscountData ? { manualDiscount: { create: manualDiscountData } } : {}),
         payments: {
-          create: input.payments.map((p) => ({ method: p.method, amount: p.amount, note: p.note?.trim() || null })),
+          create: resolvePaymentTips(input.payments, tipAmount).map((p) => ({
+            method: p.method,
+            amount: p.amount,
+            tipAmount: p.tipAmount,
+            note: p.note?.trim() || null,
+          })),
         },
       },
     });
@@ -1230,7 +1269,7 @@ export type CloseTabInput = {
   employeeId: string;
   // Última ronda de productos, si se agrega justo al cobrar.
   items?: CreateSaleItemInput[];
-  payments: { method: PaymentMethod; amount: number; note?: string }[];
+  payments: PaymentInput[];
   tipAmount?: number;
   customerId?: string;
   discountCodeId?: string;
@@ -1360,7 +1399,12 @@ export const closeTab = safeAction(async function closeTab(input: CloseTabInput)
         discountCodeId: input.discountCodeId || null,
         ...(manualDiscountData ? { manualDiscount: { create: manualDiscountData } } : {}),
         payments: {
-          create: input.payments.map((p) => ({ method: p.method, amount: p.amount, note: p.note?.trim() || null })),
+          create: resolvePaymentTips(input.payments, tipAmount).map((p) => ({
+            method: p.method,
+            amount: p.amount,
+            tipAmount: p.tipAmount,
+            note: p.note?.trim() || null,
+          })),
         },
       },
     });
