@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Coffee, Minus, Plus, Trash2 } from "lucide-react";
 import type { SaleOrderType, DomicilioOrigen } from "@prisma/client";
-import { useCartStore, lineUnitPrice, cartLineToSaleItemInput } from "./cart-store";
-import { openTab as openTabAction, addItemsToTab as addItemsToTabAction, removeTabItem as removeTabItemAction, updateTabItemQuantity as updateTabItemQuantityAction, type OpenTabDetail } from "@/actions/pos";
+import { useCartStore, lineUnitPrice, cartLineToSaleItemInput, type CartLine } from "./cart-store";
+import { openTab as openTabAction, addItemsToTab as addItemsToTabAction, removeTabItem as removeTabItemAction, updateTabItemQuantity as updateTabItemQuantityAction, type OpenTabDetail, type OpenTabItem } from "@/actions/pos";
+import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,6 +60,7 @@ export function CartPanel({
     incrementLine,
     decrementLine,
     removeLine,
+    restoreLine,
     subtotal,
     orderType,
     setOrderType,
@@ -67,6 +69,7 @@ export function CartPanel({
     activeTabId,
     setActiveTabId,
   } = useCartStore();
+  const notify = useToast();
   const [tabError, setTabError] = useState<string | null>(null);
   const [isSavingTab, startSavingTab] = useTransition();
   // Id de este intento de "dejar cuenta abierta"/"agregar ronda" (ver
@@ -127,7 +130,7 @@ export function CartPanel({
     setView("cart");
     resetOrderState();
     // Si se cobró una cuenta de Mesa, ya no está abierta — refresca el
-    // contador de "Mesas abiertas".
+    // contador de "Cuentas en espera".
     onTabChanged();
   }
 
@@ -141,7 +144,9 @@ export function CartPanel({
     setShortageMessage(null);
     if (lines.length === 0) return;
     if (!activeTabId && !tableNumber.trim()) {
-      setTabError("Captura el número de mesa.");
+      setTabError(
+        orderType === "CONSUMO_LOCAL" ? "Captura el número de mesa." : "Captura un nombre o nota para identificar el pedido."
+      );
       return;
     }
 
@@ -159,13 +164,24 @@ export function CartPanel({
         if (activeTabId) {
           await addItemsToTab({ saleId: activeTabId, branchId, shiftId, employeeId, items, allowShortage, clientRequestId });
         } else {
-          await openTab({ branchId, shiftId, employeeId, tableNumber, items, allowShortage, clientRequestId });
+          await openTab({
+            branchId,
+            shiftId,
+            employeeId,
+            tableNumber,
+            orderType,
+            domicilioOrigen: orderType === "DOMICILIO" ? domicilioOrigen : undefined,
+            customerId: selectedCustomer?.id,
+            items,
+            allowShortage,
+            clientRequestId,
+          });
         }
         tabRequestIdRef.current = null;
         setTabOfflineRetry(false);
         useCartStore.getState().clear();
         setLastReceipt(null);
-        setTabConfirmation({ tableNumber: resolvedTableNumber, itemCount, total, isNewTab });
+        setTabConfirmation({ tableNumber: resolvedTableNumber, orderType, itemCount, total, isNewTab });
         resetOrderState();
         onTabChanged();
       } catch (err) {
@@ -196,12 +212,31 @@ export function CartPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabOfflineRetry]);
 
-  async function handleRemoveRegistered(saleItemId: string) {
+  async function handleRemoveRegistered(item: OpenTabItem) {
     setRegisteredError(null);
-    setPendingItemId(saleItemId);
+    setPendingItemId(item.id);
     try {
-      await removeTabItem({ saleItemId, branchId, shiftId, employeeId });
+      const { removedItem } = await removeTabItem({ saleItemId: item.id, branchId, shiftId, employeeId });
       onTabChanged();
+      if (removedItem && activeTabId) {
+        notify(`"${item.productName}" quitado.`, "info", {
+          label: "Deshacer",
+          onClick: async () => {
+            try {
+              await addItemsToTab({
+                saleId: activeTabId,
+                branchId,
+                shiftId,
+                employeeId,
+                items: [removedItem],
+              });
+              onTabChanged();
+            } catch (err) {
+              setRegisteredError(err instanceof Error ? err.message : "No se pudo deshacer.");
+            }
+          },
+        });
+      }
     } catch (err) {
       setRegisteredError(err instanceof Error ? err.message : "No se pudo quitar el producto.");
     } finally {
@@ -209,9 +244,9 @@ export function CartPanel({
     }
   }
 
-  async function handleAdjustRegistered(saleItemId: string, newQuantity: number) {
+  async function handleAdjustRegistered(saleItemId: string, newQuantity: number, item: OpenTabItem) {
     setRegisteredError(null);
-    if (newQuantity <= 0) return handleRemoveRegistered(saleItemId);
+    if (newQuantity <= 0) return handleRemoveRegistered(item);
     setPendingItemId(saleItemId);
     try {
       await updateTabItemQuantity({ saleItemId, branchId, shiftId, employeeId, quantity: newQuantity });
@@ -270,19 +305,19 @@ export function CartPanel({
             </button>
           ))}
         </div>
-        {orderType === "CONSUMO_LOCAL" && (
-          <div className="flex flex-col gap-1">
-          <Label htmlFor="table-number">Número de mesa</Label>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="table-number">
+            {orderType === "CONSUMO_LOCAL" ? "Número de mesa" : "Nombre o nota (para dejar en espera)"}
+          </Label>
           <Input
             id="table-number"
             value={tableNumber}
             onChange={(e) => setTableNumber(e.target.value)}
-            placeholder="Número de mesa"
+            placeholder={orderType === "CONSUMO_LOCAL" ? "Número de mesa" : "ej. Juan, chamarra roja"}
             className="h-9"
             disabled={Boolean(activeTabId)}
           />
-          </div>
-        )}
+        </div>
         <CustomerPicker
           customers={customers}
           employeeId={employeeId}
@@ -329,9 +364,9 @@ export function CartPanel({
                         )}
                       </div>
                       <button
-                        onClick={() => handleRemoveRegistered(item.id)}
+                        onClick={() => handleRemoveRegistered(item)}
                         disabled={isPending}
-                        className="flex-shrink-0 text-muted-foreground hover:text-destructive disabled:opacity-50"
+                        className="flex h-11 w-11 flex-shrink-0 items-center justify-center text-muted-foreground hover:text-destructive disabled:opacity-50"
                         aria-label="Quitar"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -342,9 +377,9 @@ export function CartPanel({
                         <Button
                           size="icon"
                           variant="outline"
-                          className="h-10 w-10 rounded-full"
+                          className="h-11 w-11 rounded-full"
                           disabled={isPending}
-                          onClick={() => handleAdjustRegistered(item.id, item.quantity - 1)}
+                          onClick={() => handleAdjustRegistered(item.id, item.quantity - 1, item)}
                         >
                           <Minus className="h-3 w-3" />
                         </Button>
@@ -352,9 +387,9 @@ export function CartPanel({
                         <Button
                           size="icon"
                           variant="outline"
-                          className="h-10 w-10 rounded-full"
+                          className="h-11 w-11 rounded-full"
                           disabled={isPending}
-                          onClick={() => handleAdjustRegistered(item.id, item.quantity + 1)}
+                          onClick={() => handleAdjustRegistered(item.id, item.quantity + 1, item)}
                         >
                           <Plus className="h-3 w-3" />
                         </Button>
@@ -413,8 +448,14 @@ export function CartPanel({
                     )}
                   </div>
                   <button
-                    onClick={() => removeLine(line.lineId)}
-                    className="flex-shrink-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => {
+                      removeLine(line.lineId);
+                      notify(`"${line.productName}" quitado.`, "info", {
+                        label: "Deshacer",
+                        onClick: () => restoreLine(line),
+                      });
+                    }}
+                    className="flex h-11 w-11 flex-shrink-0 items-center justify-center text-muted-foreground hover:text-destructive"
                     aria-label="Quitar"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -426,7 +467,7 @@ export function CartPanel({
                     <Button
                       size="icon"
                       variant="outline"
-                      className="h-10 w-10 rounded-full"
+                      className="h-11 w-11 rounded-full"
                       onClick={() => decrementLine(line.lineId)}
                     >
                       <Minus className="h-3 w-3" />
@@ -435,7 +476,7 @@ export function CartPanel({
                     <Button
                       size="icon"
                       variant="outline"
-                      className="h-10 w-10 rounded-full"
+                      className="h-11 w-11 rounded-full"
                       onClick={() => incrementLine(line.lineId)}
                     >
                       <Plus className="h-3 w-3" />
@@ -463,16 +504,14 @@ export function CartPanel({
           </p>
         )}
         <div className="flex gap-2">
-          {orderType === "CONSUMO_LOCAL" && (
-            <Button
-              variant="outline"
-              className="flex-1"
-              disabled={lines.length === 0 || isSavingTab}
-              onClick={() => handleLeaveOpen()}
-            >
-              {isSavingTab ? "Guardando..." : activeTabId ? "Agregar a la cuenta" : "Dejar cuenta abierta"}
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            className="flex-1"
+            disabled={lines.length === 0 || isSavingTab}
+            onClick={() => handleLeaveOpen()}
+          >
+            {isSavingTab ? "Guardando..." : activeTabId ? "Agregar a la cuenta" : "Dejar en espera"}
+          </Button>
           <Button
             className={cn("flex-1", posAccentClass)}
             disabled={lines.length === 0 && !activeTabId}

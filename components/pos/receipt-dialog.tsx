@@ -5,18 +5,28 @@ import { CheckCircle2 } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
+import { PAYMENT_METHOD_LABELS } from "@/lib/settings-shared";
+import type { SaleOrderType } from "@prisma/client";
 import type { SaleReceipt } from "./checkout-form";
 
-// Confirmación de "Dejar cuenta abierta" / "Agregar a la cuenta" — mismo
+// Confirmación de "Dejar en espera" / "Agregar a la cuenta" — mismo
 // patrón de popup que SaleReceipt, para que esa acción también avise algo
 // (antes no dejaba ningún mensaje, el cajero no sabía si de verdad se
-// guardó).
+// guardó). Cubre cualquier tipo de orden (D7, "mistake recovery") — antes
+// solo existía para Mesa.
 export type TabConfirmation = {
   tableNumber: string;
+  orderType: SaleOrderType;
   itemCount: number;
   total: number;
   isNewTab: boolean;
 };
+
+function tabConfirmationLabel(tc: TabConfirmation): string {
+  if (tc.orderType === "CONSUMO_LOCAL") return `Mesa ${tc.tableNumber}`;
+  const kind = tc.orderType === "DOMICILIO" ? "A domicilio" : "Para llevar";
+  return tc.tableNumber ? `${kind} — ${tc.tableNumber}` : kind;
+}
 
 // Popup modal que confirma una venta cobrada o una cuenta dejada
 // abierta — antes la venta mostraba un aviso fijo dentro de la lista del
@@ -40,7 +50,7 @@ export function ReceiptDialog({
       onOpenChange={(next) => {
         if (!next) onClose();
       }}
-      title={saleReceipt ? "Venta registrada" : tabConfirmation?.isNewTab ? "Cuenta dejada abierta" : "Mesa actualizada"}
+      title={saleReceipt ? "Venta registrada" : tabConfirmation?.isNewTab ? "Pedido dejado en espera" : "Cuenta actualizada"}
     >
       <div className="flex flex-col gap-4">
         <div className="flex items-start gap-3">
@@ -57,15 +67,27 @@ export function ReceiptDialog({
                     <p className="text-muted-foreground">Recibido {formatCurrency(saleReceipt.cashReceived ?? 0)}</p>
                     <p className="text-lg font-bold">Cambio a entregar: {formatCurrency(saleReceipt.change)}</p>
                   </>
+                ) : saleReceipt.payments.length > 1 ? (
+                  // Pago dividido (D8) — un renglón por método, sin cambio
+                  // (se asume monto exacto por método).
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Pagado con</p>
+                    {saleReceipt.payments.map((p, i) => (
+                      <p key={i} className="flex justify-between gap-4">
+                        <span>{PAYMENT_METHOD_LABELS[p.method]}</span>
+                        <span className="font-medium">{formatCurrency(p.amount)}</span>
+                      </p>
+                    ))}
+                  </div>
                 ) : (
                   <p className="text-muted-foreground">
-                    Pagado con {saleReceipt.method === "TARJETA" ? "tarjeta" : "transferencia"}.
+                    Pagado con {saleReceipt.payments[0]?.method === "TARJETA" ? "tarjeta" : "transferencia"}.
                   </p>
                 )}
               </>
             ) : tabConfirmation ? (
               <>
-                <p className="text-lg font-semibold">Mesa {tabConfirmation.tableNumber}</p>
+                <p className="text-lg font-semibold">{tabConfirmationLabel(tabConfirmation)}</p>
                 <p className="text-muted-foreground">
                   {tabConfirmation.itemCount} producto{tabConfirmation.itemCount === 1 ? "" : "s"} registrado
                   {tabConfirmation.itemCount === 1 ? "" : "s"} · {formatCurrency(tabConfirmation.total)}

@@ -1018,9 +1018,9 @@ export const createSale = safeAction(async function createSale(input: CreateSale
 // -----------------------------------------------------------------------
 
 export type OpenTabInput = {
-  // Id del intento de "dejar cuenta abierta" (ver Sale.clientRequestId):
+  // Id del intento de "dejar cuenta en espera" (ver Sale.clientRequestId):
   // un reintento con el mismo id regresa la cuenta ya creada en vez de
-  // duplicarla (y, de paso, de abrir dos cuentas en la misma mesa).
+  // duplicarla (y, de paso, de abrir dos cuentas con la misma referencia).
   clientRequestId?: string;
   // El cajero ya vio la advertencia de insumos insuficientes y decidió
   // vender de todos modos (ver findShortages).
@@ -1028,7 +1028,14 @@ export type OpenTabInput = {
   branchId: string;
   shiftId: string;
   employeeId: string;
+  // Número de mesa (CONSUMO_LOCAL) o una referencia libre — nombre, nota —
+  // para identificar un "Para llevar"/"A domicilio" dejado en espera
+  // (D7, "mistake recovery"): antes solo Mesa se podía pausar, y un
+  // cliente que se alejaba a medio pedido obligaba a perder el carrito o
+  // bloquear la caja con él.
   tableNumber: string;
+  orderType: SaleOrderType;
+  domicilioOrigen?: DomicilioOrigen;
   items: CreateSaleItemInput[];
   customerId?: string;
 };
@@ -1039,7 +1046,11 @@ export const openTab = safeAction(async function openTab(input: OpenTabInput) {
     throw new Error("La cuenta no tiene productos.");
   }
   if (!input.tableNumber.trim()) {
-    throw new Error("Captura el número de mesa para dejar la cuenta abierta.");
+    throw new Error(
+      input.orderType === "CONSUMO_LOCAL"
+        ? "Captura el número de mesa para dejar la cuenta abierta."
+        : "Captura un nombre o nota para dejar el pedido en espera."
+    );
   }
 
   await requirePermission(input.employeeId, input.branchId, "VENTA_REALIZAR");
@@ -1053,8 +1064,8 @@ export const openTab = safeAction(async function openTab(input: OpenTabInput) {
       throw new Error("No hay un turno abierto válido para esta cuenta.");
     }
 
-    // Dos cuentas abiertas con el mismo número de mesa son ambiguas al
-    // retomarlas/cobrarlas — si la mesa ya tiene cuenta, se le agrega ahí.
+    // Dos cuentas en espera con la misma referencia son ambiguas al
+    // retomarlas/cobrarlas — si ya existe una, se le agrega ahí.
     const tableNumber = input.tableNumber.trim();
     const existingTab = await tx.sale.findFirst({
       where: {
@@ -1065,8 +1076,25 @@ export const openTab = safeAction(async function openTab(input: OpenTabInput) {
     });
     if (existingTab) {
       throw new Error(
-        `La mesa ${tableNumber} ya tiene una cuenta abierta. Retómala desde "Cuentas abiertas" para agregarle productos.`
+        input.orderType === "CONSUMO_LOCAL"
+          ? `La mesa ${tableNumber} ya tiene una cuenta abierta. Retómala desde "Cuentas en espera" para agregarle productos.`
+          : `Ya hay un pedido en espera con esa referencia ("${tableNumber}"). Retómalo desde "Cuentas en espera" o usa una referencia distinta.`
       );
+    }
+
+    // A domicilio: sin cliente con dirección no hay a dónde entregar —
+    // mejor detenerlo aquí que dejarlo "en espera" sin poder cerrarse
+    // nunca (ver el mismo chequeo en closeTab).
+    if (input.orderType === "DOMICILIO") {
+      const customer = input.customerId
+        ? await tx.customer.findUnique({ where: { id: input.customerId } })
+        : null;
+      if (!customer) {
+        throw new Error("Un pedido a domicilio necesita un cliente.");
+      }
+      if (!customer.address?.trim()) {
+        throw new Error("Captura el domicilio de entrega del cliente.");
+      }
     }
 
     const { saleItemsData, consumption, subtotal } = await resolveSaleItems(tx, input.items);
@@ -1078,8 +1106,9 @@ export const openTab = safeAction(async function openTab(input: OpenTabInput) {
         shiftId: input.shiftId,
         employeeId: input.employeeId,
         status: "ABIERTA",
-        orderType: "CONSUMO_LOCAL",
+        orderType: input.orderType,
         tableNumber,
+        domicilioOrigen: input.orderType === "DOMICILIO" ? input.domicilioOrigen ?? null : null,
         customerId: input.customerId || null,
         subtotal,
         discountTotal: 0,
@@ -1237,6 +1266,22 @@ export const closeTab = safeAction(async function closeTab(input: CloseTabInput)
       });
     }
 
+    // A domicilio: sin cliente con dirección no hay a dónde entregar
+    // (mismo criterio que createSale) — aplica también a un pedido a
+    // domicilio que se dejó en espera (openTab) y se cierra aquí.
+    if (existing.orderType === "DOMICILIO") {
+      const domicilioCustomerId = input.customerId || existing.customerId || undefined;
+      const customer = domicilioCustomerId
+        ? await tx.customer.findUnique({ where: { id: domicilioCustomerId } })
+        : null;
+      if (!customer) {
+        throw new Error("Un pedido a domicilio necesita un cliente.");
+      }
+      if (!customer.address?.trim()) {
+        throw new Error("Captura el domicilio de entrega del cliente.");
+      }
+    }
+
     // El subtotal acumulado de toda la cuenta (todas las rondas) es la
     // base del total — una cuenta abierta no carga descuento hasta que
     // se cierra.
@@ -1334,6 +1379,9 @@ export const closeTab = safeAction(async function closeTab(input: CloseTabInput)
 export type OpenTabSummary = {
   id: string;
   tableNumber: string | null;
+  orderType: SaleOrderType;
+  domicilioOrigen: DomicilioOrigen | null;
+  customerName: string | null;
   total: number;
   itemCount: number;
   createdAt: string;
@@ -1342,18 +1390,21 @@ export type OpenTabSummary = {
 export const listOpenTabs = safeAction(async function listOpenTabs(branchId: string): Promise<OpenTabSummary[]> {
   const employeeId = await getSessionEmployeeId();
   if (!employeeId) {
-    throw new SessionExpiredError("Necesitas iniciar sesión para ver las cuentas abiertas.");
+    throw new SessionExpiredError("Necesitas iniciar sesión para ver las cuentas en espera.");
   }
 
   const sales = await prisma.sale.findMany({
     where: { branchId, status: "ABIERTA" },
     orderBy: { createdAt: "asc" },
-    include: { _count: { select: { items: true } } },
+    include: { _count: { select: { items: true } }, customer: { select: { name: true } } },
   });
 
   return sales.map((sale) => ({
     id: sale.id,
     tableNumber: sale.tableNumber,
+    orderType: sale.orderType,
+    domicilioOrigen: sale.domicilioOrigen,
+    customerName: sale.customer?.name ?? null,
     total: sale.total.toNumber(),
     itemCount: sale._count.items,
     createdAt: sale.createdAt.toISOString(),
@@ -1516,13 +1567,22 @@ export type RemoveTabItemInput = {
   employeeId: string;
 };
 
+// Lo que hace falta para volver a agregar (addItemsToTab) exactamente el
+// mismo producto que se acaba de quitar — ver "Deshacer" en cart-panel.tsx.
+// null = no se puede deshacer (ej. la variante ya no existe).
+export type RemovedTabItemForUndo = CreateSaleItemInput | null;
+
 // Quitar un producto ya registrado de una cuenta abierta (antes de
 // cobrar) — restaura el inventario que ya se había descontado. Solo
 // mientras la cuenta sigue ABIERTA; una venta ya cobrada no se corrige
 // aquí (existe VENTA_CANCELAR para eso).
-export const removeTabItem = safeAction(async function removeTabItem(input: RemoveTabItemInput) {
+export const removeTabItem = safeAction(async function removeTabItem(
+  input: RemoveTabItemInput
+): Promise<{ sale: ReturnType<typeof serializeSale>; removedItem: RemovedTabItemForUndo }> {
   await assertSessionEmployee(input.employeeId);
   await requirePermission(input.employeeId, input.branchId, "VENTA_REALIZAR");
+
+  let removedItem: RemovedTabItemForUndo = null;
 
   const sale = await prisma.$transaction(async (tx) => {
     const item = await tx.saleItem.findUniqueOrThrow({
@@ -1538,6 +1598,13 @@ export const removeTabItem = safeAction(async function removeTabItem(input: Remo
 
     const reconstructed = await reconstructTabItem(tx, item);
     if (reconstructed) {
+      removedItem = {
+        productVariantId: reconstructed.productVariantId,
+        quantity: item.quantity,
+        modifierOptionIds: reconstructed.modifierOptionIds,
+        extraIngredients: reconstructed.extraIngredients,
+        notes: item.notes ?? undefined,
+      };
       const consumption = await computeTabItemConsumption(tx, reconstructed, item.quantity);
       // Restockear todo lo que este item había consumido — delta negativo.
       const reversal = new Map([...consumption].map(([id, qty]) => [id, qty.negated()] as const));
@@ -1558,7 +1625,7 @@ export const removeTabItem = safeAction(async function removeTabItem(input: Remo
   });
 
   revalidatePath("/pos");
-  return serializeSale(sale);
+  return { sale: serializeSale(sale), removedItem };
 });
 
 export type UpdateTabItemQuantityInput = {

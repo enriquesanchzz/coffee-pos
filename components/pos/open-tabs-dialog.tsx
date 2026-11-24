@@ -11,9 +11,18 @@ import { withActionErrors } from "@/lib/action-result";
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const listOpenTabs = withActionErrors(listOpenTabsAction);
 
-// Lista de cuentas de Mesa dejadas abiertas (ver "cambios para la
-// sección de punto de venta") — retomar una carga su mesa/tipo de orden
-// en el carrito para seguir agregando productos o cobrarla.
+// Etiqueta de cada cuenta en espera — Mesa sigue usando su número; Para
+// llevar/A domicilio usan la referencia libre que capturó el cajero
+// (D7, "mistake recovery": antes solo Mesa se podía pausar).
+function tabLabel(tab: OpenTabSummary): string {
+  if (tab.orderType === "CONSUMO_LOCAL") return `Mesa ${tab.tableNumber}`;
+  const kind = tab.orderType === "DOMICILIO" ? "A domicilio" : "Para llevar";
+  return tab.tableNumber ? `${kind} — ${tab.tableNumber}` : kind;
+}
+
+// Lista de cuentas dejadas en espera (cualquier tipo de orden) — retomar
+// una carga su tipo de orden, mesa/referencia y cliente en el carrito
+// para seguir agregando productos o cobrarla.
 export function OpenTabsDialog({
   open,
   onOpenChange,
@@ -35,31 +44,34 @@ export function OpenTabsDialog({
       try {
         setTabs(await listOpenTabs(branchId));
       } catch (err) {
-        setError(err instanceof Error ? err.message : "No se pudieron cargar las mesas abiertas.");
+        setError(err instanceof Error ? err.message : "No se pudieron cargar las cuentas en espera.");
       }
     });
   }, [open, branchId]);
 
   function handleResume(tab: OpenTabSummary) {
-    setOrderType("CONSUMO_LOCAL");
+    setOrderType(tab.orderType);
     setTableNumber(tab.tableNumber ?? "");
     setActiveTabId(tab.id);
     onOpenChange(false);
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="Mesas abiertas">
+    <Dialog open={open} onOpenChange={onOpenChange} title="Cuentas en espera">
       <div className="flex flex-col gap-3">
         {isPending && <p className="text-sm text-muted-foreground">Cargando...</p>}
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {!isPending && !error && tabs.length === 0 && (
-          <p className="text-sm text-muted-foreground">No hay mesas abiertas por ahora.</p>
+          <p className="text-sm text-muted-foreground">No hay cuentas en espera por ahora.</p>
         )}
         <ul className="flex flex-col gap-2">
           {tabs.map((tab) => (
             <li key={tab.id} className="flex items-center justify-between rounded-md border border-border p-3">
               <div>
-                <p className="text-sm font-medium">Mesa {tab.tableNumber}</p>
+                <p className="text-sm font-medium">
+                  {tabLabel(tab)}
+                  {tab.customerName && ` · ${tab.customerName}`}
+                </p>
                 <p className="text-xs text-muted-foreground">
                   {pluralize(tab.itemCount, "producto")} · {formatCurrency(tab.total)}
                 </p>
