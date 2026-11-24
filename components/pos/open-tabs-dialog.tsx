@@ -76,9 +76,19 @@ export function OpenTabsDialog({
                   {pluralize(tab.itemCount, "producto")} · {formatCurrency(tab.total)}
                 </p>
               </div>
-              <Button size="sm" onClick={() => handleResume(tab)}>
-                Retomar
-              </Button>
+              <div className="flex flex-shrink-0 items-center gap-2">
+                <a
+                  href={`/pos/cuenta/${tab.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex h-8 items-center rounded-md border border-border px-3 text-sm hover:bg-muted"
+                >
+                  Imprimir cuenta
+                </a>
+                <Button size="sm" onClick={() => handleResume(tab)}>
+                  Retomar
+                </Button>
+              </div>
             </li>
           ))}
         </ul>

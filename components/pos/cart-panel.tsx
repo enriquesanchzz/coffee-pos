@@ -400,9 +400,34 @@ export function CartPanel({
                 );
               })}
             </ul>
-            <p className="text-right text-xs text-muted-foreground">
-              Ya registrado: {formatCurrency(activeTabSummary.total)}
-            </p>
+            <div className="flex items-center justify-between gap-2">
+              {/* Pre-cuenta para mostrarle al cliente antes de cobrar — solo
+                  lo ya registrado; la ronda actual hay que agregarla antes. */}
+              <a
+                href={`/pos/cuenta/${activeTabSummary.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-disabled={lines.length > 0}
+                onClick={(e) => {
+                  if (lines.length > 0) e.preventDefault();
+                }}
+                title={lines.length > 0 ? "Agrega la ronda actual a la cuenta antes de imprimirla" : undefined}
+                className={cn(
+                  "flex min-h-11 items-center rounded-md border border-border px-3 text-sm font-medium",
+                  lines.length > 0 ? "cursor-not-allowed opacity-50" : "hover:bg-muted"
+                )}
+              >
+                Imprimir cuenta
+              </a>
+              <p className="text-right text-xs text-muted-foreground">
+                Ya registrado: {formatCurrency(activeTabSummary.total)}
+              </p>
+            </div>
+            {lines.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Para imprimir la cuenta, primero agrega la ronda actual (&ldquo;Agregar a la cuenta&rdquo;).
+              </p>
+            )}
             <div className="border-t border-border pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Ronda actual
             </div>
