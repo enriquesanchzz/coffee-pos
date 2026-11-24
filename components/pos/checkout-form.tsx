@@ -21,7 +21,7 @@ import { findDiscountCodeByCode as findDiscountCodeByCodeAction, type FoundDisco
 import { updateCustomer as updateCustomerAction } from "@/actions/customers";
 import type { CustomerOption } from "@/lib/customers";
 import { useCartStore, cartLineToSaleItemInput } from "./cart-store";
-import { withActionErrors } from "@/lib/action-result";
+import { withActionErrors, NetworkError } from "@/lib/action-result";
 import { randomId } from "@/lib/id";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
@@ -138,8 +138,13 @@ export function CheckoutForm({
   // corte de red) para que el servidor nunca registre la venta dos veces;
   // se renueva si cambia la cuenta o después de cobrar.
   const requestIdRef = useRef<string | null>(null);
+  // Si se cayó la red a medio cobro, se reintenta solo (mismo
+  // clientRequestId, nunca duplica) hasta que entre o se edite el
+  // carrito — ver el useEffect de offlineRetry más abajo.
+  const [offlineRetry, setOfflineRetry] = useState(false);
   useEffect(() => {
     requestIdRef.current = null;
+    setOfflineRetry(false);
   }, [lines]);
   const [allowShortage, setAllowShortage] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
@@ -395,11 +400,31 @@ export function CheckoutForm({
         setConfirmHighTip(false);
         setCashReceived("");
         onConfirmed(receipt);
+        setOfflineRetry(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo registrar la venta.");
+        // Solo una falla de red reintenta sola — un error de negocio real
+        // (stock, PIN, etc.) se queda mostrado para que el cajero lo
+        // resuelva a mano.
+        setOfflineRetry(err instanceof NetworkError);
       }
     });
   }
+
+  // Reintenta el mismo cobro (mismo clientRequestId, nunca duplica) cada
+  // vez que el navegador avisa que volvió la red, y además cada 5s por si
+  // el aviso del navegador no llega (ej. el servidor se reinició pero el
+  // WiFi nunca se desconectó).
+  useEffect(() => {
+    if (!offlineRetry) return;
+    const interval = setInterval(handleConfirm, 5000);
+    window.addEventListener("online", handleConfirm);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("online", handleConfirm);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [offlineRetry]);
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -716,6 +741,11 @@ export function CheckoutForm({
       )}
 
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {offlineRetry && (
+        <p role="status" className="text-sm text-amber-600">
+          La venta se enviará sola en cuanto vuelva la conexión — no se va a duplicar, no hace falta volver a cobrar.
+        </p>
+      )}
 
       {shortages.length > 0 && (
         <div className="flex flex-col gap-2 rounded-md border border-destructive/50 bg-destructive/5 p-3 text-sm">

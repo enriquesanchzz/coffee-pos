@@ -9,6 +9,13 @@
 // lib/session.ts) — el cliente navega ahí además de lanzar el error.
 export type ActionError = { __actionError: string; redirectTo?: string };
 
+// Falla de red real (el fetch del Server Action nunca llegó a responder),
+// a diferencia de un error de negocio que el servidor sí alcanzó a
+// procesar — permite que quien llama (ej. checkout-form.tsx) decida
+// reintentar solo, en vez de solo mostrar el mensaje (ver clientRequestId
+// en actions/pos.ts: un reintento nunca duplica la venta).
+export class NetworkError extends Error {}
+
 export function isActionError(value: unknown): value is ActionError {
   return (
     typeof value === "object" &&
@@ -30,7 +37,7 @@ export function withActionErrors<A extends unknown[], R>(
       // se traduce para que el usuario sepa qué pasó y que puede reintentar
       // (los cobros reintentan con el mismo id y no se duplican).
       if (err instanceof TypeError) {
-        throw new Error("Sin conexión con el servidor. Revisa la red y vuelve a intentar.");
+        throw new NetworkError("Sin conexión con el servidor. Revisa la red y vuelve a intentar.");
       }
       throw err;
     }

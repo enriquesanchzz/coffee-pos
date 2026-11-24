@@ -4,6 +4,7 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { activeChildHref, isInModule, visibleModules } from "@/lib/navigation";
 import { logoutAction } from "@/actions/session";
 import { CART_STORAGE_KEY } from "@/components/pos/cart-store";
+import { ConnectionBadge } from "./connection-status";
 
 // Mismos módulos y sub-secciones que el menú lateral (lib/navigation.ts):
 // "zona" = sección de la UI, no sucursal/estación física (ver
@@ -31,10 +32,13 @@ export function SessionBar({
     // en Administración → Apariencia: es un ancla visual constante para
     // identificar quién opera el sistema, no debe cambiar con el tema.
     <footer aria-label="Sesión" className="flex h-12 shrink-0 items-center border-t border-neutral-700 justify-between gap-2 bg-neutral-900 px-3 text-neutral-50 sm:px-4">
-      <p className="min-w-0 truncate text-sm" title={employeeName}>
-        <span className="hidden sm:inline">Atendiendo: </span>
-        <span className="font-semibold">{employeeName}</span>
-      </p>
+      <div className="flex min-w-0 items-center gap-2">
+        <p className="min-w-0 truncate text-sm" title={employeeName}>
+          <span className="hidden sm:inline">Atendiendo: </span>
+          <span className="font-semibold">{employeeName}</span>
+        </p>
+        <ConnectionBadge />
+      </div>
       <div className="flex flex-shrink-0 items-center gap-2 sm:gap-4">
         <select
           aria-label="Cambiar de zona"
@@ -64,11 +68,13 @@ export function SessionBar({
           action={logoutAction}
           onSubmit={() => {
             // La orden en curso no debe quedar visible para el siguiente
-            // empleado que use este navegador (ver cart-store.ts).
+            // empleado que use este navegador (ver cart-store.ts, ahora en
+            // localStorage — claimCart ya lo protege por ownerKey, pero
+            // esto lo limpia también de inmediato al salir).
             try {
-              sessionStorage.removeItem(CART_STORAGE_KEY);
+              localStorage.removeItem(CART_STORAGE_KEY);
             } catch {
-              // sessionStorage no disponible: no hay nada guardado.
+              // localStorage no disponible: no hay nada guardado.
             }
           }}
         >

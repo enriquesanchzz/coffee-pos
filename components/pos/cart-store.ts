@@ -113,10 +113,15 @@ type CartState = {
 
 export const CART_STORAGE_KEY = "nomada-pos-cart";
 
-// El carrito se guarda en sessionStorage para que una recarga accidental,
-// un cuelgue del navegador o volver a entrar no hagan perder la orden en
-// curso (QA-004). skipHydration: se rehidrata en PosWorkspace al montar,
-// para que el HTML del servidor (carrito vacío) coincida al hidratar.
+// El carrito se guarda en localStorage (no sessionStorage) para que una
+// recarga accidental, un cuelgue del navegador, cerrar la app por
+// completo o un reinicio de la tablet no hagan perder la orden en curso
+// (QA-004) — sessionStorage se perdía justo en ese último caso.
+// ownerKey ("empleado:turno") sigue protegiendo contra un carrito viejo
+// de otro empleado/turno filtrándose (ver claimCart): localStorage no
+// tiene vencimiento propio, así que esa es la única barrera. skipHydration:
+// se rehidrata en PosWorkspace al montar, para que el HTML del servidor
+// (carrito vacío) coincida al hidratar.
 export const useCartStore = create<CartState>()(
   persist(
     (set, get) => ({
@@ -203,7 +208,7 @@ export const useCartStore = create<CartState>()(
     }),
     {
       name: CART_STORAGE_KEY,
-      storage: createJSONStorage(() => sessionStorage),
+      storage: createJSONStorage(() => localStorage),
       skipHydration: true,
       partialize: (state) => ({
         lines: state.lines,
