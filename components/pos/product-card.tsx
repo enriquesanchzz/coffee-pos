@@ -3,6 +3,7 @@
 import { formatCurrency } from "@/lib/utils";
 import type { CatalogProduct } from "@/lib/catalog";
 import { Card } from "@/components/ui/card";
+import { CategoryIcon } from "@/components/productos/category-icon-picker";
 
 // Tono estable por producto (mismo nombre, mismo color) para que cada
 // tarjeta sin foto se distinga de un vistazo en vez de repetir el mismo
@@ -45,6 +46,10 @@ export function ProductCard({
           // Imagen por URL externa — no hay storage de archivos configurado.
           // eslint-disable-next-line @next/next/no-img-element
           <img src={product.imageUrl} alt={product.name} className="h-full w-full object-cover" />
+        ) : product.categoryIcon ? (
+          // Ícono de la categoría (igual que en Productos/Inventario) en
+          // vez de una inicial — se reconoce más rápido de un vistazo.
+          <CategoryIcon icon={product.categoryIcon} className="h-10 w-10" style={{ color: `hsl(${hue} 45% 35%)` }} />
         ) : (
           <span className="text-4xl font-bold" style={{ color: `hsl(${hue} 45% 35%)` }}>
             {product.name.charAt(0).toUpperCase()}

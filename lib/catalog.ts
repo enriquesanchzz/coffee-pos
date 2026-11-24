@@ -39,6 +39,10 @@ export type CatalogProduct = {
   id: string;
   name: string;
   imageUrl: string | null;
+  // Ícono de su categoría (o, si la categoría no tiene uno propio, el de
+  // su categoría padre) — para que ProductCard muestre algo reconocible
+  // en vez de una inicial cuando el producto no tiene foto.
+  categoryIcon: string | null;
   variants: CatalogVariant[];
   // True cuando algún insumo directo de la receta de TODAS las variantes
   // tiene existencia registrada en 0 o menos. Solo informativo: el POS no
@@ -159,6 +163,7 @@ export async function getCatalog(
         id: product.id,
         name: product.name,
         imageUrl: product.imageUrl,
+        categoryIcon: category.icon ?? category.parent?.icon ?? null,
         outOfStock:
           product.variants.length > 0 && product.variants.every((v) => unavailableVariantIds.has(v.id)),
         variants: product.variants.map((variant) => {

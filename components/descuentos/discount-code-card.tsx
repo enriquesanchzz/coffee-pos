@@ -47,8 +47,8 @@ export function DiscountCodeCard({
   );
 }
 
-const STATUS_BADGE: Record<DiscountCodeStatus, { label: string; variant: "default" | "outline" | "destructive" }> = {
-  ACTIVO: { label: "Activo", variant: "default" },
+const STATUS_BADGE: Record<DiscountCodeStatus, { label: string; variant: "success" | "outline" | "destructive" }> = {
+  ACTIVO: { label: "Activo", variant: "success" },
   USADO: { label: "Usado", variant: "outline" },
   VENCIDO: { label: "Vencido", variant: "destructive" },
   INACTIVO: { label: "Inactivo", variant: "outline" },

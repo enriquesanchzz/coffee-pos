@@ -24,7 +24,7 @@ export function PromoCard({ item, onSelect }: { item: PromoCardItem; onSelect: (
       <Card className="flex cursor-pointer flex-col gap-1 rounded-2xl p-4 transition-shadow hover:shadow-md" onClick={onSelect}>
         <div className="flex items-center justify-between gap-2">
           <p className="font-semibold">{combo.name}</p>
-          <Badge variant={combo.isActive ? "default" : "outline"} className="text-[10px]">
+          <Badge variant={combo.isActive ? "success" : "outline"} className="text-[10px]">
             {combo.isActive ? "activo" : "inactivo"}
           </Badge>
         </div>
@@ -44,7 +44,7 @@ export function PromoCard({ item, onSelect }: { item: PromoCardItem; onSelect: (
     <Card className="flex cursor-pointer flex-col gap-1 rounded-2xl p-4 transition-shadow hover:shadow-md" onClick={onSelect}>
       <div className="flex items-center justify-between gap-2">
         <p className="font-semibold">{promotion.name}</p>
-        <Badge variant={promotion.isActive ? "default" : "outline"} className="text-[10px]">
+        <Badge variant={promotion.isActive ? "success" : "outline"} className="text-[10px]">
           {promotion.isActive ? "activo" : "inactivo"}
         </Badge>
       </div>

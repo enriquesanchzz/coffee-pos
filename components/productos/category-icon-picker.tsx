@@ -43,10 +43,18 @@ export const CATEGORY_ICONS: Record<string, LucideIcon> = {
   Package,
 };
 
-export function CategoryIcon({ icon, className }: { icon: string | null; className?: string }) {
+export function CategoryIcon({
+  icon,
+  className,
+  style,
+}: {
+  icon: string | null;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
   const Icon = icon ? CATEGORY_ICONS[icon] : undefined;
   if (!Icon) return null;
-  return <Icon className={className} />;
+  return <Icon className={className} style={style} />;
 }
 
 export function CategoryIconPicker({

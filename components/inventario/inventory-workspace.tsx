@@ -55,7 +55,7 @@ export function InventoryWorkspace({
         <div className="flex items-start justify-between gap-2">
           <p className="min-w-0 break-words text-sm font-medium leading-tight">{item.name}</p>
           {item.isLow && (
-            <Badge variant="destructive" className="flex-shrink-0 text-[10px]">
+            <Badge variant={item.isOut ? "destructive" : "warning"} className="flex-shrink-0 text-[10px]">
               {item.quantity < 0 ? "negativo" : item.quantity === 0 ? "sin stock" : "stock bajo"}
             </Badge>
           )}
