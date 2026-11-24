@@ -153,6 +153,9 @@ async function validateAndConsumeDiscountCode(
 // mililitros, ver Ingredient.standardDoseUnit).
 type ResolvedSaleItem = {
   productVariantId: string;
+  // Para emparejar Paquetes (Combo) por producto, no por variante exacta
+  // — ver applyPromotions.
+  productId: string;
   recipeVersionId: string | null;
   quantity: number;
   unitPrice: Prisma.Decimal;
@@ -236,30 +239,47 @@ async function applyPromotions(
     savings.set(name, (savings.get(name) ?? new Prisma.Decimal(0)).add(saving));
   }
 
-  // Una línea "modificada" no califica (combo/2x1/día temático), pero un
-  // grupo de modificadores como "Tipo de leche" con su opción base
-  // seleccionada (ej. "Entera", priceDelta=0, sin sustituir ingrediente)
-  // no cuenta como modificación real — es solo la receta por default, no
-  // algo que el cliente cambió. Sin este matiz, ninguna bebida con leche
-  // (Latte, Cortado, etc.) podría calificar nunca, ni siquiera sin pedir
-  // ningún cambio — y el pedido original del usuario usa justo "Jueves de
-  // Latte al 50%" como ejemplo de Día temático.
+  // Una línea "modificada" no califica (2x1/día temático), pero un grupo
+  // de modificadores como "Tipo de leche" con su opción base seleccionada
+  // (ej. "Entera", priceDelta=0, sin sustituir ingrediente) no cuenta
+  // como modificación real — es solo la receta por default, no algo que
+  // el cliente cambió. Sin este matiz, ninguna bebida con leche (Latte,
+  // Cortado, etc.) podría calificar nunca, ni siquiera sin pedir ningún
+  // cambio — y el pedido original del usuario usa justo "Jueves de Latte
+  // al 50%" como ejemplo de Día temático.
   function isEligible(item: ResolvedSaleItem) {
     const hasRealModifier = item.modifiers.some((m) => !m.priceDelta.equals(0));
     return !hasRealModifier && item.extraIngredients.length === 0 && !item.hasAutomaticPromotion;
   }
 
-  // --- Paquetes (Combo) — match exacto de productVariantId+cantidad,
-  // nunca se parte una línea (alcance explícito de esta primera versión).
+  // Un ingrediente extra sí puede ir dentro de un paquete (a diferencia
+  // de 2x1/día temático) — se cobra aparte, encima del precio del
+  // paquete, en vez de descalificar la línea.
+  function extrasAmount(item: ResolvedSaleItem) {
+    const perUnit = item.extraIngredients.reduce((sum, e) => sum.add(e.priceDelta), new Prisma.Decimal(0));
+    return perUnit.mul(item.quantity);
+  }
+  function comboEligible(item: ResolvedSaleItem) {
+    const hasRealModifier = item.modifiers.some((m) => !m.priceDelta.equals(0));
+    return !hasRealModifier && !item.hasAutomaticPromotion;
+  }
+
+  // --- Paquetes (Combo) — match por PRODUCTO+cantidad (cualquier
+  // variante activa cuenta, ver ComboItem en el schema), nunca se parte
+  // una línea.
   const combos = await tx.combo.findMany({
     where: { isActive: true },
-    include: { items: { include: { productVariant: true } } },
+    include: { items: { include: { product: { include: { variants: { where: { isActive: true } } } } } } },
   });
   function comboDiscount(combo: (typeof combos)[number]) {
-    const normalTotal = combo.items.reduce(
-      (sum, item) => sum.add(item.productVariant.price.mul(item.quantity)),
-      new Prisma.Decimal(0)
-    );
+    // Referencia conservadora: la variante más barata de cada producto
+    // (igual que assertComboIsCheaper en actions/promotions.ts) — la
+    // variante real la decide el cajero al vender.
+    const normalTotal = combo.items.reduce((sum, item) => {
+      const prices = item.product.variants.map((v) => v.price);
+      const minPrice = prices.length > 0 ? Prisma.Decimal.min(...prices) : new Prisma.Decimal(0);
+      return sum.add(minPrice.mul(item.quantity));
+    }, new Prisma.Decimal(0));
     return normalTotal.sub(combo.price);
   }
   // Un paquete solo se aplica si de verdad abarata: uno guardado con
@@ -276,9 +296,9 @@ async function applyPromotions(
     for (const comboItem of combo.items) {
       const matchIndex = saleItemsData.findIndex(
         (item, idx) =>
-          isEligible(item) &&
+          comboEligible(item) &&
           !matchedIndices.includes(idx) &&
-          item.productVariantId === comboItem.productVariantId &&
+          item.productId === comboItem.productId &&
           item.quantity === comboItem.quantity
       );
       if (matchIndex === -1) {
@@ -289,13 +309,12 @@ async function applyPromotions(
     }
     if (!allMatched) continue;
 
-    // Reparto proporcional al precio normal de cada línea, para que la
-    // suma sea EXACTAMENTE combo.price — el último renglón absorbe el
-    // redondeo, para no perder ni ganar centavos.
-    const originalTotal = matchedIndices.reduce(
-      (sum, idx) => sum.add(saleItemsData[idx].lineTotal),
-      new Prisma.Decimal(0)
-    );
+    // Reparto proporcional al precio normal de cada línea (sin contar
+    // extras, que se cobran completos aparte), para que la suma sea
+    // EXACTAMENTE combo.price — el último renglón absorbe el redondeo,
+    // para no perder ni ganar centavos.
+    const basePortion = (idx: number) => saleItemsData[idx].lineTotal.sub(extrasAmount(saleItemsData[idx]));
+    const originalTotal = matchedIndices.reduce((sum, idx) => sum.add(basePortion(idx)), new Prisma.Decimal(0));
     if (originalTotal.lessThanOrEqualTo(combo.price)) continue;
     recordSaving(combo.name, originalTotal.sub(combo.price));
     let assigned = new Prisma.Decimal(0);
@@ -303,9 +322,9 @@ async function applyPromotions(
       const isLast = i === matchedIndices.length - 1;
       const share = isLast
         ? combo.price.sub(assigned)
-        : saleItemsData[idx].lineTotal.div(originalTotal).mul(combo.price).toDecimalPlaces(2);
+        : basePortion(idx).div(originalTotal).mul(combo.price).toDecimalPlaces(2);
       assigned = assigned.add(share);
-      saleItemsData[idx].lineTotal = share;
+      saleItemsData[idx].lineTotal = share.add(extrasAmount(saleItemsData[idx]));
       saleItemsData[idx].comboId = combo.id;
       saleItemsData[idx].hasAutomaticPromotion = true;
     });
@@ -544,6 +563,7 @@ async function resolveSaleItems(
 
     saleItemsData.push({
       productVariantId: variant.id,
+      productId: variant.productId,
       recipeVersionId: recipeVersion?.id ?? null,
       quantity: item.quantity,
       unitPrice,

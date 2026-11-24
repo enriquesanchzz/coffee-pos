@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { ComboListItem, PromotionListItem, VariantOption } from "@/lib/promotions";
+import type { ComboListItem, PromotionListItem, VariantOption, ProductOption } from "@/lib/promotions";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -30,11 +30,13 @@ export function PromocionesWorkspace({
   combos,
   promotions,
   variants,
+  products,
   employeeId,
 }: {
   combos: ComboListItem[];
   promotions: PromotionListItem[];
   variants: VariantOption[];
+  products: ProductOption[];
   employeeId: string;
 }) {
   const router = useRouter();
@@ -203,7 +205,7 @@ export function PromocionesWorkspace({
       <ComboFormDialog
         open={comboDialogOpen}
         combo={selectedCombo}
-        variants={variants}
+        products={products}
         employeeId={employeeId}
         onOpenChange={setComboDialogOpen}
         onSaved={() => router.refresh()}

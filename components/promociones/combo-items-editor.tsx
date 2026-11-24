@@ -1,15 +1,15 @@
 "use client";
 
-import type { VariantOption } from "@/lib/promotions";
+import type { ProductOption } from "@/lib/promotions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
 import { randomId } from "@/lib/id";
 
-export type ComboItemDraft = { key: string; productVariantId: string; quantity: string };
+export type ComboItemDraft = { key: string; productId: string; quantity: string };
 
 export function emptyComboItem(): ComboItemDraft {
-  return { key: randomId(), productVariantId: "", quantity: "1" };
+  return { key: randomId(), productId: "", quantity: "1" };
 }
 
 // Para el estado inicial de un formulario (useState corre tanto en SSR
@@ -18,23 +18,25 @@ export function emptyComboItem(): ComboItemDraft {
 // RecipeLinesEditor.initialLine().
 export function initialComboItems(): ComboItemDraft[] {
   return [
-    { key: "combo-item-1", productVariantId: "", quantity: "1" },
-    { key: "combo-item-2", productVariantId: "", quantity: "1" },
+    { key: "combo-item-1", productId: "", quantity: "1" },
+    { key: "combo-item-2", productId: "", quantity: "1" },
   ];
 }
 
-// Líneas de producto+cantidad de un paquete — mismo patrón que
-// RecipeLinesEditor (Productos), pero sin unidad/conversión: la
-// cantidad aquí es un conteo de piezas del producto, no una medida de
-// ingrediente.
+// Líneas de producto+cantidad de un paquete — se elige el PRODUCTO
+// completo, no una variante específica: cualquier variante activa
+// (frío/caliente, tamaño, etc.) cuenta para esta línea al vender, el
+// cliente/cajero la elige en el POS (ver applyPromotions en
+// actions/pos.ts). Mismo patrón que RecipeLinesEditor (Productos), pero
+// sin unidad/conversión: la cantidad aquí es un conteo de piezas.
 export function ComboItemsEditor({
   items,
   onChange,
-  variants,
+  products,
 }: {
   items: ComboItemDraft[];
   onChange: (items: ComboItemDraft[]) => void;
-  variants: VariantOption[];
+  products: ProductOption[];
 }) {
   function updateItem(key: string, patch: Partial<ComboItemDraft>) {
     onChange(items.map((item) => (item.key === key ? { ...item, ...patch } : item)));
@@ -52,9 +54,9 @@ export function ComboItemsEditor({
             className="flex-1"
             aria-label="Producto del paquete"
             placeholder="Busca un producto…"
-            value={item.productVariantId || null}
-            onChange={(productVariantId) => updateItem(item.key, { productVariantId })}
-            options={variants.map((v) => ({ value: v.id, label: `${v.productName} ${v.variantName}` }))}
+            value={item.productId || null}
+            onChange={(productId) => updateItem(item.key, { productId })}
+            options={products.map((p) => ({ value: p.id, label: p.name }))}
           />
           <Input
             type="number"
@@ -73,6 +75,9 @@ export function ComboItemsEditor({
       <Button type="button" variant="outline" size="sm" onClick={() => onChange([...items, emptyComboItem()])}>
         + Agregar producto
       </Button>
+      <p className="text-xs text-muted-foreground">
+        Cualquier variante del producto (frío/caliente, tamaño, etc.) cuenta para el paquete.
+      </p>
     </div>
   );
 }

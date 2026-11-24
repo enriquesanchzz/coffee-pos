@@ -769,10 +769,16 @@ model ComboItem {
   id               String          @id @default(cuid())
   comboId          String
   combo            Combo           @relation(fields: [comboId], references: [id])
+  // El paquete combina por PRODUCTO, no por variante exacta — cualquier
+  // variante activa del producto (ej. Americano Frío o Caliente) cuenta
+  // para esta línea; el cliente/cajero elige la variante al vender.
   productId        String
   product          Product         @relation(fields: [productId], references: [id])
-  productVariantId String
-  productVariant   ProductVariant  @relation(fields: [productVariantId], references: [id])
+  // Variante "representativa" elegida al armar el paquete — solo para
+  // estimar el ahorro mostrado en el editor, no restringe qué variante
+  // califica al vender (ver applyPromotions en actions/pos.ts).
+  productVariantId String?
+  productVariant   ProductVariant? @relation(fields: [productVariantId], references: [id])
   quantity         Int             @default(1)
 
   @@map("combo_items")
