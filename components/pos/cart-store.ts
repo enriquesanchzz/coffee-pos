@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { SaleOrderType, UnitOfMeasure } from "@prisma/client";
 import type { CreateSaleItemInput } from "@/actions/pos";
+import { randomId } from "@/lib/id";
 
 export type CartModifier = {
   modifierOptionId: string;
@@ -146,7 +147,7 @@ export const useCartStore = create<CartState>()(
       }
 
       const newLine: CartLine = {
-        lineId: crypto.randomUUID(),
+        lineId: randomId(),
         productVariantId: input.productVariantId,
         productName: input.productName,
         variantName: input.variantName,

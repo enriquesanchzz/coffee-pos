@@ -7,6 +7,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { formatCurrency, formatUnitCost } from "@/lib/utils";
 import { unitLabels } from "./enum-labels";
 import { roundQty } from "@/lib/units";
+import { randomId } from "@/lib/id";
 
 export type OrderLineDraft = {
   key: string;
@@ -16,7 +17,7 @@ export type OrderLineDraft = {
 };
 
 export function emptyOrderLine(): OrderLineDraft {
-  return { key: crypto.randomUUID(), ingredientId: "", quantity: "1", estimatedUnitCost: "0" };
+  return { key: randomId(), ingredientId: "", quantity: "1", estimatedUnitCost: "0" };
 }
 
 // Estado inicial del formulario (useState corre en SSR y al hidratar) — key

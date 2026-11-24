@@ -22,6 +22,7 @@ import { updateCustomer as updateCustomerAction } from "@/actions/customers";
 import type { CustomerOption } from "@/lib/customers";
 import { useCartStore, cartLineToSaleItemInput } from "./cart-store";
 import { withActionErrors } from "@/lib/action-result";
+import { randomId } from "@/lib/id";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const createSale = withActionErrors(createSaleAction);
@@ -294,7 +295,7 @@ export function CheckoutForm({
       return;
     }
 
-    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID();
+    if (!requestIdRef.current) requestIdRef.current = randomId();
     const clientRequestId = requestIdRef.current;
 
     startTransition(async () => {

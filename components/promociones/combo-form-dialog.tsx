@@ -12,6 +12,7 @@ import { DaysOfWeekPicker } from "./days-of-week-picker";
 import { ComboItemsEditor, type ComboItemDraft, initialComboItems } from "./combo-items-editor";
 import { withActionErrors } from "@/lib/action-result";
 import { useToast } from "@/components/ui/toast";
+import { randomId } from "@/lib/id";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const createCombo = withActionErrors(createComboAction);
@@ -20,7 +21,7 @@ const updateCombo = withActionErrors(updateComboAction);
 function itemsFromCombo(combo: ComboListItem | null): ComboItemDraft[] {
   if (!combo || combo.items.length === 0) return initialComboItems();
   return combo.items.map((item) => ({
-    key: crypto.randomUUID(),
+    key: randomId(),
     productVariantId: item.productVariantId,
     quantity: String(item.quantity),
   }));

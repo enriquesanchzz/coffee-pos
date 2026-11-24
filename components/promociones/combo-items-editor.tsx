@@ -4,11 +4,12 @@ import type { VariantOption } from "@/lib/promotions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
+import { randomId } from "@/lib/id";
 
 export type ComboItemDraft = { key: string; productVariantId: string; quantity: string };
 
 export function emptyComboItem(): ComboItemDraft {
-  return { key: crypto.randomUUID(), productVariantId: "", quantity: "1" };
+  return { key: randomId(), productVariantId: "", quantity: "1" };
 }
 
 // Para el estado inicial de un formulario (useState corre tanto en SSR

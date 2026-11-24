@@ -16,6 +16,7 @@ import { VariantFields } from "./variant-fields";
 import { CategoryIconPicker } from "./category-icon-picker";
 import { withActionErrors } from "@/lib/action-result";
 import { useToast } from "@/components/ui/toast";
+import { randomId } from "@/lib/id";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const createProductWithRecipe = withActionErrors(createProductWithRecipeAction);
@@ -34,11 +35,10 @@ type VariantDraft = {
   note: string;
 };
 
-// Usada por "+ Agregar variante" (solo en el cliente, después de montar) —
-// crypto.randomUUID() aquí es seguro porque nunca corre durante SSR.
+// Usada por "+ Agregar variante" (solo en el cliente, después de montar).
 function emptyVariant(): VariantDraft {
   return {
-    key: crypto.randomUUID(),
+    key: randomId(),
     name: "",
     price: "0",
     lines: [emptyLine()],
