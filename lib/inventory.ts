@@ -29,6 +29,10 @@ export type InventoryOverviewItem = {
   quantity: number;
   reorderThreshold: number | null;
   isLow: boolean;
+  // Subconjunto de isLow sin existencia (o en negativo) — alerta roja;
+  // el resto de isLow (por debajo del mínimo pero aún con stock) es una
+  // advertencia ámbar, menos urgente.
+  isOut: boolean;
 };
 
 // Existencias actuales por ingrediente activo en una ubicación de stock.
@@ -70,6 +74,7 @@ export async function getInventoryOverview(
       // advertencia de insumos insuficientes) siempre cuenta como alerta,
       // aunque no haya ReorderPoint configurado (QA-003).
       isLow: quantity <= 0 || (reorderThreshold !== null && quantity <= reorderThreshold),
+      isOut: quantity <= 0,
     };
   });
 }

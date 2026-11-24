@@ -40,8 +40,8 @@ export default async function ComprasPage() {
                 <div key={item.id} className="flex items-center justify-between text-sm">
                   <div className="flex items-center gap-2">
                     <span>{item.name}</span>
-                    <Badge variant="destructive" className="text-[10px]">
-                      stock bajo
+                    <Badge variant={item.isOut ? "destructive" : "warning"} className="text-[10px]">
+                      {item.isOut ? "sin stock" : "stock bajo"}
                     </Badge>
                   </div>
                   <div className="flex items-center gap-3">
