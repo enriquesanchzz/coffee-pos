@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Coffee, Minus, Plus, Trash2 } from "lucide-react";
 import type { SaleOrderType, DomicilioOrigen } from "@prisma/client";
 import { useCartStore, lineUnitPrice, cartLineToSaleItemInput } from "./cart-store";
@@ -15,7 +15,8 @@ import { ReceiptDialog, type TabConfirmation } from "./receipt-dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { isShortageError } from "@/lib/stock";
 import type { CustomerOption } from "@/lib/customers";
-import { withActionErrors } from "@/lib/action-result";
+import { withActionErrors, NetworkError } from "@/lib/action-result";
+import { randomId } from "@/lib/id";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const openTab = withActionErrors(openTabAction);
@@ -68,6 +69,20 @@ export function CartPanel({
   } = useCartStore();
   const [tabError, setTabError] = useState<string | null>(null);
   const [isSavingTab, startSavingTab] = useTransition();
+  // Id de este intento de "dejar cuenta abierta"/"agregar ronda" (ver
+  // clientRequestId en checkout-form.tsx): se reutiliza en reintentos para
+  // que el servidor nunca lo aplique dos veces. Se reinicia si cambia el
+  // carrito o la mesa/cuenta activa.
+  const tabRequestIdRef = useRef<string | null>(null);
+  // Conserva el allowShortage del intento que falló por red, para que el
+  // reintento automático mande exactamente lo mismo (no vuelva a mostrar
+  // la advertencia de faltantes si el cajero ya la había confirmado).
+  const tabRetryAllowShortageRef = useRef(false);
+  const [tabOfflineRetry, setTabOfflineRetry] = useState(false);
+  useEffect(() => {
+    tabRequestIdRef.current = null;
+    setTabOfflineRetry(false);
+  }, [lines, activeTabId]);
   // Item de la cuenta ya registrada que se está quitando/ajustando ahora
   // mismo — deshabilita sus botones para no disparar dos correcciones a
   // la vez sobre la misma línea.
@@ -125,6 +140,14 @@ export function CartPanel({
     setTabError(null);
     setShortageMessage(null);
     if (lines.length === 0) return;
+    if (!activeTabId && !tableNumber.trim()) {
+      setTabError("Captura el número de mesa.");
+      return;
+    }
+
+    if (!tabRequestIdRef.current) tabRequestIdRef.current = randomId();
+    const clientRequestId = tabRequestIdRef.current;
+    tabRetryAllowShortageRef.current = allowShortage;
 
     startSavingTab(async () => {
       try {
@@ -134,14 +157,12 @@ export function CartPanel({
         const total = (activeTabSummary?.total ?? 0) + subtotal();
         const resolvedTableNumber = tableNumber;
         if (activeTabId) {
-          await addItemsToTab({ saleId: activeTabId, branchId, shiftId, employeeId, items, allowShortage });
+          await addItemsToTab({ saleId: activeTabId, branchId, shiftId, employeeId, items, allowShortage, clientRequestId });
         } else {
-          if (!tableNumber.trim()) {
-            setTabError("Captura el número de mesa.");
-            return;
-          }
-          await openTab({ branchId, shiftId, employeeId, tableNumber, items, allowShortage });
+          await openTab({ branchId, shiftId, employeeId, tableNumber, items, allowShortage, clientRequestId });
         }
+        tabRequestIdRef.current = null;
+        setTabOfflineRetry(false);
         useCartStore.getState().clear();
         setLastReceipt(null);
         setTabConfirmation({ tableNumber: resolvedTableNumber, itemCount, total, isNewTab });
@@ -154,9 +175,26 @@ export function CartPanel({
         } else {
           setTabError(message);
         }
+        // Solo una falla de red reintenta sola — un error de negocio real
+        // (mesa duplicada, stock, etc.) se queda mostrado para que el
+        // cajero lo resuelva a mano.
+        setTabOfflineRetry(err instanceof NetworkError);
       }
     });
   }
+
+  // Mismo patrón que el reintento de cobro en checkout-form.tsx.
+  useEffect(() => {
+    if (!tabOfflineRetry) return;
+    const retry = () => handleLeaveOpen(tabRetryAllowShortageRef.current);
+    const interval = setInterval(retry, 5000);
+    window.addEventListener("online", retry);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("online", retry);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabOfflineRetry]);
 
   async function handleRemoveRegistered(saleItemId: string) {
     setRegisteredError(null);
@@ -419,6 +457,11 @@ export function CartPanel({
           <span className="text-2xl font-bold">{formatCurrency(subtotal())}</span>
         </div>
         {tabError && <p role="alert" className="mb-2 text-xs text-destructive">{tabError}</p>}
+        {tabOfflineRetry && (
+          <p role="status" className="mb-2 text-xs text-amber-600">
+            Se enviará sola en cuanto vuelva la conexión — no hace falta volver a intentar.
+          </p>
+        )}
         <div className="flex gap-2">
           {orderType === "CONSUMO_LOCAL" && (
             <Button

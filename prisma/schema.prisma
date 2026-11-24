@@ -1268,6 +1268,11 @@ model Sale {
   // venta, reintentar con el mismo id regresa la venta existente en vez de
   // cobrar dos veces (QA-015).
   clientRequestId String? @unique
+  // Id del último "agregar ronda" aplicado a una cuenta abierta
+  // (addItemsToTab) — no es única globalmente (solo se compara contra la
+  // misma venta): si la red se cae después de aplicar la ronda, reintentar
+  // con el mismo id no la vuelve a agregar.
+  lastRoundRequestId String?
 
   items       SaleItem[]
   payments    SalePayment[]
