@@ -62,14 +62,8 @@ export function ReceiptDialog({
                 {saleReceipt.taxIncluded > 0 && (
                   <p className="text-xs text-muted-foreground">Incluye IVA {formatCurrency(saleReceipt.taxIncluded)}</p>
                 )}
-                {saleReceipt.change !== null ? (
-                  <>
-                    <p className="text-muted-foreground">Recibido {formatCurrency(saleReceipt.cashReceived ?? 0)}</p>
-                    <p className="text-lg font-bold">Cambio a entregar: {formatCurrency(saleReceipt.change)}</p>
-                  </>
-                ) : saleReceipt.payments.length > 1 ? (
-                  // Pago dividido (D8) — un renglón por método, sin cambio
-                  // (se asume monto exacto por método).
+                {saleReceipt.payments.length > 1 && (
+                  // Pago dividido (D8) — un renglón por método.
                   <div className="flex flex-col gap-0.5">
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Pagado con</p>
                     {saleReceipt.payments.map((p, i) => (
@@ -79,10 +73,18 @@ export function ReceiptDialog({
                       </p>
                     ))}
                   </div>
+                )}
+                {saleReceipt.change !== null ? (
+                  <>
+                    <p className="text-muted-foreground">Efectivo recibido {formatCurrency(saleReceipt.cashReceived ?? 0)}</p>
+                    <p className="text-lg font-bold">Cambio a entregar: {formatCurrency(saleReceipt.change)}</p>
+                  </>
                 ) : (
-                  <p className="text-muted-foreground">
-                    Pagado con {saleReceipt.payments[0]?.method === "TARJETA" ? "tarjeta" : "transferencia"}.
-                  </p>
+                  saleReceipt.payments.length === 1 && (
+                    <p className="text-muted-foreground">
+                      Pagado con {saleReceipt.payments[0]?.method === "TARJETA" ? "tarjeta" : "transferencia"}.
+                    </p>
+                  )
                 )}
               </>
             ) : tabConfirmation ? (
