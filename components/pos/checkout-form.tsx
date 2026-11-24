@@ -72,8 +72,8 @@ export type SaleReceipt = {
   total: number;
   // Uno o varios métodos (pago dividido, D8) — amount de cada uno.
   payments: { method: PaymentMethod; amount: number }[];
-  // Solo tiene sentido si se pagó completo en efectivo (sin dividir) —
-  // en pago dividido se asume monto exacto por método, sin cambio.
+  // Efectivo recibido y cambio total — null si no hubo efectivo con monto
+  // recibido capturado (en pago dividido, suma de los renglones en efectivo).
   cashReceived: number | null;
   change: number | null;
   // IVA contenido (Configuración → Impuestos); 0 si no se desglosa.
@@ -116,10 +116,9 @@ export function CheckoutForm({
   // Pago dividido (D8, "split-payment flow") — por default la cuenta se
   // cobra completa con un solo método, como siempre; "Dividir el pago"
   // cambia a una lista de método+monto que debe sumar exacto al total.
-  // En modo dividido no se calcula cambio por renglón (se asume monto
-  // exacto por método) — simplificación deliberada frente a calcular
-  // cambio de efectivo combinado con otros métodos a la vez.
-  type SplitRow = { id: string; method: PaymentMethod; amount: string };
+  // Cada renglón en efectivo puede capturar lo recibido para calcular su
+  // propio cambio (vacío = se recibió exacto).
+  type SplitRow = { id: string; method: PaymentMethod; amount: string; received: string };
   const [splitRows, setSplitRows] = useState<SplitRow[] | null>(null);
   const isSplit = splitRows !== null;
 
@@ -257,6 +256,15 @@ export function CheckoutForm({
     0
   );
   const splitRemainingCents = totalToCollectCents - splitAssignedCents;
+  // Cambio de un renglón en efectivo: null si no aplica (otro método o no
+  // se capturó lo recibido), negativo si lo recibido no alcanza.
+  function splitRowChangeCents(row: SplitRow): number | null {
+    if (row.method !== "EFECTIVO" || row.received.trim() === "") return null;
+    return Math.round((Number(row.received) || 0) * 100) - Math.round((Number(row.amount) || 0) * 100);
+  }
+  const splitChangeCents = (splitRows ?? []).reduce((sum, row) => sum + Math.max(0, splitRowChangeCents(row) ?? 0), 0);
+  const splitHasInsufficientCash = (splitRows ?? []).some((row) => (splitRowChangeCents(row) ?? 0) < 0);
+  const splitCashRows = (splitRows ?? []).filter((row) => row.method === "EFECTIVO" && row.received.trim() !== "");
 
   // Mismas reglas que valida computeDiscount en el servidor — aquí solo
   // para avisar antes de intentar cobrar (antes se podía capturar 150% y
@@ -288,14 +296,19 @@ export function CheckoutForm({
 
   function startSplitPayment() {
     setSplitRows([
-      { id: randomId(), method, amount: totalToCollect > 0 ? totalToCollect.toFixed(2) : "" },
+      { id: randomId(), method, amount: totalToCollect > 0 ? totalToCollect.toFixed(2) : "", received: "" },
     ]);
   }
   function cancelSplitPayment() {
     setSplitRows(null);
   }
   function addSplitRow() {
-    setSplitRows((prev) => [...(prev ?? []), { id: randomId(), method: paymentMethods[0]?.value ?? "EFECTIVO", amount: "" }]);
+    // El nuevo renglón se prellena con lo que falta por asignar.
+    const remaining = splitRemainingCents > 0 ? (splitRemainingCents / 100).toFixed(2) : "";
+    setSplitRows((prev) => [
+      ...(prev ?? []),
+      { id: randomId(), method: paymentMethods[0]?.value ?? "EFECTIVO", amount: remaining, received: "" },
+    ]);
   }
   function updateSplitRow(id: string, patch: Partial<SplitRow>) {
     setSplitRows((prev) => (prev ?? []).map((r) => (r.id === id ? { ...r, ...patch } : r)));
@@ -422,8 +435,20 @@ export function CheckoutForm({
           saleId,
           total: totalToCollect,
           payments,
-          cashReceived: !isSplit && method === "EFECTIVO" ? cashReceivedCents / 100 : null,
-          change: !isSplit && method === "EFECTIVO" ? (cashReceivedCents - totalToCollectCents) / 100 : null,
+          cashReceived: isSplit
+            ? splitCashRows.length > 0
+              ? splitCashRows.reduce((sum, row) => sum + (Number(row.received) || 0), 0)
+              : null
+            : method === "EFECTIVO"
+              ? cashReceivedCents / 100
+              : null,
+          change: isSplit
+            ? splitCashRows.length > 0
+              ? splitChangeCents / 100
+              : null
+            : method === "EFECTIVO"
+              ? (cashReceivedCents - totalToCollectCents) / 100
+              : null,
           taxIncluded,
         };
         requestIdRef.current = null;
@@ -477,7 +502,10 @@ export function CheckoutForm({
     (discountMode === "CODIGO" && !resolvedCode) ||
     (discountMode === "MANUAL" && (!authorizingPin || manualDiscountError !== null)) ||
     (isSplit
-      ? splitRows!.length === 0 || splitRows!.some((r) => !(Number(r.amount) > 0)) || splitRemainingCents !== 0
+      ? splitRows!.length === 0 ||
+        splitRows!.some((r) => !(Number(r.amount) > 0)) ||
+        splitRemainingCents !== 0 ||
+        splitHasInsufficientCash
       : method === "EFECTIVO" && (cashReceived === "" || cashReceivedCents < totalToCollectCents));
 
   // Enter confirma el cobro en cuanto el formulario ya es válido — salvo
@@ -780,42 +808,74 @@ export function CheckoutForm({
           </>
         ) : (
           <div className="flex flex-col gap-2">
-            {splitRows!.map((row) => (
-              <div key={row.id} className="flex items-center gap-2">
-                <Select
-                  aria-label="Método de este pago"
-                  className="flex-1"
-                  value={row.method}
-                  onChange={(e) => updateSplitRow(row.id, { method: e.target.value as PaymentMethod })}
-                >
-                  {paymentMethods.map((m) => (
-                    <option key={m.value} value={m.value}>
-                      {m.label}
-                    </option>
-                  ))}
-                </Select>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  inputMode="decimal"
-                  className="w-28"
-                  aria-label={`Monto de este pago (${PAYMENT_METHOD_LABELS[row.method]})`}
-                  placeholder="0.00"
-                  value={row.amount}
-                  onChange={(e) => updateSplitRow(row.id, { amount: e.target.value })}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={splitRows!.length === 1}
-                  onClick={() => removeSplitRow(row.id)}
-                >
-                  Quitar
-                </Button>
-              </div>
-            ))}
+            {splitRows!.map((row) => {
+              const changeCents = splitRowChangeCents(row);
+              return (
+                <div key={row.id} className="flex flex-col gap-1.5 rounded-md border border-border p-2">
+                  <div className="flex items-center gap-2">
+                    <Select
+                      aria-label="Método de este pago"
+                      className="flex-1"
+                      value={row.method}
+                      onChange={(e) => updateSplitRow(row.id, { method: e.target.value as PaymentMethod })}
+                    >
+                      {paymentMethods.map((m) => (
+                        <option key={m.value} value={m.value}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </Select>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      inputMode="decimal"
+                      className="w-28"
+                      aria-label={`Monto de este pago (${PAYMENT_METHOD_LABELS[row.method]})`}
+                      placeholder="0.00"
+                      value={row.amount}
+                      onChange={(e) => updateSplitRow(row.id, { amount: e.target.value })}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={splitRows!.length === 1}
+                      onClick={() => removeSplitRow(row.id)}
+                    >
+                      Quitar
+                    </Button>
+                  </div>
+                  {row.method === "EFECTIVO" && (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        inputMode="decimal"
+                        className="flex-1"
+                        aria-label="Efectivo recibido en este pago"
+                        placeholder="Recibido (vacío = exacto)"
+                        value={row.received}
+                        onChange={(e) => updateSplitRow(row.id, { received: e.target.value })}
+                      />
+                      <span
+                        className={cn(
+                          "w-32 text-right text-sm",
+                          changeCents !== null && changeCents < 0 ? "text-destructive" : "font-semibold"
+                        )}
+                      >
+                        {changeCents === null
+                          ? "Cambio: —"
+                          : changeCents < 0
+                            ? "No alcanza"
+                            : `Cambio: ${formatCurrency(changeCents / 100)}`}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
             <Button type="button" variant="outline" size="sm" onClick={addSplitRow}>
               + Agregar método
             </Button>
@@ -834,6 +894,12 @@ export function CheckoutForm({
               </span>
               <span>{formatCurrency(Math.abs(splitRemainingCents) / 100)}</span>
             </div>
+            {splitCashRows.length > 0 && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Cambio total a entregar</span>
+                <span className="text-lg font-semibold">{formatCurrency(splitChangeCents / 100)}</span>
+              </div>
+            )}
           </div>
         )}
       </div>
