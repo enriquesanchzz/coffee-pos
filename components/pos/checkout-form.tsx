@@ -71,7 +71,7 @@ export type SaleReceipt = {
   saleId: string;
   total: number;
   // Uno o varios métodos (pago dividido, D8) — amount de cada uno.
-  payments: { method: PaymentMethod; amount: number }[];
+  payments: { method: PaymentMethod; amount: number; tipAmount?: number }[];
   // Efectivo recibido y cambio total — null si no hubo efectivo con monto
   // recibido capturado (en pago dividido, suma de los renglones en efectivo).
   cashReceived: number | null;
@@ -115,10 +115,21 @@ export function CheckoutForm({
   const [transferNote, setTransferNote] = useState("");
   // Pago dividido (D8, "split-payment flow") — por default la cuenta se
   // cobra completa con un solo método, como siempre; "Dividir el pago"
-  // cambia a una lista de método+monto que debe sumar exacto al total.
-  // Cada renglón en efectivo puede capturar lo recibido para calcular su
-  // propio cambio (vacío = se recibió exacto).
-  type SplitRow = { id: string; method: PaymentMethod; amount: string; received: string };
+  // cambia a una lista de pagos — pensado tanto para quien usa dos métodos
+  // como para una mesa donde cada quien paga su parte: `amount` es la
+  // parte de la cuenta (sin propina) y cada renglón deja su propia
+  // propina. Las partes deben sumar exacto el total. Cada renglón en
+  // efectivo puede capturar lo recibido para calcular su propio cambio
+  // (vacío = se recibió exacto).
+  type SplitRow = {
+    id: string;
+    method: PaymentMethod;
+    amount: string;
+    tipMode: "NINGUNA" | "PORCENTAJE" | "MONTO";
+    tipPercent: number;
+    tipCustom: string;
+    received: string;
+  };
   const [splitRows, setSplitRows] = useState<SplitRow[] | null>(null);
   const isSplit = splitRows !== null;
 
@@ -237,8 +248,27 @@ export function CheckoutForm({
         ? previewDiscountAmount(manualType, Number(manualValue) || 0, discountableBase)
         : 0;
   const total = Math.max(0, Math.round((rawSubtotal - discountPreview) * 100) / 100);
-  const tipValue =
-    tipMode === "PORCENTAJE"
+  const totalCents = Math.round(total * 100);
+
+  // Pago dividido: cada renglón es "la parte" de una persona (sin propina)
+  // más su propia propina — las partes suman el total de la cuenta y las
+  // propinas se suman encima.
+  function splitRowBaseCents(row: SplitRow) {
+    return Math.round((Number(row.amount) || 0) * 100);
+  }
+  function splitRowTipCents(row: SplitRow) {
+    if (row.tipMode === "PORCENTAJE") return Math.round((splitRowBaseCents(row) * row.tipPercent) / 100);
+    if (row.tipMode === "MONTO") return Math.max(0, Math.round((Number(row.tipCustom) || 0) * 100));
+    return 0;
+  }
+  function splitRowTotalCents(row: SplitRow) {
+    return splitRowBaseCents(row) + splitRowTipCents(row);
+  }
+  const splitTipCents = (splitRows ?? []).reduce((sum, row) => sum + splitRowTipCents(row), 0);
+
+  const tipValue = isSplit
+    ? splitTipCents / 100
+    : tipMode === "PORCENTAJE"
       ? Math.round(total * tipPercent) / 100
       : tipMode === "MONTO"
         ? Math.max(0, Math.round((Number(tipCustom) || 0) * 100) / 100)
@@ -246,21 +276,24 @@ export function CheckoutForm({
   const totalToCollect = Math.round((total + tipValue) * 100) / 100;
   // Propina mayor al umbral (por defecto, la mitad de la cuenta): casi
   // siempre es un error de captura (ej. 100000 en vez de 100) — se pide
-  // confirmarla (QA-028). Umbral en Configuración → Cobro.
-  const isHighTip = total > 0 && tipValue > (total * settings.highTipThresholdPercent) / 100;
+  // confirmarla (QA-028). Umbral en Configuración → Cobro. En pago
+  // dividido se revisa contra la parte de cada persona.
+  const isHighTip = isSplit
+    ? (splitRows ?? []).some(
+        (row) => splitRowTipCents(row) > (splitRowBaseCents(row) * settings.highTipThresholdPercent) / 100
+      )
+    : total > 0 && tipValue > (total * settings.highTipThresholdPercent) / 100;
   const taxIncluded = includedTax(total, settings);
   const cashReceivedCents = Math.round((Number(cashReceived) || 0) * 100);
   const totalToCollectCents = Math.round(totalToCollect * 100);
-  const splitAssignedCents = (splitRows ?? []).reduce(
-    (sum, row) => sum + Math.round((Number(row.amount) || 0) * 100),
-    0
-  );
-  const splitRemainingCents = totalToCollectCents - splitAssignedCents;
-  // Cambio de un renglón en efectivo: null si no aplica (otro método o no
-  // se capturó lo recibido), negativo si lo recibido no alcanza.
+  const splitAssignedCents = (splitRows ?? []).reduce((sum, row) => sum + splitRowBaseCents(row), 0);
+  const splitRemainingCents = totalCents - splitAssignedCents;
+  // Cambio de un renglón en efectivo (sobre su parte + su propina): null si
+  // no aplica (otro método o no se capturó lo recibido), negativo si lo
+  // recibido no alcanza.
   function splitRowChangeCents(row: SplitRow): number | null {
     if (row.method !== "EFECTIVO" || row.received.trim() === "") return null;
-    return Math.round((Number(row.received) || 0) * 100) - Math.round((Number(row.amount) || 0) * 100);
+    return Math.round((Number(row.received) || 0) * 100) - splitRowTotalCents(row);
   }
   const splitChangeCents = (splitRows ?? []).reduce((sum, row) => sum + Math.max(0, splitRowChangeCents(row) ?? 0), 0);
   const splitHasInsufficientCash = (splitRows ?? []).some((row) => (splitRowChangeCents(row) ?? 0) < 0);
@@ -294,10 +327,22 @@ export function CheckoutForm({
     setAuthorizingPin("");
   }
 
+  function newSplitRow(amount: string, rowMethod: PaymentMethod = paymentMethods[0]?.value ?? "EFECTIVO"): SplitRow {
+    return {
+      id: randomId(),
+      method: rowMethod,
+      amount,
+      tipMode: "NINGUNA",
+      tipPercent: settings.tipPercents[0] ?? 10,
+      tipCustom: "",
+      received: "",
+    };
+  }
   function startSplitPayment() {
-    setSplitRows([
-      { id: randomId(), method, amount: totalToCollect > 0 ? totalToCollect.toFixed(2) : "", received: "" },
-    ]);
+    // La propina pasa a capturarse por persona.
+    setTipMode("NINGUNA");
+    setTipCustom("");
+    setSplitRows([newSplitRow(total > 0 ? total.toFixed(2) : "", method)]);
   }
   function cancelSplitPayment() {
     setSplitRows(null);
@@ -305,10 +350,23 @@ export function CheckoutForm({
   function addSplitRow() {
     // El nuevo renglón se prellena con lo que falta por asignar.
     const remaining = splitRemainingCents > 0 ? (splitRemainingCents / 100).toFixed(2) : "";
-    setSplitRows((prev) => [
-      ...(prev ?? []),
-      { id: randomId(), method: paymentMethods[0]?.value ?? "EFECTIVO", amount: remaining, received: "" },
-    ]);
+    setSplitRows((prev) => [...(prev ?? []), newSplitRow(remaining)]);
+  }
+  // "Partes iguales": reparte el total entre N personas; los centavos que
+  // no se dividen exacto van a las primeras partes (nunca se pierden).
+  const [equalParts, setEqualParts] = useState("2");
+  function splitEqually() {
+    const n = Math.max(1, Math.min(50, Math.floor(Number(equalParts) || 0)));
+    const base = Math.floor(totalCents / n);
+    const extra = totalCents - base * n;
+    setSplitRows((prev) =>
+      Array.from({ length: n }, (_, i) => {
+        // Conserva método/propina de los renglones que ya existían.
+        const existing = prev?.[i];
+        const amount = ((base + (i < extra ? 1 : 0)) / 100).toFixed(2);
+        return existing ? { ...existing, amount } : newSplitRow(amount);
+      })
+    );
   }
   function updateSplitRow(id: string, patch: Partial<SplitRow>) {
     setSplitRows((prev) => (prev ?? []).map((r) => (r.id === id ? { ...r, ...patch } : r)));
@@ -371,7 +429,11 @@ export function CheckoutForm({
         }
 
         const payments = isSplit
-          ? splitRows!.map((row) => ({ method: row.method, amount: Number(row.amount) || 0 }))
+          ? splitRows!.map((row) => ({
+              method: row.method,
+              amount: splitRowTotalCents(row) / 100,
+              tipAmount: splitRowTipCents(row) / 100,
+            }))
           : [
               {
                 method,
@@ -695,6 +757,10 @@ export function CheckoutForm({
 
       <div>
         <p className="mb-2 text-sm font-medium">Propina</p>
+        {isSplit ? (
+          <p className="text-xs text-muted-foreground">En pago dividido cada persona deja su propina en su renglón (abajo).</p>
+        ) : (
+        <>
         <div className="flex flex-wrap gap-2">
           <button
             aria-pressed={tipMode === "NINGUNA"}
@@ -755,10 +821,14 @@ export function CheckoutForm({
         {tipMode === "MONTO" && Number(tipCustom) < 0 && (
           <p role="alert" className="mt-1 text-xs text-destructive">La propina no puede ser negativa.</p>
         )}
+        </>
+        )}
         {isHighTip && (
           <label className="mt-2 flex items-center gap-2 text-sm text-destructive">
             <input type="checkbox" checked={confirmHighTip} onChange={(e) => setConfirmHighTip(e.target.checked)} />
-            Confirmo una propina de {formatCurrency(tipValue)} (más del {settings.highTipThresholdPercent}% de la cuenta)
+            {isSplit
+              ? `Confirmo propinas de más del ${settings.highTipThresholdPercent}% de la parte de alguien`
+              : `Confirmo una propina de ${formatCurrency(tipValue)} (más del ${settings.highTipThresholdPercent}% de la cuenta)`}
           </label>
         )}
       </div>
@@ -808,8 +878,25 @@ export function CheckoutForm({
           </>
         ) : (
           <div className="flex flex-col gap-2">
-            {splitRows!.map((row) => {
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Partes iguales entre</span>
+              <Input
+                type="number"
+                min="1"
+                step="1"
+                inputMode="numeric"
+                className="h-9 w-16"
+                aria-label="Número de personas"
+                value={equalParts}
+                onChange={(e) => setEqualParts(e.target.value)}
+              />
+              <Button type="button" variant="outline" size="sm" onClick={splitEqually}>
+                Dividir
+              </Button>
+            </div>
+            {splitRows!.map((row, index) => {
               const changeCents = splitRowChangeCents(row);
+              const tipCents = splitRowTipCents(row);
               return (
                 <div key={row.id} className="flex flex-col gap-1.5 rounded-md border border-border p-2">
                   <div className="flex items-center gap-2">
@@ -832,7 +919,7 @@ export function CheckoutForm({
                       inputMode="decimal"
                       className="w-28"
                       aria-label={`Monto de este pago (${PAYMENT_METHOD_LABELS[row.method]})`}
-                      placeholder="0.00"
+                      placeholder="Su parte"
                       value={row.amount}
                       onChange={(e) => updateSplitRow(row.id, { amount: e.target.value })}
                     />
@@ -846,6 +933,57 @@ export function CheckoutForm({
                       Quitar
                     </Button>
                   </div>
+                  <div className="flex gap-1" role="group" aria-label={`Propina del pago ${index + 1}`}>
+                    {(
+                      [
+                        { key: "NINGUNA", label: "Sin propina", active: row.tipMode === "NINGUNA", patch: { tipMode: "NINGUNA" } },
+                        ...settings.tipPercents.map((pct) => ({
+                          key: `p${pct}`,
+                          label: `${pct}%`,
+                          active: row.tipMode === "PORCENTAJE" && row.tipPercent === pct,
+                          patch: { tipMode: "PORCENTAJE", tipPercent: pct },
+                        })),
+                        { key: "MONTO", label: "Monto", active: row.tipMode === "MONTO", patch: { tipMode: "MONTO" } },
+                      ] as { key: string; label: string; active: boolean; patch: Partial<SplitRow> }[]
+                    ).map((opt) => (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        aria-pressed={opt.active}
+                        onClick={() => {
+                          updateSplitRow(row.id, opt.patch);
+                          setConfirmHighTip(false);
+                        }}
+                        className={cn(
+                          "min-h-10 flex-1 rounded-md border border-border px-1 text-xs",
+                          opt.active ? posAccentBorderClass : "hover:bg-muted"
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  {row.tipMode === "MONTO" && (
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      inputMode="decimal"
+                      aria-label={`Monto de propina del pago ${index + 1}`}
+                      placeholder="Monto de la propina"
+                      value={row.tipCustom}
+                      onChange={(e) => {
+                        updateSplitRow(row.id, { tipCustom: e.target.value });
+                        setConfirmHighTip(false);
+                      }}
+                    />
+                  )}
+                  <p className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">
+                      {tipCents > 0 ? `Parte + propina ${formatCurrency(tipCents / 100)}` : "Paga"}
+                    </span>
+                    <span className="font-semibold">{formatCurrency(splitRowTotalCents(row) / 100)}</span>
+                  </p>
                   {row.method === "EFECTIVO" && (
                     <div className="flex items-center gap-2">
                       <Input
@@ -877,7 +1015,7 @@ export function CheckoutForm({
               );
             })}
             <Button type="button" variant="outline" size="sm" onClick={addSplitRow}>
-              + Agregar método
+              + Agregar persona o método
             </Button>
             <div
               className={cn(

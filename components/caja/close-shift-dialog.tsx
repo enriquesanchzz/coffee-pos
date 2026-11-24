@@ -19,6 +19,7 @@ type Preview = {
   openingCash: number;
   salesTotal: number;
   tipsTotal: number;
+  tipsByMethod: Record<"EFECTIVO" | "TARJETA" | "TRANSFERENCIA", number>;
   cashSalesTotal: number;
   paymentsByMethod: Record<"EFECTIVO" | "TARJETA" | "TRANSFERENCIA", number>;
   retirosTotal: number;
@@ -126,6 +127,18 @@ export function CloseShiftDialog({
               <span className="text-muted-foreground">Propinas</span>
               <span>{formatCurrency(preview.tipsTotal)}</span>
             </div>
+            {preview.tipsTotal > 0 && (
+              <>
+                <div className="flex justify-between pl-3 text-xs">
+                  <span className="text-muted-foreground">en efectivo (ya están en caja)</span>
+                  <span>{formatCurrency(preview.tipsByMethod.EFECTIVO)}</span>
+                </div>
+                <div className="flex justify-between pl-3 text-xs">
+                  <span className="text-muted-foreground">con tarjeta/transferencia (no están en caja)</span>
+                  <span>{formatCurrency(preview.tipsByMethod.TARJETA + preview.tipsByMethod.TRANSFERENCIA)}</span>
+                </div>
+              </>
+            )}
             <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cobrado por tipo (incluye propinas)</p>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Efectivo</span>

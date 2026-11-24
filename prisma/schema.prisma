@@ -1339,7 +1339,11 @@ model SalePayment {
   saleId String
   sale   Sale          @relation(fields: [saleId], references: [id])
   method PaymentMethod
-  amount Decimal       @db.Decimal(10, 2)
+  amount Decimal       @db.Decimal(10, 2) // incluye tipAmount
+  // Parte de `amount` que es propina — en pago dividido cada persona deja
+  // la suya; permite separar en el corte propinas en efectivo vs tarjeta/
+  // transferencia (las que hay que pagar al personal en efectivo).
+  tipAmount Decimal    @default(0) @db.Decimal(10, 2)
   note   String? // ej. banco/referencia cuando method = TRANSFERENCIA
 
   @@map("sale_payments")

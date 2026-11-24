@@ -48,6 +48,15 @@ export default async function ShiftClosingTicketPage({ params }: { params: Promi
         <TicketRow label="Fondo inicial" value={formatCurrency(shift.openingCash)} />
         <TicketRow label="Total de ventas" value={formatCurrency(shift.salesTotal)} bold />
         <TicketRow label="Propinas" value={formatCurrency(shift.tipsTotal)} />
+        {shift.tipsTotal > 0 && (
+          <>
+            <TicketRow label="  en efectivo" value={formatCurrency(shift.tipsByMethod.EFECTIVO)} />
+            <TicketRow
+              label="  tarjeta/transf."
+              value={formatCurrency(shift.tipsByMethod.TARJETA + shift.tipsByMethod.TRANSFERENCIA)}
+            />
+          </>
+        )}
         <p className="mt-1 text-[11px] font-bold uppercase tracking-wide">Cobrado por tipo (incluye propinas)</p>
         <TicketRow label="Efectivo" value={formatCurrency(shift.paymentsByMethod.EFECTIVO)} />
         <TicketRow label="Tarjeta" value={formatCurrency(shift.paymentsByMethod.TARJETA)} />
