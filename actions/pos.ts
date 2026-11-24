@@ -1018,6 +1018,10 @@ export const createSale = safeAction(async function createSale(input: CreateSale
 // -----------------------------------------------------------------------
 
 export type OpenTabInput = {
+  // Id del intento de "dejar cuenta abierta" (ver Sale.clientRequestId):
+  // un reintento con el mismo id regresa la cuenta ya creada en vez de
+  // duplicarla (y, de paso, de abrir dos cuentas en la misma mesa).
+  clientRequestId?: string;
   // El cajero ya vio la advertencia de insumos insuficientes y decidió
   // vender de todos modos (ver findShortages).
   allowShortage?: boolean;
@@ -1039,6 +1043,9 @@ export const openTab = safeAction(async function openTab(input: OpenTabInput) {
   }
 
   await requirePermission(input.employeeId, input.branchId, "VENTA_REALIZAR");
+
+  const alreadyOpened = await findSaleByClientRequestId(input.clientRequestId);
+  if (alreadyOpened) return serializeSale(alreadyOpened);
 
   const sale = await prisma.$transaction(async (tx) => {
     const shift = await tx.shift.findUnique({ where: { id: input.shiftId } });
@@ -1077,6 +1084,7 @@ export const openTab = safeAction(async function openTab(input: OpenTabInput) {
         subtotal,
         discountTotal: 0,
         total: subtotal,
+        clientRequestId: input.clientRequestId || null,
       },
     });
 
@@ -1125,6 +1133,9 @@ async function loadOpenTab(tx: Prisma.TransactionClient, saleId: string, branchI
 }
 
 export type AddItemsToTabInput = {
+  // Id de esta ronda (ver Sale.lastRoundRequestId): un reintento con el
+  // mismo id no vuelve a agregar los productos.
+  clientRequestId?: string;
   // El cajero ya vio la advertencia de insumos insuficientes y decidió
   // vender de todos modos (ver findShortages).
   allowShortage?: boolean;
@@ -1145,6 +1156,13 @@ export const addItemsToTab = safeAction(async function addItemsToTab(input: AddI
 
   const sale = await prisma.$transaction(async (tx) => {
     const existing = await loadOpenTab(tx, input.saleId, input.branchId, input.shiftId);
+
+    // Reintento tras un corte de red (ver useConnectionStatus/
+    // checkout-form.tsx): esta ronda ya se aplicó, no hay que repetirla.
+    if (input.clientRequestId && existing.lastRoundRequestId === input.clientRequestId) {
+      return existing;
+    }
+
     const { saleItemsData, consumption, subtotal } = await resolveSaleItems(tx, input.items);
     await assertStockOrAllowed(tx, consumption, input.allowShortage, input.employeeId, input.branchId);
 
@@ -1161,6 +1179,7 @@ export const addItemsToTab = safeAction(async function addItemsToTab(input: AddI
       data: {
         subtotal: existing.subtotal.add(subtotal),
         total: existing.total.add(subtotal),
+        lastRoundRequestId: input.clientRequestId || null,
       },
     });
   });
