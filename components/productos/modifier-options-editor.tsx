@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { unitLabels } from "./enum-labels";
 import { unitStep } from "@/lib/utils";
+import { randomId } from "@/lib/id";
 
 export type ModifierOptionDraft = {
   key: string;
@@ -17,7 +18,7 @@ export type ModifierOptionDraft = {
 };
 
 export function emptyModifierOption(): ModifierOptionDraft {
-  return { key: crypto.randomUUID(), ingredientId: "", quantity: "1", priceDelta: "0" };
+  return { key: randomId(), ingredientId: "", quantity: "1", priceDelta: "0" };
 }
 
 export function modifierOptionsToInput(rows: ModifierOptionDraft[]): ModifierOptionInput[] {

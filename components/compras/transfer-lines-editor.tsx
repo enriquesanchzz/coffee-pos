@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
 import { unitLabels } from "./enum-labels";
+import { randomId } from "@/lib/id";
 
 export type TransferLineDraft = {
   key: string;
@@ -13,7 +14,7 @@ export type TransferLineDraft = {
 };
 
 export function emptyTransferLine(): TransferLineDraft {
-  return { key: crypto.randomUUID(), ingredientId: "", quantity: "1" };
+  return { key: randomId(), ingredientId: "", quantity: "1" };
 }
 
 // Estado inicial del formulario (useState corre en SSR y al hidratar) — key

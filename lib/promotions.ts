@@ -42,10 +42,33 @@ export async function getVariantOptions(): Promise<VariantOption[]> {
   }));
 }
 
+// Para armar un Paquete (Combo): a diferencia de 2x1/Día temático, un
+// paquete combina por PRODUCTO completo — cualquier variante activa
+// cuenta para esa línea (ver ComboItem en el schema y applyPromotions en
+// actions/pos.ts). minPrice es solo una referencia conservadora para
+// mostrar el ahorro estimado en el editor.
+export type ProductOption = {
+  id: string;
+  name: string;
+  minPrice: number;
+};
+
+export async function getProductOptions(): Promise<ProductOption[]> {
+  const products = await prisma.product.findMany({
+    where: { isActive: true, variants: { some: { isActive: true } } },
+    include: { variants: { where: { isActive: true } } },
+    orderBy: { name: "asc" },
+  });
+  return products.map((p) => ({
+    id: p.id,
+    name: p.name,
+    minPrice: Math.min(...p.variants.map((v) => v.price.toNumber())),
+  }));
+}
+
 export type ComboItemListItem = {
-  productVariantId: string;
+  productId: string;
   productName: string;
-  variantName: string;
   quantity: number;
 };
 
@@ -63,7 +86,7 @@ export type ComboListItem = {
 export async function getCombos(): Promise<ComboListItem[]> {
   const combos = await prisma.combo.findMany({
     orderBy: { name: "asc" },
-    include: { items: { include: { product: true, productVariant: true } } },
+    include: { items: { include: { product: true } } },
   });
   return combos.map((combo) => ({
     id: combo.id,
@@ -74,9 +97,8 @@ export async function getCombos(): Promise<ComboListItem[]> {
     startTime: combo.startTime,
     endTime: combo.endTime,
     items: combo.items.map((item) => ({
-      productVariantId: item.productVariantId,
+      productId: item.productId,
       productName: item.product.name,
-      variantName: variantDisplayName(item.productVariant.name, item.productVariant.temperature),
       quantity: item.quantity,
     })),
   }));

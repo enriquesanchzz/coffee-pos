@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import type { ComboListItem, VariantOption } from "@/lib/promotions";
+import type { ComboListItem, ProductOption } from "@/lib/promotions";
 import { cn, formatCurrency } from "@/lib/utils";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { DaysOfWeekPicker } from "./days-of-week-picker";
 import { ComboItemsEditor, type ComboItemDraft, initialComboItems } from "./combo-items-editor";
 import { withActionErrors } from "@/lib/action-result";
 import { useToast } from "@/components/ui/toast";
+import { randomId } from "@/lib/id";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const createCombo = withActionErrors(createComboAction);
@@ -20,8 +21,8 @@ const updateCombo = withActionErrors(updateComboAction);
 function itemsFromCombo(combo: ComboListItem | null): ComboItemDraft[] {
   if (!combo || combo.items.length === 0) return initialComboItems();
   return combo.items.map((item) => ({
-    key: crypto.randomUUID(),
-    productVariantId: item.productVariantId,
+    key: randomId(),
+    productId: item.productId,
     quantity: String(item.quantity),
   }));
 }
@@ -33,14 +34,14 @@ function itemsFromCombo(combo: ComboListItem | null): ComboItemDraft[] {
 export function ComboFormDialog({
   open,
   combo,
-  variants,
+  products,
   employeeId,
   onOpenChange,
   onSaved,
 }: {
   open: boolean;
   combo: ComboListItem | null;
-  variants: VariantOption[];
+  products: ProductOption[];
   employeeId: string;
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
@@ -49,10 +50,11 @@ export function ComboFormDialog({
   const [name, setName] = useState(combo?.name ?? "");
   const [price, setPrice] = useState(combo ? String(combo.price) : "");
   const [items, setItems] = useState<ComboItemDraft[]>(itemsFromCombo(combo));
-  // Vista previa del ahorro (el servidor valida lo mismo al guardar).
-  const priceByVariantId = new Map(variants.map((v) => [v.id, v.price]));
+  // Vista previa del ahorro (el servidor valida lo mismo al guardar) — usa
+  // la variante más barata de cada producto, igual que assertComboIsCheaper.
+  const minPriceByProductId = new Map(products.map((p) => [p.id, p.minPrice]));
   const normalTotal = items.reduce(
-    (sum, item) => sum + (priceByVariantId.get(item.productVariantId) ?? 0) * (Number(item.quantity) || 0),
+    (sum, item) => sum + (minPriceByProductId.get(item.productId) ?? 0) * (Number(item.quantity) || 0),
     0
   );
   const saving = normalTotal - (Number(price) || 0);
@@ -86,8 +88,8 @@ export function ComboFormDialog({
           name,
           price: Number(price) || 0,
           items: items
-            .filter((item) => item.productVariantId)
-            .map((item) => ({ productVariantId: item.productVariantId, quantity: Number(item.quantity) || 0 })),
+            .filter((item) => item.productId)
+            .map((item) => ({ productId: item.productId, quantity: Number(item.quantity) || 0 })),
           daysOfWeek,
           startTime: startTime || null,
           endTime: endTime || null,
@@ -121,7 +123,7 @@ export function ComboFormDialog({
 
         <div className="flex flex-col gap-1">
           <Label>Productos combinados (mínimo 2)</Label>
-          <ComboItemsEditor items={items} onChange={setItems} variants={variants} />
+          <ComboItemsEditor items={items} onChange={setItems} products={products} />
         </div>
 
         {normalTotal > 0 && (

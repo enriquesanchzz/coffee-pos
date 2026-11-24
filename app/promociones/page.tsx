@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
-import { getCombos, getPromotions, getVariantOptions } from "@/lib/promotions";
+import { getCombos, getPromotions, getVariantOptions, getProductOptions } from "@/lib/promotions";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { PromocionesWorkspace } from "@/components/promociones/promociones-workspace";
 
@@ -17,11 +17,22 @@ export default async function PromocionesPage() {
     redirect("/administracion");
   }
 
-  const [combos, promotions, variants] = await Promise.all([getCombos(), getPromotions(), getVariantOptions()]);
+  const [combos, promotions, variants, products] = await Promise.all([
+    getCombos(),
+    getPromotions(),
+    getVariantOptions(),
+    getProductOptions(),
+  ]);
 
   return (
     <AuthenticatedShell isAdmin employeeName={employee.name} contentClassName="overflow-hidden">
-      <PromocionesWorkspace combos={combos} promotions={promotions} variants={variants} employeeId={employee.id} />
+      <PromocionesWorkspace
+        combos={combos}
+        promotions={promotions}
+        variants={variants}
+        products={products}
+        employeeId={employee.id}
+      />
     </AuthenticatedShell>
   );
 }

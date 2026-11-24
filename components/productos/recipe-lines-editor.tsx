@@ -10,6 +10,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { CreateIngredientDialog } from "./create-ingredient-dialog";
 import { unitLabels } from "./enum-labels";
 import { unitStep } from "@/lib/utils";
+import { randomId } from "@/lib/id";
 
 export type LineDraft = {
   key: string;
@@ -19,7 +20,7 @@ export type LineDraft = {
 };
 
 export function emptyLine(): LineDraft {
-  return { key: crypto.randomUUID(), ref: "", quantity: "1", unit: "PIEZA" };
+  return { key: randomId(), ref: "", quantity: "1", unit: "PIEZA" };
 }
 
 // Para el estado inicial de un formulario (useState se ejecuta tanto en SSR
