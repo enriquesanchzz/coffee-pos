@@ -33,6 +33,11 @@ enum IngredientKind {
   // descuenta directo del inventario — ver Recipe.kind = COMPUESTO
 }
 
+enum BusinessUnit {
+  CAFE
+  PET_SHOP
+}
+
 enum ProductType {
   RECETA // pasa por el modelo de receta/inventario por ingrediente
   REVENTA_DIRECTA // ej. merch, café en bolsa, postres, bebidas de aparador
@@ -527,6 +532,12 @@ model ProductCategory {
   icon     String?
   parentId String?
   parent   ProductCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  // Unidad de negocio (Cafetería / Pet Shop): base de la lealtad por
+  // puntos, los cupones por unidad y el desglose de reportes. Se elige en
+  // la categoría raíz; las subcategorías la heredan (actions/recipes.ts
+  // updateProductCategory la propaga) para no tener que subir de nivel al
+  // leerla.
+  businessUnit BusinessUnit @default(CAFE)
   children ProductCategory[] @relation("CategoryHierarchy")
   products Product[]
 

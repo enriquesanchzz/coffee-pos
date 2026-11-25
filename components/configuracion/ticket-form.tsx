@@ -6,6 +6,7 @@ import { updateTicketSettings as updateTicketSettingsAction } from "@/actions/se
 import { withActionErrors } from "@/lib/action-result";
 import { DEFAULT_TICKET_FOOTER_MESSAGE, type BusinessSettings } from "@/lib/settings-shared";
 import { SettingsCard, useSyncedState } from "./settings-card";
+import { ImageUpload } from "@/components/ui/image-upload";
 
 const updateTicketSettings = withActionErrors(updateTicketSettingsAction);
 
@@ -57,21 +58,14 @@ export function TicketForm({ initial }: { initial: BusinessSettings }) {
             />
           </div>
         </div>
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="ticket-logo">Logo (opcional)</Label>
-          <Input
-            id="ticket-logo"
-            type="url"
-            placeholder="https://…"
-            value={logoUrl}
-            onChange={(e) => setLogoUrl(e.target.value)}
-          />
-          <p className="text-xs text-muted-foreground">Link a una imagen — no hay almacenamiento de archivos en el sistema.</p>
-          {logoUrl.trim() && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt="Vista previa del logo" className="mt-1 h-16 w-auto object-contain" />
-          )}
-        </div>
+        <ImageUpload
+          id="ticket-logo"
+          label="Logo (opcional)"
+          value={logoUrl}
+          onChange={setLogoUrl}
+          fit="contain"
+          hint="Se imprime en blanco y negro: un logo con fondo transparente o blanco se ve mejor."
+        />
       </SettingsCard>
 
       <SettingsCard

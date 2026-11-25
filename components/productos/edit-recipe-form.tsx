@@ -5,14 +5,13 @@ import type { UnitOfMeasure, VariantTemperature } from "@prisma/client";
 import type { VariantRecipeDetail, IngredientOption, ComposedRecipeOption, ModifierOptionDetail, IngredientCategoryOption } from "@/lib/recipes";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { updateVariantRecipe as updateVariantRecipeAction, type RecipeLineInput } from "@/actions/recipes";
 import { type LineDraft } from "./recipe-lines-editor";
 import { modifierOptionsToInput, type ModifierOptionDraft } from "./modifier-options-editor";
 import { VariantFields } from "./variant-fields";
 import { withActionErrors } from "@/lib/action-result";
 import { useToast } from "@/components/ui/toast";
+import { ImageUpload } from "@/components/ui/image-upload";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const updateVariantRecipe = withActionErrors(updateVariantRecipeAction);
@@ -131,15 +130,7 @@ export function EditRecipeForm({
           <CardTitle>Variante</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="product-image">Imagen del producto (URL, opcional)</Label>
-            <Input
-              id="product-image"
-              value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-              placeholder="https://…"
-            />
-          </div>
+          <ImageUpload id="product-image" label="Foto del producto (opcional)" value={imageUrl} onChange={setImageUrl} />
 
           <VariantFields
             idPrefix="variant"

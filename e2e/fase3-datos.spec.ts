@@ -89,18 +89,19 @@ test.describe("QA-009/010 validación de datos", () => {
     await expect(page.getByText("El email no es válido.")).toBeVisible();
   });
 
-  test("producto con imagen que no es https se rechaza", async ({ page }) => {
+  // Antes la foto era un link https:// tecleado; ahora se sube un archivo
+  // (lib/uploads.ts). Lo que no es imagen se rechaza sin tocar el producto.
+  test("subir como foto algo que no es imagen se rechaza", async ({ page }) => {
     await loginAdmin(page);
     await page.goto("/productos");
     await page.getByRole("button", { name: "+ Nuevo producto" }).click();
-    await page.getByRole("button", { name: "Reventa directa (merch, souvenirs, tarjetas)" }).click();
-    await page.fill("#product-name", `Producto E2E ${Date.now()}`);
-    await page.fill("#product-image", "esto no es url");
-    await page.selectOption("#product-category", { label: "Souvenirs" });
-    await page.locator('input[placeholder="ej. Chico"]').first().fill("Único");
-    await page.locator('input[id$="-price"]').first().fill("100");
-    await page.getByRole("button", { name: "Crear producto" }).click();
-    await expect(page.getByText("La imagen debe ser un link que empiece con https://")).toBeVisible();
+    await page.setInputFiles("#product-image", {
+      name: "no-es-foto.jpg",
+      mimeType: "image/jpeg",
+      buffer: Buffer.from("esto no es una imagen"),
+    });
+    await expect(page.getByText("No se pudo leer la imagen. Usa una foto JPG, PNG o WebP.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Subir foto" })).toBeVisible();
   });
 
   test("el login de Administración no distingue mayúsculas en el email", async ({ page }) => {

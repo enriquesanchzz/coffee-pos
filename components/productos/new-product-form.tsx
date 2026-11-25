@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { ProductType, VariantTemperature } from "@prisma/client";
+import type { BusinessUnit, ProductType, VariantTemperature } from "@prisma/client";
 import type { ProductCategoryOption, IngredientOption, ComposedRecipeOption, IngredientCategoryOption } from "@/lib/recipes";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,10 +13,12 @@ import { createProductWithRecipe as createProductWithRecipeAction, type RecipeLi
 import { emptyLine, initialLine, type LineDraft } from "./recipe-lines-editor";
 import { modifierOptionsToInput, type ModifierOptionDraft } from "./modifier-options-editor";
 import { VariantFields } from "./variant-fields";
+import { BusinessUnitSelect } from "./business-unit-select";
 import { CategoryIconPicker } from "./category-icon-picker";
 import { withActionErrors } from "@/lib/action-result";
 import { useToast } from "@/components/ui/toast";
 import { randomId } from "@/lib/id";
+import { ImageUpload } from "@/components/ui/image-upload";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const createProductWithRecipe = withActionErrors(createProductWithRecipeAction);
@@ -111,6 +113,7 @@ export function NewProductForm({
   const [categoryId, setCategoryId] = useState(categories.length > 0 ? "" : NEW_CATEGORY_VALUE);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryIcon, setNewCategoryIcon] = useState<string | null>(null);
+  const [newCategoryUnit, setNewCategoryUnit] = useState<BusinessUnit>("CAFE");
   const [variants, setVariants] = useState<VariantDraft[]>([initialVariant()]);
   const [ingredients, setIngredients] = useState(ingredientOptions.ingredients);
   const [error, setError] = useState<string | null>(null);
@@ -151,6 +154,7 @@ export function NewProductForm({
           categoryId: categoryId === NEW_CATEGORY_VALUE ? undefined : categoryId,
           newCategoryName: categoryId === NEW_CATEGORY_VALUE ? newCategoryName : undefined,
           newCategoryIcon: categoryId === NEW_CATEGORY_VALUE ? newCategoryIcon || undefined : undefined,
+          newCategoryBusinessUnit: categoryId === NEW_CATEGORY_VALUE ? newCategoryUnit : undefined,
           variants: variants.map((v) => ({
             name: v.name,
             price: Number(v.price) || 0,
@@ -221,15 +225,7 @@ export function NewProductForm({
             />
           </div>
 
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="product-image">Imagen (URL, opcional)</Label>
-            <Input
-              id="product-image"
-              value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-              placeholder="https://…"
-            />
-          </div>
+          <ImageUpload id="product-image" label="Foto (opcional)" value={imageUrl} onChange={setImageUrl} />
 
           <div className="flex flex-col gap-1">
             <Label htmlFor="product-category">Categoría</Label>
@@ -270,6 +266,7 @@ export function NewProductForm({
                   placeholder="ej. Café frío"
                 />
               </div>
+              <BusinessUnitSelect id="new-category-unit" value={newCategoryUnit} onChange={setNewCategoryUnit} />
               <CategoryIconPicker value={newCategoryIcon} onChange={setNewCategoryIcon} />
             </>
           )}

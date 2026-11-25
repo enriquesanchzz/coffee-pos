@@ -50,10 +50,14 @@ export function normalizeRfc(rfc: string | undefined | null): string | null {
   return raw;
 }
 
-// URL de imagen: vacía o https:// (no hay storage de archivos propio).
+// URL de imagen: vacía, una foto propia (/media/<uuid>.webp, ver
+// lib/uploads.ts) o un link https:// externo (fotos dadas de alta antes de
+// tener almacenamiento propio).
+const MEDIA_URL = /^\/media\/[0-9a-f-]{36}\.webp$/;
 export function normalizeImageUrl(url: string | undefined | null): string | null {
   const value = url?.trim();
   if (!value) return null;
+  if (MEDIA_URL.test(value)) return value;
   let parsed: URL;
   try {
     parsed = new URL(value);

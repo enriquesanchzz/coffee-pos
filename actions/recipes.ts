@@ -10,6 +10,7 @@ import { requirePermission, requireAdminRole } from "@/lib/permissions";
 import { recordRecipeCostSnapshot } from "@/lib/recipe-cost";
 import { getVariantRecipeDetail } from "@/lib/recipes";
 import { assertMoney, normalizeImageUrl } from "@/lib/validation";
+import { isBusinessUnit } from "@/lib/business-unit";
 
 export type CreateIngredientInput = {
   employeeId: string;
@@ -250,6 +251,7 @@ export type CreateProductWithRecipeInput = {
   categoryId?: string;
   newCategoryName?: string;
   newCategoryIcon?: string;
+  newCategoryBusinessUnit?: string;
   // RECETA (bebida con receta, default) o REVENTA_DIRECTA (merch/
   // souvenirs/tarjetas — sin receta, con talla/color/nota en su lugar).
   type?: ProductType;
@@ -299,7 +301,11 @@ export const createProductWithRecipe = safeAction(async function createProductWi
   const productId = await prisma.$transaction(async (tx) => {
     const category = newCategoryName
       ? await tx.productCategory.create({
-          data: { name: newCategoryName, icon: input.newCategoryIcon || null },
+          data: {
+            name: newCategoryName,
+            icon: input.newCategoryIcon || null,
+            businessUnit: isBusinessUnit(input.newCategoryBusinessUnit) ? input.newCategoryBusinessUnit : "CAFE",
+          },
         })
       : await tx.productCategory.findUniqueOrThrow({ where: { id: input.categoryId } });
 
@@ -563,6 +569,8 @@ export type UpdateProductCategoryInput = {
   name: string;
   icon?: string;
   parentId?: string;
+  // Solo cuenta en categorías raíz: una subcategoría hereda la de su padre.
+  businessUnit?: string;
 };
 
 // Primera UI real para editar una categoría ya existente (antes solo se
@@ -582,10 +590,28 @@ export const updateProductCategory = safeAction(async function updateProductCate
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "PRODUCTO_CREAR");
   await requireAdminRole(input.employeeId, DEFAULT_BRANCH_ID);
 
-  await prisma.productCategory.update({
+  const parent = input.parentId
+    ? await prisma.productCategory.findUniqueOrThrow({ where: { id: input.parentId }, select: { businessUnit: true } })
+    : null;
+  const current = await prisma.productCategory.findUniqueOrThrow({
     where: { id: input.categoryId },
-    data: { name, icon: input.icon || null, parentId: input.parentId || null },
+    select: { businessUnit: true },
   });
+  const businessUnit = parent
+    ? parent.businessUnit
+    : isBusinessUnit(input.businessUnit)
+      ? input.businessUnit
+      : current.businessUnit;
+
+  // La unidad se decide en la raíz y baja a sus subcategorías, así nunca
+  // quedan desalineadas (una subcategoría "Pet Shop" bajo una raíz "Café").
+  await prisma.$transaction([
+    prisma.productCategory.update({
+      where: { id: input.categoryId },
+      data: { name, icon: input.icon || null, parentId: input.parentId || null, businessUnit },
+    }),
+    prisma.productCategory.updateMany({ where: { parentId: input.categoryId }, data: { businessUnit } }),
+  ]);
 
   revalidatePath("/productos");
   revalidatePath("/pos");
