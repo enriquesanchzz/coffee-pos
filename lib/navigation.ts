@@ -25,6 +25,7 @@ export type NavIconName =
   | "pos"
   | "caja"
   | "administracion"
+  | "ventas"
   | "clientes"
   | "descuentos"
   | "promociones"
@@ -69,6 +70,7 @@ export const NAV_MODULES: NavModule[] = [
   { href: "/pos", label: "Punto de Venta", icon: "pos", adminOnly: false },
   { href: "/caja", label: "Caja", icon: "caja", adminOnly: false },
   { href: "/administracion", label: "Administración", icon: "administracion", adminOnly: true, needsPassword: true },
+  { href: "/ventas", label: "Ventas", icon: "ventas", adminOnly: true },
   { href: "/clientes", label: "Clientes", icon: "clientes", adminOnly: true },
   { href: "/descuentos", label: "Códigos de descuento", icon: "descuentos", adminOnly: true },
   { href: "/promociones", label: "Promociones", icon: "promociones", adminOnly: true },
