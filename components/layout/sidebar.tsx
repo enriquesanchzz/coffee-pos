@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Receipt,
   ShoppingCart,
   Wallet,
   Package,
@@ -34,6 +35,7 @@ const ICONS: Record<NavIconName, LucideIcon> = {
   pos: ShoppingCart,
   caja: Wallet,
   administracion: LayoutDashboard,
+  ventas: Receipt,
   clientes: Users,
   descuentos: Tag,
   promociones: Percent,
