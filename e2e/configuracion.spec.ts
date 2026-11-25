@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { addProduct, db, loginAdmin, loginPin, PIN } from "./helpers";
+import { addProduct, db, loginAdmin, loginPin, PIN, expectSaleRegistered } from "./helpers";
 
 // Configuración → cada sección cambia de verdad el comportamiento del
 // sistema. Los ajustes se guardan desde la UI y se restauran al final
@@ -38,7 +38,7 @@ async function resetSettings() {
 
 async function save(page: Page) {
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
-  await expect(page.getByText("Guardado.")).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: /guardad/i }).first()).toBeVisible();
 }
 
 test.describe.serial("Configuración del sistema", () => {
@@ -110,7 +110,7 @@ test.describe.serial("Configuración del sistema", () => {
     await expect(page.getByText("Incluye IVA (16%)")).toBeVisible();
     await page.getByRole("button", { name: "Exacto" }).click();
     await page.getByRole("button", { name: "Confirmar venta" }).click();
-    await expect(page.getByRole("status")).toContainText("Incluye IVA $5.93");
+    await expectSaleRegistered(page, "Incluye IVA $5.93");
     const sale = await db.sale.findFirstOrThrow({ orderBy: { createdAt: "desc" } });
     expect(sale.taxAmount.toNumber()).toBeCloseTo(5.93);
   });

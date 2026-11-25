@@ -8,6 +8,7 @@ import { getActiveSuppliers, getIngredientOptions, getSupplierCostMap } from "@/
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { ComprasLayout } from "@/components/compras/compras-layout";
 import { NewOrderForm } from "@/components/compras/new-order-form";
+import { buttonVariants } from "@/components/ui/button";
 
 export const metadata: Metadata = { title: "Nueva orden de compra" };
 
@@ -33,7 +34,7 @@ export default async function NuevaOrdenPage() {
             <p className="text-sm text-muted-foreground">
               Todavía no hay proveedores activos — crea uno antes de armar una orden.
             </p>
-            <Link href="/compras/proveedores/nuevo" className="text-sm text-primary hover:underline">
+            <Link href="/compras/proveedores/nuevo" className={buttonVariants({ className: "w-fit" })}>
               + Nuevo proveedor
             </Link>
           </div>

@@ -5,6 +5,7 @@ import { activeChildHref, isInModule, visibleModules } from "@/lib/navigation";
 import { logoutAction } from "@/actions/session";
 import { CART_STORAGE_KEY } from "@/components/pos/cart-store";
 import { ConnectionBadge } from "./connection-status";
+import { LogOut } from "lucide-react";
 
 // Mismos módulos y sub-secciones que el menú lateral (lib/navigation.ts):
 // "zona" = sección de la UI, no sucursal/estación física (ver
@@ -80,8 +81,9 @@ export function SessionBar({
         >
           <button
             type="submit"
-            className="min-h-9 whitespace-nowrap px-1 text-sm text-neutral-300 hover:text-neutral-50 hover:underline"
+            className="inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-md border border-neutral-600 px-3 text-sm text-neutral-100 transition-colors hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-300"
           >
+            <LogOut className="h-4 w-4" aria-hidden="true" />
             <span className="sm:hidden">Salir</span>
             <span className="hidden sm:inline">Cambiar de empleado</span>
           </button>

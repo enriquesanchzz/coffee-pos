@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 import { purchaseOrderStatusLabels } from "@/components/compras/enum-labels";
 import { formatDate } from "@/lib/time";
+import { buttonVariants } from "@/components/ui/button";
 
 export const metadata: Metadata = { title: "Compras" };
 
@@ -48,8 +49,8 @@ export default async function ComprasPage() {
                     <span className="text-xs text-muted-foreground">
                       {new Intl.NumberFormat("es-MX").format(item.quantity)} {item.baseUnit}
                     </span>
-                    <Link href="/compras/nueva" className="text-sm text-primary hover:underline">
-                      Pedir →
+                    <Link href="/compras/nueva" className={buttonVariants({ variant: "outline", size: "sm", className: "h-9" })}>
+                      Pedir
                     </Link>
                   </div>
                 </div>
@@ -74,7 +75,7 @@ export default async function ComprasPage() {
                 <Link
                   key={order.id}
                   href={`/compras/${order.id}`}
-                  className="flex items-center justify-between text-sm hover:underline"
+                  className="-mx-2 flex items-center justify-between rounded-md px-2 py-2 text-sm hover:bg-muted"
                 >
                   <div>
                     <p>{order.supplierName}</p>

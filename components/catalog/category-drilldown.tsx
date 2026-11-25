@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { CategoryIcon } from "@/components/productos/category-icon-picker";
+import { buttonVariants } from "@/components/ui/button";
 
 export type DrilldownCategory = {
   id: string;
@@ -195,7 +196,7 @@ export function CategoryDrilldown({
                 <button
                   type="button"
                   onClick={() => setActiveSubId(null)}
-                  className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+                  className={buttonVariants({ variant: "outline", className: "w-fit" })}
                 >
                   <ChevronLeft className="h-4 w-4" />
                   Subcategorías

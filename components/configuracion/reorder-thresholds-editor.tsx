@@ -8,6 +8,7 @@ import { Alert } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { updateReorderThresholds as updateReorderThresholdsAction } from "@/actions/settings";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 import { matchesSearch } from "@/lib/search";
 import { cn } from "@/lib/utils";
 
@@ -32,7 +33,7 @@ export function ReorderThresholdsEditor({ rows }: { rows: ThresholdRow[] }) {
   );
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState<string | null>(null);
+  const notify = useToast();
   const [isPending, startTransition] = useTransition();
 
   const original = Object.fromEntries(rows.map((r) => [r.ingredientId, r.threshold === null ? "" : String(r.threshold)]));
@@ -50,7 +51,6 @@ export function ReorderThresholdsEditor({ rows }: { rows: ThresholdRow[] }) {
 
   function handleSave() {
     setError(null);
-    setSaved(null);
     const payload = dirtyIds.map((id) => {
       const text = values[id].trim();
       return { ingredientId: id, threshold: text === "" ? null : Number(text) };
@@ -63,7 +63,7 @@ export function ReorderThresholdsEditor({ rows }: { rows: ThresholdRow[] }) {
     startTransition(async () => {
       try {
         await updateReorderThresholds(payload);
-        setSaved(`Se guardaron ${payload.length} mínimo${payload.length === 1 ? "" : "s"}.`);
+        notify(`Se guardaron ${payload.length} mínimo${payload.length === 1 ? "" : "s"}.`);
         router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudieron guardar los mínimos.");
@@ -116,7 +116,6 @@ export function ReorderThresholdsEditor({ rows }: { rows: ThresholdRow[] }) {
                     aria-label={`Mínimo de ${row.name} en ${row.unit}`}
                     value={value}
                     onChange={(e) => {
-                      setSaved(null);
                       setValues((prev) => ({ ...prev, [row.ingredientId]: e.target.value }));
                     }}
                   />
@@ -128,7 +127,6 @@ export function ReorderThresholdsEditor({ rows }: { rows: ThresholdRow[] }) {
           {visible.length === 0 && <li className="py-2 text-sm text-muted-foreground">Ningún insumo coincide.</li>}
         </ul>
         {error && <Alert variant="error">{error}</Alert>}
-        {saved && !error && <Alert variant="success">{saved}</Alert>}
         <Button type="button" className="w-fit" onClick={handleSave} disabled={isPending || dirtyIds.length === 0}>
           {isPending
             ? "Guardando..."

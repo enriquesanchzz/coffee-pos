@@ -45,7 +45,16 @@ export async function payExactCash(page: Page) {
   await page.getByRole("button", { name: "Cobrar" }).click();
   await page.getByRole("button", { name: "Exacto" }).click();
   await page.getByRole("button", { name: "Confirmar venta" }).click();
-  await expect(page.getByRole("status")).toContainText("Venta registrada");
+  await expectSaleRegistered(page);
+}
+
+// La venta registrada se confirma en un popup (ReceiptDialog); se valida y
+// se cierra para que no tape el resto de la pantalla.
+export async function expectSaleRegistered(page: Page, text = "Venta registrada") {
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText(text);
+  await dialog.getByRole("button", { name: "Cerrar", exact: true }).last().click();
+  await expect(dialog).toBeHidden();
 }
 
 export async function stockOf(ingredientId: string) {

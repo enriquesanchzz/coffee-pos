@@ -8,7 +8,7 @@ import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 
 export const metadata: Metadata = { title: "Clientes" };
 
@@ -58,14 +58,14 @@ export default async function ClientesPage({
               (query ? (
                 <p className="text-sm text-muted-foreground">
                   Ningún cliente coincide.{" "}
-                  <Link href="/clientes" className="underline">
+                  <Link href="/clientes" className={buttonVariants({ variant: "outline", size: "sm", className: "ml-2 h-9" })}>
                     Ver todos
                   </Link>
                 </p>
               ) : (
                 <p className="text-sm text-muted-foreground">
                   Todavía no hay clientes.{" "}
-                  <Link href="/clientes/nuevo" className="underline">
+                  <Link href="/clientes/nuevo" className={buttonVariants({ variant: "outline", size: "sm", className: "ml-2 h-9" })}>
                     Registra el primero
                   </Link>
                 </p>
@@ -74,7 +74,7 @@ export default async function ClientesPage({
               <Link
                 key={customer.id}
                 href={`/clientes/${customer.id}`}
-                className="flex items-center justify-between text-sm hover:underline"
+                className="-mx-2 flex items-center justify-between rounded-md px-2 py-2 text-sm hover:bg-muted"
               >
                 <div>
                   <p>{customer.name}</p>
@@ -94,7 +94,7 @@ export default async function ClientesPage({
         {pageCount > 1 && (
           <nav aria-label="Paginación de clientes" className="flex items-center justify-between text-sm">
             {page > 1 ? (
-              <Link href={pageHref(page - 1)} className="underline">
+              <Link href={pageHref(page - 1)} className={buttonVariants({ variant: "outline" })}>
                 ← Anteriores
               </Link>
             ) : (
@@ -104,7 +104,7 @@ export default async function ClientesPage({
               Página {page} de {pageCount}
             </span>
             {page < pageCount ? (
-              <Link href={pageHref(page + 1)} className="underline">
+              <Link href={pageHref(page + 1)} className={buttonVariants({ variant: "outline" })}>
                 Siguientes →
               </Link>
             ) : (

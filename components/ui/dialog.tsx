@@ -109,7 +109,7 @@ export function Dialog({
           aria-labelledby={title ? titleId : undefined}
           tabIndex={-1}
           className={cn(
-            "fixed bottom-0 right-0 top-0 flex w-full max-w-[420px] flex-col overflow-y-auto border-l border-border bg-background p-6 shadow-lg outline-none md:right-[320px] lg:right-[360px]",
+            "fixed bottom-0 right-0 top-0 flex w-full max-w-[420px] flex-col overflow-y-auto border-l border-border bg-background p-6 shadow-lg outline-none md:right-[360px] lg:right-[400px] xl:right-[440px]",
             className
           )}
           onClick={(e) => e.stopPropagation()}

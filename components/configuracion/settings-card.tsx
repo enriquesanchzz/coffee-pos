@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 
 // Tarjeta común de las secciones de Configuración: título, campos, botón
 // Guardar, "Restaurar valores originales" (opcional) y el mensaje de
@@ -27,18 +28,19 @@ export function SettingsCard({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const notify = useToast();
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [isPending, startTransition] = useTransition();
 
+  // Éxito como toast (igual que el resto del sistema); el error se queda
+  // en la tarjeta, junto a los campos que hay que corregir.
   function run(task: () => Promise<void>, okMessage: string) {
     setError(null);
-    setSaved(null);
     startTransition(async () => {
       try {
         await task();
-        setSaved(okMessage);
+        notify(`${title}: ${okMessage.charAt(0).toLowerCase()}${okMessage.slice(1)}`);
         router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo guardar la configuración.");
@@ -55,7 +57,6 @@ export function SettingsCard({
       <CardContent className="flex flex-col gap-4">
         {children}
         {error && <Alert variant="error">{error}</Alert>}
-        {saved && !error && <Alert variant="success">{saved}</Alert>}
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button" onClick={() => run(onSave, "Guardado.")} disabled={isPending || saveDisabled}>
             {isPending ? "Guardando..." : "Guardar"}

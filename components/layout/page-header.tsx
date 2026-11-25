@@ -29,7 +29,7 @@ export function PageHeader({
         {action && (
           <Link
             href={action.href}
-            className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            className="inline-flex h-10 flex-shrink-0 items-center justify-center whitespace-nowrap rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
           >
             {action.label}
           </Link>

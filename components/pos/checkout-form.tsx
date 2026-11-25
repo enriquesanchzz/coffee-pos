@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { PaymentMethod, DiscountType, ManualDiscountReason } from "@prisma/client";
 import type { DomicilioOrigen } from "@prisma/client";
 import { Button } from "@/components/ui/button";
+import { ChevronLeft, Trash2, Users } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -577,7 +578,9 @@ export function CheckoutForm({
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     if (e.key !== "Enter") return;
     const target = e.target as HTMLElement;
-    if (target.tagName === "TEXTAREA") return;
+    // En un botón/enlace/selector, Enter debe activar ESE elemento (ej.
+    // "+$100"), no cobrar; tampoco en un <textarea> (salto de línea).
+    if (["TEXTAREA", "BUTTON", "A", "SELECT"].includes(target.tagName)) return;
     if (confirmDisabled) return;
     e.preventDefault();
     handleConfirm();
@@ -586,14 +589,10 @@ export function CheckoutForm({
   return (
     <div className="flex flex-col gap-4 p-4" onKeyDown={handleKeyDown}>
       <div className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={isPending}
-          className="text-sm text-muted-foreground hover:text-foreground disabled:opacity-50"
-        >
-          ← Atrás
-        </button>
+        <Button type="button" variant="outline" onClick={onCancel} disabled={isPending}>
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+          Atrás
+        </Button>
         <p className="font-semibold">Cobrar</p>
         <span />
       </div>
@@ -838,13 +837,14 @@ export function CheckoutForm({
           <p className="text-sm font-medium">Método de pago</p>
           {paymentMethods.length > 1 &&
             (isSplit ? (
-              <button type="button" className="text-xs text-muted-foreground underline" onClick={cancelSplitPayment}>
+              <Button type="button" variant="outline" size="sm" className="h-10" onClick={cancelSplitPayment}>
                 Un solo método
-              </button>
+              </Button>
             ) : (
-              <button type="button" className="text-xs text-muted-foreground underline" onClick={startSplitPayment}>
+              <Button type="button" variant="outline" size="sm" className="h-10" onClick={startSplitPayment}>
+                <Users className="h-4 w-4" aria-hidden="true" />
                 Dividir el pago
-              </button>
+              </Button>
             ))}
         </div>
 
@@ -902,7 +902,7 @@ export function CheckoutForm({
                   <div className="flex items-center gap-2">
                     <Select
                       aria-label="Método de este pago"
-                      className="flex-1"
+                      className="min-w-0 flex-1"
                       value={row.method}
                       onChange={(e) => updateSplitRow(row.id, { method: e.target.value as PaymentMethod })}
                     >
@@ -917,7 +917,7 @@ export function CheckoutForm({
                       min="0"
                       step="0.01"
                       inputMode="decimal"
-                      className="w-28"
+                      className="w-24 flex-shrink-0"
                       aria-label={`Monto de este pago (${PAYMENT_METHOD_LABELS[row.method]})`}
                       placeholder="Su parte"
                       value={row.amount}
@@ -925,12 +925,15 @@ export function CheckoutForm({
                     />
                     <Button
                       type="button"
-                      variant="ghost"
-                      size="sm"
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10 flex-shrink-0"
+                      aria-label={`Quitar pago ${index + 1}`}
+                      title="Quitar este pago"
                       disabled={splitRows!.length === 1}
                       onClick={() => removeSplitRow(row.id)}
                     >
-                      Quitar
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
                     </Button>
                   </div>
                   <div className="flex gap-1" role="group" aria-label={`Propina del pago ${index + 1}`}>
@@ -993,7 +996,7 @@ export function CheckoutForm({
                         inputMode="decimal"
                         className="flex-1"
                         aria-label="Efectivo recibido en este pago"
-                        placeholder="Recibido (vacío = exacto)"
+                        placeholder="Recibido"
                         value={row.received}
                         onChange={(e) => updateSplitRow(row.id, { received: e.target.value })}
                       />

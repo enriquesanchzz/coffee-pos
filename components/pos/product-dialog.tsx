@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Dialog } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatCurrency, cn, posAccentClass, posAccentBorderClass, unitStep, unitLabel } from "@/lib/utils";
@@ -348,7 +348,7 @@ export function ProductDialog({
                     <button
                       type="button"
                       onClick={() => removeExtra(index)}
-                      className="text-xs text-muted-foreground hover:text-destructive"
+                      className={buttonVariants({ variant: "outline", size: "sm", className: "h-9" })}
                     >
                       Quitar
                     </button>

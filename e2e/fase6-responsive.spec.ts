@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { addProduct, db, loginAdmin, loginPin, PIN } from "./helpers";
+import { addProduct, db, loginAdmin, loginPin, PIN, expectSaleRegistered } from "./helpers";
 
 test.describe("QA-005 POS en celular", () => {
   test.use({ viewport: { width: 390, height: 844 } });
@@ -17,7 +17,7 @@ test.describe("QA-005 POS en celular", () => {
     const confirm = sheet.getByRole("button", { name: "Confirmar venta" });
     await expect(confirm).toBeInViewport();
     await confirm.click();
-    await expect(page.getByRole("status").filter({ hasText: "Venta registrada" })).toBeVisible();
+    await expectSaleRegistered(page);
 
     await sheet.getByRole("button", { name: "Seguir agregando" }).click();
     await expect(sheet).toBeHidden();

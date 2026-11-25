@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import type { CatalogCategory, CatalogProduct, ExtraIngredientOption } from "@/lib/catalog";
 import type { CustomerOption } from "@/lib/customers";
 import Link from "next/link";
+import { ArrowLeftRight, ClipboardList, FileText } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { CatalogBrowser } from "./catalog-browser";
 import { CartPanel } from "./cart-panel";
 import { ProductDialog } from "./product-dialog";
@@ -111,36 +113,39 @@ export function PosWorkspace({
 
   return (
     // Celular: catálogo a pantalla completa + barra "Ver cuenta" que abre
-    // la hoja inferior. Tablet: cuenta a 320px. Escritorio: 360px (el
-    // drawer de ProductDialog se alinea a ese ancho).
-    <div className="grid h-full grid-rows-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1fr)_320px] md:grid-rows-1 lg:grid-cols-[minmax(0,1fr)_360px]">
+    // la hoja inferior. Tablet: cuenta a 360px; pantallas más anchas
+    // 400/440px — el cobro (pago dividido, propinas) necesita espacio. El
+    // drawer de ProductDialog se alinea a ese ancho (components/ui/dialog).
+    <div className="grid h-full grid-rows-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1fr)_360px] md:grid-rows-1 lg:grid-cols-[minmax(0,1fr)_400px] xl:grid-cols-[minmax(0,1fr)_440px]">
       <div className="flex h-full min-w-0 flex-col">
-        <div className="flex items-center justify-end gap-4 border-b border-border px-3 py-2 sm:px-5 sm:py-3">
-          <button
-            type="button"
-            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:underline"
-            onClick={() => setOpenTabsDialogOpen(true)}
-          >
+        <div className="flex flex-wrap items-center justify-end gap-2 border-b border-border px-3 py-2 sm:px-5">
+          <Button type="button" variant="outline" className="px-3" onClick={() => setOpenTabsDialogOpen(true)}>
+            <ClipboardList className="h-4 w-4" aria-hidden="true" />
             Cuentas en espera
             {openTabsCount > 0 && (
               <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-xs font-semibold text-primary-foreground">
                 {openTabsCount}
               </span>
             )}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className="text-sm text-muted-foreground hover:underline"
+            variant="outline"
+            className="px-3"
             onClick={() => setMovementOpen(true)}
+            title="Movimiento de caja (retiro o ingreso de efectivo)"
           >
-            Movimiento de caja
-          </button>
+            <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
+            Retiro/ingreso
+          </Button>
           <Link
             href={`/caja/turno/${shiftId}/apertura`}
             target="_blank"
-            className="text-sm text-muted-foreground hover:underline"
+            title="Comprobante de apertura del turno"
+            className={buttonVariants({ variant: "outline", className: "px-3" })}
           >
-            Comprobante de apertura
+            <FileText className="h-4 w-4" aria-hidden="true" />
+            Apertura
           </Link>
         </div>
         <div className="flex-1 overflow-hidden">

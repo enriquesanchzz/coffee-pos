@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/utils";
 import { closeShift as closeShiftAction, previewShiftClose as previewShiftCloseAction } from "@/actions/shift";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const closeShift = withActionErrors(closeShiftAction);
@@ -49,6 +50,7 @@ export function CloseShiftDialog({
   // para imprimir el corte — antes se cerraba solo y esa oportunidad se
   // perdía (no había otra forma de llegar al comprobante).
   const [closed, setClosed] = useState(false);
+  const notify = useToast();
 
   useEffect(() => {
     if (!open) return;
@@ -82,6 +84,7 @@ export function CloseShiftDialog({
           confirmingPin,
         });
         setClosed(true);
+        notify("Turno cerrado.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo cerrar el turno.");
       }
