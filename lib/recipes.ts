@@ -1,4 +1,4 @@
-import { Prisma, type ProductType, type VariantTemperature } from "@prisma/client";
+import { Prisma, type BusinessUnit, type ProductType, type VariantTemperature } from "@prisma/client";
 import { prisma } from "./prisma";
 import { DEFAULT_BRANCH_ID } from "./constants";
 import { calculateRecipeVersionCost } from "./recipe-cost";
@@ -12,6 +12,7 @@ export type ProductCategoryOption = {
   icon: string | null;
   parentId: string | null;
   parentName: string | null;
+  businessUnit: BusinessUnit;
 };
 
 export type ProductBasicInfo = { id: string; name: string; type: ProductType; categoryName: string };
@@ -37,6 +38,7 @@ export async function getProductCategories(): Promise<ProductCategoryOption[]> {
     icon: c.icon,
     parentId: c.parentId,
     parentName: c.parent?.name ?? null,
+    businessUnit: c.businessUnit,
   }));
 }
 

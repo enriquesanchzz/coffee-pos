@@ -1,5 +1,6 @@
 import "server-only";
-import { Prisma, type VariantTemperature } from "@prisma/client";
+import { Prisma, type BusinessUnit, type VariantTemperature } from "@prisma/client";
+import { allocateByUnit, BUSINESS_UNITS } from "./business-unit";
 import { prisma } from "./prisma";
 import { DEFAULT_BRANCH_ID, DEFAULT_STOCK_LOCATION_ID } from "./constants";
 import { calculateRecipeVersionCost } from "./recipe-cost";
@@ -365,6 +366,11 @@ export type SaleDetailStat = {
   total: number;
 };
 
+// Por unidad de negocio (Cafetería / Pet Shop): lo cobrado se reparte por
+// el peso de sus líneas (allocateByUnit), así un descuento general no infla
+// a ninguna. `tickets` cuenta ventas que tocaron esa unidad.
+export type BusinessUnitStat = { unit: BusinessUnit; revenue: number; tickets: number };
+
 export type StatsReport = {
   totalSales: number;
   totalRevenue: number;
@@ -373,13 +379,20 @@ export type StatsReport = {
   dailySales: DailySalesStat[];
   hourlySales: HourlySalesStat[];
   channelSales: ChannelSalesStat[];
+  businessUnitSales: BusinessUnitStat[];
+  // Tickets que incluyen productos de ambas unidades (venta cruzada).
+  mixedTickets: number;
   sales: SaleDetailStat[];
 };
 
 export async function getStatsReport(from: Date, to: Date): Promise<StatsReport> {
   const sales = await prisma.sale.findMany({
     where: { branchId: DEFAULT_BRANCH_ID, status: "COMPLETADA", createdAt: { gte: from, lte: to } },
-    include: { items: { include: { productVariant: { include: { product: true } } } } },
+    include: {
+      items: {
+        include: { productVariant: { include: { product: { include: { category: { select: { businessUnit: true } } } } } } },
+      },
+    },
     orderBy: { createdAt: "asc" },
   });
 
@@ -391,8 +404,25 @@ export async function getStatsReport(from: Date, to: Date): Promise<StatsReport>
   const byDay = new Map<string, { salesCount: number; revenue: number }>();
   const byHour = new Map<number, { salesCount: number; revenue: number }>();
   const byChannel = new Map<string, { salesCount: number; revenue: number }>();
+  const byUnit: Record<BusinessUnit, { revenue: number; tickets: number }> = {
+    CAFE: { revenue: 0, tickets: 0 },
+    PET_SHOP: { revenue: 0, tickets: 0 },
+  };
+  let mixedTickets = 0;
 
   for (const sale of sales) {
+    const unitLines = sale.items.map((item) => ({
+      unit: item.productVariant?.product.category.businessUnit ?? ("CAFE" as const),
+      amount: item.lineTotal.toNumber(),
+    }));
+    const split = allocateByUnit(unitLines, sale.total.toNumber());
+    const touched = new Set(unitLines.map((l) => l.unit));
+    for (const unit of BUSINESS_UNITS) {
+      byUnit[unit].revenue += split[unit];
+      if (touched.has(unit)) byUnit[unit].tickets += 1;
+    }
+    if (touched.size > 1) mixedTickets += 1;
+
     const day = zonedDateKey(sale.createdAt);
     const dayEntry = byDay.get(day) ?? { salesCount: 0, revenue: 0 };
     dayEntry.salesCount += 1;
@@ -457,6 +487,8 @@ export async function getStatsReport(from: Date, to: Date): Promise<StatsReport>
     dailySales,
     hourlySales,
     channelSales,
+    businessUnitSales: BUSINESS_UNITS.map((unit) => ({ unit, ...byUnit[unit] })),
+    mixedTickets,
     sales: saleDetails,
   };
 }

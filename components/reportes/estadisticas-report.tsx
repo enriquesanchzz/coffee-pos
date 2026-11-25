@@ -1,6 +1,7 @@
 import type { StatsReport } from "@/lib/reports";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateRangePicker } from "./date-range-picker";
+import { BUSINESS_UNIT_LABELS } from "@/lib/business-unit";
 import { formatCurrency, pluralize } from "@/lib/utils";
 import { formatDateTime } from "@/lib/time";
 
@@ -121,6 +122,34 @@ export function EstadisticasReport({
               </p>
             </div>
           ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle as="h3">Ventas por negocio</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2">
+          {report.totalSales === 0 && <p className="text-sm text-muted-foreground">No hay ventas en este periodo.</p>}
+          {report.totalSales > 0 &&
+            report.businessUnitSales.map((u) => (
+              <div key={u.unit} className="flex items-center justify-between text-sm">
+                <p>{BUSINESS_UNIT_LABELS[u.unit]}</p>
+                <p className="text-xs text-muted-foreground">
+                  {u.tickets} ticket{u.tickets === 1 ? "" : "s"} · {formatCurrency(u.revenue)}
+                  {report.totalRevenue > 0 && ` · ${Math.round((u.revenue / report.totalRevenue) * 100)}%`}
+                </p>
+              </div>
+            ))}
+          {report.totalSales > 0 && (
+            <p className="border-t pt-2 text-sm">
+              Venta cruzada:{" "}
+              <span className="font-semibold">{Math.round((report.mixedTickets / report.totalSales) * 100)}%</span>{" "}
+              <span className="text-muted-foreground">
+                de los tickets incluyen Cafetería y Pet Shop ({report.mixedTickets} de {report.totalSales})
+              </span>
+            </p>
+          )}
         </CardContent>
       </Card>
 

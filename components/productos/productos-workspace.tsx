@@ -18,6 +18,9 @@ import { VariantCard, AddVariantCard } from "./variant-card";
 import { NewProductForm } from "./new-product-form";
 import { AddVariantForm } from "./add-variant-form";
 import { EditRecipeForm } from "./edit-recipe-form";
+import type { BusinessUnit } from "@prisma/client";
+import { BUSINESS_UNIT_LABELS } from "@/lib/business-unit";
+import { BusinessUnitSelect } from "./business-unit-select";
 import { CategoryIconPicker } from "./category-icon-picker";
 import { fetchVariantRecipeDetail as fetchVariantRecipeDetailAction, updateProductCategory as updateProductCategoryAction } from "@/actions/recipes";
 import { Dialog } from "@/components/ui/dialog";
@@ -327,6 +330,10 @@ function EditCategoryDialog({
   const [name, setName] = useState(category.name);
   const [icon, setIcon] = useState<string | null>(category.icon);
   const [parentId, setParentId] = useState(category.parentId ?? "");
+  const [businessUnit, setBusinessUnit] = useState<BusinessUnit>(
+    categories.find((c) => c.id === category.id)?.businessUnit ?? "CAFE"
+  );
+  const parentUnit = categories.find((c) => c.id === parentId)?.businessUnit ?? null;
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const notify = useToast();
@@ -343,6 +350,7 @@ function EditCategoryDialog({
           name,
           icon: icon || undefined,
           parentId: parentId || undefined,
+          businessUnit,
         });
         onSaved();
         notify("Categoría actualizada.");
@@ -371,6 +379,19 @@ function EditCategoryDialog({
             ))}
           </Select>
         </div>
+        {parentUnit ? (
+          <p className="text-sm text-muted-foreground">
+            Negocio: <span className="font-medium text-foreground">{BUSINESS_UNIT_LABELS[parentUnit]}</span> — lo hereda de su
+            categoría padre.
+          </p>
+        ) : (
+          <BusinessUnitSelect
+            id="edit-category-unit"
+            value={businessUnit}
+            onChange={setBusinessUnit}
+            hint="Se aplica también a sus subcategorías."
+          />
+        )}
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <div className="flex gap-2">
           <Button onClick={handleSave} disabled={isPending}>
