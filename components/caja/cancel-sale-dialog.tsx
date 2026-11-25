@@ -23,12 +23,16 @@ export function CancelSaleDialog({
   branchId,
   shiftId,
   employeeId,
+  onCancelled,
 }: {
   sale: ShiftSaleRow | null;
   onOpenChange: (open: boolean) => void;
   branchId: string;
   shiftId: string;
   employeeId: string;
+  // Ej. el POS: al cancelar la cuenta que se tenía retomada, hay que
+  // soltarla y volver a una venta nueva.
+  onCancelled?: () => void;
 }) {
   const router = useRouter();
   const [reason, setReason] = useState("");
@@ -57,6 +61,7 @@ export function CancelSaleDialog({
           reason,
         });
         onOpenChange(false);
+        onCancelled?.();
         router.refresh();
         notify(isOpenTab ? "Cuenta cancelada." : "Venta anulada.");
       } catch (err) {

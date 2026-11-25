@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Coffee, Minus, Plus, Trash2 } from "lucide-react";
+import { Coffee, LogOut, Minus, Plus, Trash2, XCircle } from "lucide-react";
 import type { SaleOrderType, DomicilioOrigen } from "@prisma/client";
 import { useCartStore, lineUnitPrice, cartLineToSaleItemInput } from "./cart-store";
 import { openTab as openTabAction, addItemsToTab as addItemsToTabAction, removeTabItem as removeTabItemAction, updateTabItemQuantity as updateTabItemQuantityAction, type OpenTabDetail, type OpenTabItem } from "@/actions/pos";
@@ -14,6 +14,8 @@ import { CustomerPicker } from "./customer-picker";
 import { CheckoutForm, type SaleReceipt } from "./checkout-form";
 import { ReceiptDialog, type TabConfirmation } from "./receipt-dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { CancelSaleDialog } from "@/components/caja/cancel-sale-dialog";
+import type { ShiftSaleRow } from "@/lib/shift";
 import { isShortageError } from "@/lib/stock";
 import type { CustomerOption } from "@/lib/customers";
 import { withActionErrors, NetworkError } from "@/lib/action-result";
@@ -122,6 +124,19 @@ export function CartPanel({
     setOrderType("PARA_LLEVAR");
     setTableNumber("");
     setActiveTabId(null);
+  }
+
+  // Soltar la cuenta retomada (sigue en espera, sin cambios) y volver a
+  // una venta nueva. La ronda sin agregar se descarta (se confirma antes).
+  const [confirmExitTab, setConfirmExitTab] = useState(false);
+  const [tabToCancel, setTabToCancel] = useState<ShiftSaleRow | null>(null);
+  function exitTab(message = "Saliste de la cuenta — sigue en espera.") {
+    useCartStore.getState().clear();
+    setTabError(null);
+    setRegisteredError(null);
+    resetOrderState();
+    onTabChanged();
+    if (message) notify(message);
   }
 
   function handleConfirmed(receipt: SaleReceipt) {
@@ -334,6 +349,48 @@ export function CartPanel({
       <div className="flex-1 overflow-y-auto p-3">
         {activeTabSummary && (
           <div className="mb-4 flex flex-col gap-2">
+            {/* Salir deja la cuenta en espera tal cual y vuelve a una venta
+                nueva; Cancelar la anula (motivo + PIN, igual que en Caja). */}
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/40 p-2">
+              <p className="text-sm font-semibold">
+                {activeTabSummary.tableNumber
+                  ? orderType === "CONSUMO_LOCAL"
+                    ? `Mesa ${activeTabSummary.tableNumber}`
+                    : activeTabSummary.tableNumber
+                  : "Cuenta en espera"}
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => (lines.length > 0 ? setConfirmExitTab(true) : exitTab())}
+                >
+                  <LogOut className="h-4 w-4" aria-hidden="true" />
+                  Salir
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() =>
+                    setTabToCancel({
+                      id: activeTabSummary.id,
+                      status: "ABIERTA",
+                      createdAt: "",
+                      orderType,
+                      tableNumber: activeTabSummary.tableNumber,
+                      total: activeTabSummary.total,
+                      tipAmount: 0,
+                      employeeName: "",
+                      paymentMethods: [],
+                    })
+                  }
+                >
+                  <XCircle className="h-4 w-4" aria-hidden="true" />
+                  Cancelar cuenta
+                </Button>
+              </div>
+            </div>
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Ya registrado en la cuenta — revisa con el cliente antes de cobrar
             </p>
@@ -570,6 +627,28 @@ export function CartPanel({
         confirmLabel="Registrar de todos modos"
         onConfirm={() => handleLeaveOpen(true)}
         onCancel={() => setShortageMessage(null)}
+      />
+      <ConfirmDialog
+        open={confirmExitTab}
+        title="¿Salir de la cuenta?"
+        message="La cuenta sigue en espera con lo ya registrado, pero los productos de la ronda actual (sin agregar) se van a descartar."
+        confirmLabel="Salir y descartar la ronda"
+        destructive
+        onConfirm={() => {
+          setConfirmExitTab(false);
+          exitTab();
+        }}
+        onCancel={() => setConfirmExitTab(false)}
+      />
+      <CancelSaleDialog
+        sale={tabToCancel}
+        onOpenChange={(open) => {
+          if (!open) setTabToCancel(null);
+        }}
+        branchId={branchId}
+        shiftId={shiftId}
+        employeeId={employeeId}
+        onCancelled={() => exitTab("")}
       />
     </div>
     </div>
