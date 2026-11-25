@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 import { formatTime, zonedDateKey, zonedEndOfDay, zonedStartOfDay } from "@/lib/time";
+import { buttonVariants } from "@/components/ui/button";
 
 export const metadata: Metadata = { title: "Administración" };
 
@@ -129,8 +130,8 @@ export default async function AdministracionPage() {
                     <span className="text-xs text-muted-foreground">
                       {new Intl.NumberFormat("es-MX").format(item.quantity)} {item.baseUnit}
                     </span>
-                    <Link href="/compras/nueva" className="text-sm text-primary hover:underline">
-                      Pedir →
+                    <Link href="/compras/nueva" className={buttonVariants({ variant: "outline", size: "sm", className: "h-9" })}>
+                      Pedir
                     </Link>
                   </div>
                 </div>

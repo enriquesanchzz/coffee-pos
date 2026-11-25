@@ -6,7 +6,7 @@ import type { DiscountCodeCategory } from "@prisma/client";
 import type { DiscountCodeListItem, DiscountCodeStatus } from "@/lib/discounts";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { DiscountCodeCard } from "./discount-code-card";
 import { DiscountCodeFormDialog } from "./discount-code-form-dialog";
 import { discountCategoryLabels } from "./enum-labels";
@@ -114,7 +114,7 @@ export function DiscountCodesWorkspace({ codes, employeeId }: { codes: DiscountC
                 Ningún código coincide con los filtros.{" "}
                 <button
                   type="button"
-                  className="underline"
+                  className={buttonVariants({ variant: "outline", size: "sm", className: "ml-2 h-9" })}
                   onClick={() => {
                     setQuery("");
                     setStatusFilter("todos");

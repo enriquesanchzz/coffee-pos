@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { tooManyAttemptsText } from "@/lib/settings-shared";
 import { loginAdmin } from "@/actions/session";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,7 +43,7 @@ export function AdminLoginForm({ error, lockMinutes }: { error?: string; lockMin
             Administración requiere email y password, no el PIN del POS. ¿Olvidaste tu password? Pide a otro
             administrador que te asigne uno nuevo en Empleados.
           </p>
-          <Link href="/pos" className="text-sm text-muted-foreground underline hover:text-foreground">
+          <Link href="/pos" className={buttonVariants({ variant: "outline" })}>
             ← Volver al Punto de Venta
           </Link>
         </form>

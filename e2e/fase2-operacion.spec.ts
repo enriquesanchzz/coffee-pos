@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { addProduct, db, loginAdmin, loginPin, PIN, payExactCash, stockOf } from "./helpers";
+import { addProduct, db, loginAdmin, loginPin, PIN, payExactCash, stockOf, expectSaleRegistered } from "./helpers";
 
 const MILK = { ingredientId: "ing-leche", stockLocationId: "stock-branch-principal" };
 
@@ -19,7 +19,7 @@ test.describe("QA-003 stock insuficiente", () => {
 
       await page.getByLabel("Vender de todos modos").check();
       await page.getByRole("button", { name: "Confirmar venta" }).click();
-      await expect(page.getByRole("status")).toContainText("Venta registrada");
+      await expectSaleRegistered(page);
       expect(await stockOf("ing-leche")).toBe(-180);
 
       await loginAdmin(page);
@@ -70,7 +70,7 @@ test.describe("QA-015 red", () => {
     await page.getByRole("button", { name: "Confirmar venta" }).click();
     await expect(page.getByText("Sin conexión con el servidor")).toBeVisible();
     await page.getByRole("button", { name: "Confirmar venta" }).click();
-    await expect(page.getByRole("status")).toContainText("Venta registrada");
+    await expectSaleRegistered(page);
     expect(await db.sale.count()).toBe(before + 1);
   });
 });

@@ -24,7 +24,7 @@ test.describe("Fase 4 UX", () => {
     await addProduct(page, "Latte", ["Chico", "Caliente"]);
     await page.getByRole("button", { name: "Cobrar" }).click();
     await page.fill("#cash-received", "100");
-    await page.getByRole("button", { name: "← Atrás" }).click();
+    await page.getByRole("button", { name: "Atrás" }).click();
     await page.getByRole("button", { name: "Cobrar" }).click();
     await expect(page.locator("#cash-received")).toHaveValue("100");
   });

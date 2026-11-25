@@ -3,7 +3,6 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Alert } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -16,6 +15,7 @@ import {
   type ThemeSettings,
 } from "@/lib/theme";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const updateAppearanceSettings = withActionErrors(updateAppearanceSettingsAction);
@@ -27,12 +27,11 @@ export function AppearanceForm({ initial }: { initial: ThemeSettings }) {
   const [settings, setSettings] = useState<ThemeSettings>(initial);
   const [customBackground, setCustomBackground] = useState(initial.backgroundColor !== null);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  const notify = useToast();
   const [isPending, startTransition] = useTransition();
 
   function update<K extends keyof ThemeSettings>(key: K, value: ThemeSettings[K]) {
     setSettings((prev) => ({ ...prev, [key]: value }));
-    setSaved(false);
   }
 
   function toggleCustomBackground(checked: boolean) {
@@ -42,7 +41,6 @@ export function AppearanceForm({ initial }: { initial: ThemeSettings }) {
 
   function handleSave() {
     setError(null);
-    setSaved(false);
     if (!HEX_PATTERN.test(settings.color)) {
       setError("El color de acento debe ser un hex válido, ej. #5a3a24.");
       return;
@@ -54,7 +52,7 @@ export function AppearanceForm({ initial }: { initial: ThemeSettings }) {
     startTransition(async () => {
       try {
         await updateAppearanceSettings(settings);
-        setSaved(true);
+        notify("Apariencia guardada.");
         router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo guardar la apariencia.");
@@ -191,7 +189,6 @@ export function AppearanceForm({ initial }: { initial: ThemeSettings }) {
           {isPending ? "Guardando..." : "Guardar apariencia"}
         </Button>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        {saved && !error && <Alert variant="success">Guardado.</Alert>}
       </div>
     </div>
   );

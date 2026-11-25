@@ -44,7 +44,7 @@ export default async function TransferenciasPage() {
                 <Link
                   key={manifest.id}
                   href={`/compras/transferencias/${manifest.id}`}
-                  className="flex items-center justify-between text-sm hover:underline"
+                  className="-mx-2 flex items-center justify-between rounded-md px-2 py-2 text-sm hover:bg-muted"
                 >
                   <div>
                     <p>

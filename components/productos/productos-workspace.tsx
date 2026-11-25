@@ -24,7 +24,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { withActionErrors } from "@/lib/action-result";
 import { matchesSearch } from "@/lib/search";
 import { useToast } from "@/components/ui/toast";
@@ -141,17 +141,18 @@ export function ProductosWorkspace({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-border px-5 py-3">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3">
+        <div className="min-w-0">
           <h1 className="text-lg font-semibold">Productos</h1>
           <p className="text-sm text-muted-foreground">Bebidas con receta, merch, souvenirs y tarjetas de regalo.</p>
         </div>
-        <div className="flex items-center gap-4">
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex flex-shrink-0 items-center gap-4">
+          <label className="flex items-center gap-2 whitespace-nowrap text-sm text-muted-foreground">
             <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
             Mostrar inactivos
           </label>
           <Button
+            className="whitespace-nowrap"
             onClick={() => {
               setSelectedProductId(null);
               setMainView("new-product");
@@ -209,7 +210,7 @@ export function ProductosWorkspace({
                 <button
                   type="button"
                   onClick={backToBrowse}
-                  className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+                  className={buttonVariants({ variant: "outline", className: "w-fit" })}
                 >
                   <ChevronLeft className="h-4 w-4" />
                   Categorías
@@ -243,7 +244,7 @@ export function ProductosWorkspace({
               <button
                 type="button"
                 onClick={backToVariants}
-                className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+                className={buttonVariants({ variant: "outline", className: "w-fit" })}
               >
                 <ChevronLeft className="h-4 w-4" />
                 {selectedProduct.name}

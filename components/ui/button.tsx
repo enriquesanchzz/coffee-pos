@@ -21,6 +21,21 @@ const sizeClasses: Record<Size, string> = {
   icon: "h-10 w-10",
 };
 
+// Mismas clases que <Button>, para enlaces (<Link>/<a>) que son acciones
+// — así toda acción se ve y se toca como botón, no como texto.
+export function buttonVariants({
+  variant = "default",
+  size = "default",
+  className,
+}: { variant?: Variant; size?: Size; className?: string } = {}) {
+  return cn(
+    "inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 disabled:saturate-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+    variantClasses[variant],
+    sizeClasses[size],
+    className
+  );
+}
+
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
@@ -29,16 +44,7 @@ export interface ButtonProps
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = "default", size = "default", ...props }, ref) => (
-    <button
-      ref={ref}
-      className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 disabled:saturate-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-        variantClasses[variant],
-        sizeClasses[size],
-        className
-      )}
-      {...props}
-    />
+    <button ref={ref} className={buttonVariants({ variant, size, className })} {...props} />
   )
 );
 Button.displayName = "Button";

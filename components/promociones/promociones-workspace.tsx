@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { ComboListItem, PromotionListItem, VariantOption, ProductOption } from "@/lib/promotions";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { PromoCard, type PromoCardItem } from "./promo-card";
 import { ComboFormDialog } from "./combo-form-dialog";
 import { PromotionFormDialog } from "./promotion-form-dialog";
@@ -178,7 +178,7 @@ export function PromocionesWorkspace({
                 Ninguna promoción coincide con los filtros.{" "}
                 <button
                   type="button"
-                  className="underline"
+                  className={buttonVariants({ variant: "outline", size: "sm", className: "ml-2 h-9" })}
                   onClick={() => {
                     setQuery("");
                     setStatusFilter("todos");

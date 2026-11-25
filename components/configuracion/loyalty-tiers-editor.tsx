@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { deleteLoyaltyTier as deleteLoyaltyTierAction, saveLoyaltyTier as saveLoyaltyTierAction } from "@/actions/settings";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 
 const saveLoyaltyTier = withActionErrors(saveLoyaltyTierAction);
 const deleteLoyaltyTier = withActionErrors(deleteLoyaltyTierAction);
@@ -27,12 +28,14 @@ export function LoyaltyTiersEditor({ tiers }: { tiers: LoyaltyTierRow[] }) {
   const [toDelete, setToDelete] = useState<LoyaltyTierRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const notify = useToast();
 
-  function run(task: () => Promise<void>, after?: () => void) {
+  function run(task: () => Promise<void>, okMessage: string, after?: () => void) {
     setError(null);
     startTransition(async () => {
       try {
         await task();
+        notify(okMessage);
         after?.();
         router.refresh();
       } catch (err) {
@@ -133,6 +136,7 @@ export function LoyaltyTiersEditor({ tiers }: { tiers: LoyaltyTierRow[] }) {
                         minLifetimeStamps: Number(draft.minLifetimeStamps),
                         benefits: draft.benefits,
                       }),
+                    draft.id ? "Nivel actualizado." : "Nivel creado.",
                     () => setDraft(null)
                   )
                 }
@@ -164,7 +168,7 @@ export function LoyaltyTiersEditor({ tiers }: { tiers: LoyaltyTierRow[] }) {
         onConfirm={() => {
           const tier = toDelete;
           setToDelete(null);
-          if (tier) run(() => deleteLoyaltyTier(tier.id));
+          if (tier) run(() => deleteLoyaltyTier(tier.id), "Nivel eliminado.");
         }}
         onCancel={() => setToDelete(null)}
       />

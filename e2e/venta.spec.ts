@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { addProduct, db, loginPin, PIN, payExactCash, stockOf } from "./helpers";
+import { addProduct, db, loginPin, PIN, payExactCash, stockOf, expectSaleRegistered } from "./helpers";
 
 // Flujo crítico de punta a punta: venta, inventario por receta, cuenta
 // abierta de mesa y anulación.
@@ -13,7 +13,7 @@ test.describe("Punto de venta", () => {
     await page.getByRole("button", { name: "+$100", exact: true }).click();
     await page.getByRole("button", { name: "Confirmar venta" }).click();
 
-    await expect(page.getByRole("status")).toContainText("Cambio a entregar: $57.00");
+    await expectSaleRegistered(page, "Cambio a entregar: $57.00");
     expect(await stockOf("ing-leche")).toBe(milkBefore - 180);
   });
 
@@ -24,17 +24,18 @@ test.describe("Punto de venta", () => {
     await page.getByRole("button", { name: "Mesa", exact: true }).click();
     await addProduct(page, "Latte");
     await page.fill("#table-number", table);
-    await page.getByRole("button", { name: "Dejar cuenta abierta" }).click();
+    await page.getByRole("button", { name: "Dejar en espera" }).click();
+    await expectSaleRegistered(page, "Pedido dejado en espera");
     await expect(page.locator("#table-number")).toHaveValue("");
 
     await page.getByRole("button", { name: "Mesa", exact: true }).click();
     await addProduct(page, "Latte");
     await page.fill("#table-number", table);
-    await page.getByRole("button", { name: "Dejar cuenta abierta" }).click();
+    await page.getByRole("button", { name: "Dejar en espera" }).click();
     await expect(page.getByText(`La mesa ${table} ya tiene una cuenta abierta`)).toBeVisible();
     await page.getByRole("button", { name: "Quitar" }).click();
 
-    await page.getByRole("button", { name: "Cuentas abiertas" }).click();
+    await page.getByRole("button", { name: /Cuentas en espera/ }).click();
     await page.getByRole("dialog").locator("li", { hasText: `Mesa ${table}` }).getByRole("button", { name: "Retomar" }).click();
     await payExactCash(page);
 

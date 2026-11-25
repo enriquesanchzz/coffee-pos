@@ -3,13 +3,14 @@
 import { useBusinessSettings } from "@/components/layout/business-settings-context";
 import { useEffect, useState, useTransition } from "react";
 import type { SaleOrderType, DomicilioOrigen } from "@prisma/client";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn, posAccentBorderClass, buildWhatsAppLoyaltyLink } from "@/lib/utils";
 import { createCustomer as createCustomerAction } from "@/actions/customers";
 import type { CustomerOption } from "@/lib/customers";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 import { Combobox } from "@/components/ui/combobox";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
@@ -50,6 +51,7 @@ export function CustomerPicker({
   // localmente para que aparezcan de inmediato en esta misma venta.
   const [localCustomers, setLocalCustomers] = useState<CustomerOption[]>([]);
   const allCustomers = [...customers, ...localCustomers];
+  const notify = useToast();
   const [justCreatedCustomer, setJustCreatedCustomer] = useState<{
     id: string;
     loyaltyCardCode: string;
@@ -115,6 +117,7 @@ export function CustomerPicker({
         };
         setLocalCustomers((prev) => [...prev, option]);
         handleSelect(option);
+        notify(`Cliente "${name}" creado y seleccionado.`);
         setJustCreatedCustomer({
           id: created.id,
           loyaltyCardCode: created.loyaltyCardCode,
@@ -157,8 +160,12 @@ export function CustomerPicker({
       {selectedCustomer && (
         <p className="text-xs text-muted-foreground">
           Seleccionado: {selectedCustomer.name}{" "}
-          <button type="button" onClick={handleClear} className="underline">
-            quitar
+          <button
+            type="button"
+            onClick={handleClear}
+            className={buttonVariants({ variant: "outline", size: "sm", className: "ml-1 h-8" })}
+          >
+            Quitar
           </button>
         </p>
       )}
@@ -273,7 +280,7 @@ function WhatsAppLoyaltyLink({
   if (!href) return null;
 
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-primary underline">
+    <a href={href} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "outline", size: "sm", className: "h-9" })}>
       Enviar tarjeta por WhatsApp
     </a>
   );

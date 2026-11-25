@@ -29,11 +29,13 @@ test.describe("QA-002 paquetes", () => {
     await page.fill("#combo-name", `Caro E2E ${Date.now()}`);
     await page.fill("#combo-price", "500");
     const pickers = dialog.getByRole("combobox", { name: "Producto del paquete" });
-    await pickOption(pickers.nth(0), "Latte Chico Caliente", "Latte Chico — Caliente");
-    await pickOption(pickers.nth(1), "Americano Chico Caliente", "Americano Chico — Caliente");
+    // Un paquete combina por producto (cualquier variante cuenta); la
+    // referencia es la variante más barata de cada uno.
+    await pickOption(pickers.nth(0), "Latte", /^Latte$/);
+    await pickOption(pickers.nth(1), "Americano", /^Americano$/);
     await expect(dialog.getByText("debe costar menos")).toBeVisible();
     await dialog.getByRole("button", { name: /Crear|Guardar/ }).click();
-    await expect(dialog.getByText("El paquete debe costar menos que sus productos por separado ($70.00).")).toBeVisible();
+    await expect(dialog.getByText(/El paquete debe costar menos que sus productos por separado \(\$[\d,.]+\)\./)).toBeVisible();
   });
 
   test("un paquete válido se aplica y el cobro muestra la promoción", async ({ page }) => {

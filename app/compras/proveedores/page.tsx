@@ -10,6 +10,7 @@ import { ComprasLayout } from "@/components/compras/compras-layout";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 
 export const metadata: Metadata = { title: "Proveedores" };
 
@@ -57,7 +58,7 @@ export default async function ProveedoresPage() {
                   </div>
                   <Link
                     href={`/compras/proveedores/${supplier.id}`}
-                    className="text-sm text-primary hover:underline"
+                    className={buttonVariants({ variant: "outline", size: "sm", className: "h-9" })}
                   >
                     Editar
                   </Link>

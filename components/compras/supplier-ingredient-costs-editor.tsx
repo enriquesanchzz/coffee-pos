@@ -4,12 +4,12 @@ import { useEffect, useState, useTransition } from "react";
 import type { UnitOfMeasure } from "@prisma/client";
 import type { SupplierIngredientLink, IngredientOption } from "@/lib/purchases";
 import { Button } from "@/components/ui/button";
-import { Alert } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
 import { upsertIngredientSupplier as upsertIngredientSupplierAction } from "@/actions/purchases";
 import { unitLabels } from "./enum-labels";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 import { formatCurrency } from "@/lib/utils";
 import { roundQty } from "@/lib/units";
 
@@ -57,7 +57,7 @@ export function SupplierIngredientCostsEditor({
 }) {
   const [rows, setRows] = useState<Row[]>(links.map(toRow));
   const [error, setError] = useState<string | null>(null);
-  const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const notify = useToast();
   const [isPending, startTransition] = useTransition();
 
   const presentationById = new Map(ingredientOptions.map((i) => [i.id, i.presentation]));
@@ -75,14 +75,12 @@ export function SupplierIngredientCostsEditor({
   }, [dirtyRows.length]);
 
   function updateRow(ingredientId: string, patch: Partial<Row>) {
-    setSavedMessage(null);
     setRows((prev) => prev.map((r) => (r.ingredientId === ingredientId ? { ...r, ...patch, dirty: true } : r)));
   }
 
   function addIngredient(ingredientId: string) {
     const ingredient = ingredientOptions.find((i) => i.id === ingredientId);
     if (!ingredient) return;
-    setSavedMessage(null);
     setRows((prev) =>
       [
         ...prev,
@@ -100,7 +98,6 @@ export function SupplierIngredientCostsEditor({
 
   function handleSaveAll() {
     setError(null);
-    setSavedMessage(null);
     const invalid = dirtyRows.find((r) => !(Number(r.cost) > 0));
     if (invalid) {
       setError(`${invalid.ingredientName}: el costo debe ser mayor a cero.`);
@@ -120,7 +117,7 @@ export function SupplierIngredientCostsEditor({
           });
           saved.push(row.ingredientId);
         }
-        setSavedMessage(`Guardado${saved.length === 1 ? "" : "s"} ${saved.length} costo${saved.length === 1 ? "" : "s"}.`);
+        notify(`Guardado${saved.length === 1 ? "" : "s"} ${saved.length} costo${saved.length === 1 ? "" : "s"}.`);
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudieron guardar los costos.");
       } finally {
@@ -195,7 +192,6 @@ export function SupplierIngredientCostsEditor({
       )}
 
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      {savedMessage && <Alert variant="success">{savedMessage}</Alert>}
 
       <Button type="button" onClick={handleSaveAll} disabled={isPending || dirtyRows.length === 0}>
         {isPending

@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
-import { db, loginAdmin, loginPin, PIN } from "./helpers";
+import { db, loginAdmin, loginPin, PIN, expectSaleRegistered } from "./helpers";
 
 // Barrido axe de todas las rutas (A11Y): no se aceptan violaciones
 // críticas ni serias.
@@ -129,5 +129,5 @@ test("venta completa solo con teclado", async ({ page }) => {
   await confirm.focus();
   await expect(confirm).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("status")).toContainText("Venta registrada");
+  await expectSaleRegistered(page);
 });

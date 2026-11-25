@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Coffee, Minus, Plus, Trash2 } from "lucide-react";
 import type { SaleOrderType, DomicilioOrigen } from "@prisma/client";
-import { useCartStore, lineUnitPrice, cartLineToSaleItemInput, type CartLine } from "./cart-store";
+import { useCartStore, lineUnitPrice, cartLineToSaleItemInput } from "./cart-store";
 import { openTab as openTabAction, addItemsToTab as addItemsToTabAction, removeTabItem as removeTabItemAction, updateTabItemQuantity as updateTabItemQuantityAction, type OpenTabDetail, type OpenTabItem } from "@/actions/pos";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";

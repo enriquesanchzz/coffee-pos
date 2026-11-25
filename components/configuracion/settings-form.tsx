@@ -3,11 +3,11 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Alert } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { updateTargetFoodCostPercent as updateTargetFoodCostPercentAction } from "@/actions/settings";
 import { withActionErrors } from "@/lib/action-result";
+import { useToast } from "@/components/ui/toast";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const updateTargetFoodCostPercent = withActionErrors(updateTargetFoodCostPercentAction);
@@ -16,16 +16,15 @@ export function SettingsForm({ targetFoodCostPercent }: { targetFoodCostPercent:
   const router = useRouter();
   const [value, setValue] = useState(String(targetFoodCostPercent));
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  const notify = useToast();
   const [isPending, startTransition] = useTransition();
 
   function handleSave() {
     setError(null);
-    setSaved(false);
     startTransition(async () => {
       try {
         await updateTargetFoodCostPercent(Number(value) || 0);
-        setSaved(true);
+        notify("Costos y precios: guardado.");
         router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo guardar la configuración.");
@@ -47,7 +46,6 @@ export function SettingsForm({ targetFoodCostPercent }: { targetFoodCostPercent:
             value={value}
             onChange={(e) => {
               setValue(e.target.value);
-              setSaved(false);
             }}
           />
         </div>
@@ -59,7 +57,6 @@ export function SettingsForm({ targetFoodCostPercent }: { targetFoodCostPercent:
         Entre 1 y 100. Precio sugerido al crear/editar una receta = costo de ingredientes ÷ este %.
       </p>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      {saved && !error && <Alert variant="success">Guardado.</Alert>}
     </div>
   );
 }

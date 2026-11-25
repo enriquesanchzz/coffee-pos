@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { buttonVariants } from "@/components/ui/button";
 
 export const metadata: Metadata = { title: "Página no encontrada" };
 
@@ -10,7 +11,7 @@ export default function NotFound() {
       <p className="text-4xl font-bold" aria-hidden="true">404</p>
       <h1 className="text-lg font-semibold">Página no encontrada</h1>
       <p className="text-sm text-muted-foreground">No encontramos esta página o el registro ya no existe.</p>
-      <Link href="/pos" className="text-sm font-medium underline">
+      <Link href="/pos" className={buttonVariants({ variant: "outline" })}>
         Volver al Punto de Venta
       </Link>
     </main>
