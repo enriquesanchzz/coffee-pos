@@ -4,8 +4,7 @@ import { redirect } from "next/navigation";
 import type { PaymentMethod, SaleOrderType, SaleStatus } from "@prisma/client";
 import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
-import { resolveDateRange } from "@/lib/reports";
-import { getSalesEmployees, getSalesPage } from "@/lib/sales";
+import { getSalesEmployees, getSalesPage, parseSalesParams, type SalesSearchParams } from "@/lib/sales";
 import { PAYMENT_METHOD_LABELS } from "@/lib/settings-shared";
 import { formatCurrency, pluralize } from "@/lib/utils";
 import { formatDateTime } from "@/lib/time";
@@ -37,49 +36,21 @@ const ORDER_TYPE_LABELS: Record<SaleOrderType, string> = {
 };
 const METHODS: PaymentMethod[] = ["EFECTIVO", "TARJETA", "TRANSFERENCIA"];
 
-type Params = {
-  from?: string;
-  to?: string;
-  status?: string;
-  method?: string;
-  employee?: string;
-  orderType?: string;
-  q?: string;
-  page?: string;
-};
-
-function pick<T extends string>(value: string | undefined, allowed: readonly T[]): T | undefined {
-  return allowed.includes(value as T) ? (value as T) : undefined;
-}
-
-export default async function VentasPage({ searchParams }: { searchParams: Promise<Params> }) {
+export default async function VentasPage({ searchParams }: { searchParams: Promise<SalesSearchParams> }) {
   const employee = await getCurrentEmployee();
   if (!employee) redirect("/");
   if (resolveRoleName(employee, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
 
   const params = await searchParams;
-  const { from, to, fromStr, toStr } = resolveDateRange(params.from, params.to);
-  const status = pick(params.status, ["COMPLETADA", "CANCELADA", "ABIERTA"] as const);
-  const method = pick(params.method, METHODS);
-  const orderType = pick(params.orderType, ["CONSUMO_LOCAL", "PARA_LLEVAR", "DOMICILIO"] as const);
-  const q = params.q?.trim() || undefined;
-  const page = Math.max(1, Math.floor(Number(params.page) || 1));
+  // `query` conserva los filtros al paginar, al volver del detalle y al exportar.
+  const { filters, query } = parseSalesParams(params);
+  const { status, method, orderType, q, page } = filters;
+  const fromStr = query.get("from")!;
+  const toStr = query.get("to")!;
 
-  const [employees, result] = await Promise.all([
-    getSalesEmployees(),
-    getSalesPage({ from, to, status, method, employeeId: params.employee || undefined, orderType, q, page }),
-  ]);
+  const [employees, result] = await Promise.all([getSalesEmployees(), getSalesPage(filters)]);
   const { rows, totalRows, pageCount, metrics } = result;
 
-  // Conserva los filtros al paginar y al volver del detalle.
-  const query = new URLSearchParams();
-  query.set("from", fromStr);
-  query.set("to", toStr);
-  if (status) query.set("status", status);
-  if (method) query.set("method", method);
-  if (params.employee) query.set("employee", params.employee);
-  if (orderType) query.set("orderType", orderType);
-  if (q) query.set("q", q);
   const pageHref = (p: number) => {
     const next = new URLSearchParams(query);
     next.set("page", String(p));
@@ -91,10 +62,16 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
   return (
     <AuthenticatedShell isAdmin employeeName={employee.name}>
       <div className="mx-auto flex max-w-6xl flex-col gap-4 p-4 sm:p-6">
-        <PageHeader
-          title="Ventas"
-          description="Todas las ventas del periodo — cobradas, canceladas y en espera — con sus métricas."
-        />
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <PageHeader
+            title="Ventas"
+            description="Todas las ventas del periodo — cobradas, canceladas y en espera — con sus métricas."
+          />
+          {/* <a> y no <Link>: es una descarga, no una navegación del router. */}
+          <a href={`/ventas/exportar?${query}`} download className={buttonVariants({ variant: "outline" })}>
+            Exportar CSV
+          </a>
+        </div>
 
         <Card>
           <CardContent className="pt-4">

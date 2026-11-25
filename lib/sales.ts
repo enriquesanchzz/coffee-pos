@@ -1,6 +1,7 @@
 import type { PaymentMethod, Prisma, SaleOrderType, SaleStatus } from "@prisma/client";
 import { prisma } from "./prisma";
 import { DEFAULT_BRANCH_ID } from "./constants";
+import { resolveDateRange } from "./reports";
 
 // Módulo Ventas (Administración): listado de todas las ventas con filtros
 // y métricas del periodo. A diferencia de Reportes → Estadísticas (solo
@@ -70,6 +71,45 @@ export type SalesMetrics = {
   openCount: number;
   openTotal: number;
 };
+
+export type SalesSearchParams = {
+  from?: string;
+  to?: string;
+  status?: string;
+  method?: string;
+  employee?: string;
+  orderType?: string;
+  q?: string;
+  page?: string;
+};
+
+function pick<T extends string>(value: string | undefined, allowed: readonly T[]): T | undefined {
+  return allowed.includes(value as T) ? (value as T) : undefined;
+}
+
+// Lee los filtros de la URL. Lo comparten el listado y la exportación a CSV
+// para que el archivo traiga exactamente lo que se ve en pantalla.
+// `query` son los filtros normalizados (sin página) para armar enlaces.
+export function parseSalesParams(params: SalesSearchParams): { filters: SalesFilters; query: URLSearchParams } {
+  const { from, to, fromStr, toStr } = resolveDateRange(params.from, params.to);
+  const status = pick(params.status, ["COMPLETADA", "CANCELADA", "ABIERTA"] as const);
+  const method = pick(params.method, ["EFECTIVO", "TARJETA", "TRANSFERENCIA"] as const);
+  const orderType = pick(params.orderType, ["CONSUMO_LOCAL", "PARA_LLEVAR", "DOMICILIO"] as const);
+  const employeeId = params.employee || undefined;
+  const q = params.q?.trim() || undefined;
+  const page = Math.max(1, Math.floor(Number(params.page) || 1));
+
+  const query = new URLSearchParams();
+  query.set("from", fromStr);
+  query.set("to", toStr);
+  if (status) query.set("status", status);
+  if (method) query.set("method", method);
+  if (employeeId) query.set("employee", employeeId);
+  if (orderType) query.set("orderType", orderType);
+  if (q) query.set("q", q);
+
+  return { filters: { from, to, status, method, employeeId, orderType, q, page }, query };
+}
 
 export function saleFolio(id: string) {
   return id.slice(-8).toUpperCase();
@@ -145,6 +185,71 @@ export async function getSalesPage(f: SalesFilters): Promise<{
       openCount: open._count,
       openTotal: open._sum.total?.toNumber() ?? 0,
     },
+  };
+}
+
+// Exportación a CSV: todas las ventas que cumplen los filtros (sin paginar),
+// una fila por venta. El tope evita que un rango enorme tumbe el servidor.
+export const SALES_EXPORT_LIMIT = 20000;
+
+export type SalesExportRow = {
+  folio: string;
+  createdAt: Date;
+  status: SaleStatus;
+  orderType: SaleOrderType;
+  tableNumber: string | null;
+  customerName: string | null;
+  employeeName: string;
+  itemCount: number;
+  subtotal: number;
+  discountTotal: number;
+  taxAmount: number;
+  total: number;
+  tipAmount: number;
+  byMethod: Record<PaymentMethod, number>;
+  discountCode: string | null;
+  cancelReason: string | null;
+};
+
+export async function getSalesForExport(f: SalesFilters): Promise<{ rows: SalesExportRow[]; truncated: boolean }> {
+  const where: Prisma.SaleWhereInput = { ...baseWhere(f), ...(f.status ? { status: f.status } : {}) };
+  const sales = await prisma.sale.findMany({
+    where,
+    orderBy: { createdAt: "asc" },
+    take: SALES_EXPORT_LIMIT + 1,
+    include: {
+      employee: { select: { name: true } },
+      customer: { select: { name: true } },
+      discountCode: { select: { code: true } },
+      payments: { select: { method: true, amount: true } },
+      items: { select: { quantity: true } },
+    },
+  });
+  const truncated = sales.length > SALES_EXPORT_LIMIT;
+  return {
+    truncated,
+    rows: sales.slice(0, SALES_EXPORT_LIMIT).map((s) => {
+      const byMethod: Record<PaymentMethod, number> = { EFECTIVO: 0, TARJETA: 0, TRANSFERENCIA: 0 };
+      for (const p of s.payments) byMethod[p.method] += p.amount.toNumber();
+      return {
+        folio: saleFolio(s.id),
+        createdAt: s.createdAt,
+        status: s.status,
+        orderType: s.orderType,
+        tableNumber: s.tableNumber,
+        customerName: s.customer?.name ?? null,
+        employeeName: s.employee.name,
+        itemCount: s.items.reduce((sum, i) => sum + i.quantity, 0),
+        subtotal: s.subtotal.toNumber(),
+        discountTotal: s.discountTotal.toNumber(),
+        taxAmount: s.taxAmount.toNumber(),
+        total: s.total.toNumber(),
+        tipAmount: s.tipAmount.toNumber(),
+        byMethod,
+        discountCode: s.discountCode?.code ?? null,
+        cancelReason: s.cancelReason,
+      };
+    }),
   };
 }
 
