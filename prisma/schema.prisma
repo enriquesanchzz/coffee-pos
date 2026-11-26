@@ -319,6 +319,9 @@ model Branch {
   birthdayCustomerPercent Int @default(0)
   birthdayPetPercent      Int @default(0)
   birthdayCouponValidDays Int @default(7)
+  // Días que la fecha de cumpleaños debe llevar registrada antes del
+  // festejo para dar cupón (anti-abuso). 0 = basta con que sea antes del día.
+  birthdayLeadDays        Int @default(30)
   // Descuentos: tope del descuento manual como % del subtotal (null = sin tope)
   maxManualDiscountPercent Int?
   // Inventario: qué pasa al vender sin insumos suficientes

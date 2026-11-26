@@ -7,6 +7,7 @@ CREATE TYPE "PetSpecies" AS ENUM ('PERRO', 'GATO', 'OTRO');
 
 -- AlterTable
 ALTER TABLE "branches" ADD COLUMN     "birthdayCouponValidDays" INTEGER NOT NULL DEFAULT 7,
+ADD COLUMN     "birthdayLeadDays" INTEGER NOT NULL DEFAULT 30,
 ADD COLUMN     "birthdayCustomerPercent" INTEGER NOT NULL DEFAULT 0,
 ADD COLUMN     "birthdayPetPercent" INTEGER NOT NULL DEFAULT 0;
 

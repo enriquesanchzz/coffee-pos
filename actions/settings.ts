@@ -258,6 +258,7 @@ export const updateBirthdaySettings = safeAction(async function updateBirthdaySe
   birthdayCustomerPercent: number;
   birthdayPetPercent: number;
   birthdayCouponValidDays: number;
+  birthdayLeadDays: number;
 }) {
   await requireConfigActor();
   await prisma.branch.update({
@@ -266,6 +267,7 @@ export const updateBirthdaySettings = safeAction(async function updateBirthdaySe
       birthdayCustomerPercent: wholeNumber(input.birthdayCustomerPercent, "El cupón de cumpleaños del cliente", 0, 100),
       birthdayPetPercent: wholeNumber(input.birthdayPetPercent, "El cupón de cumpleaños de la mascota", 0, 100),
       birthdayCouponValidDays: wholeNumber(input.birthdayCouponValidDays, "La vigencia del cupón de cumpleaños (días)", 1, 60),
+      birthdayLeadDays: wholeNumber(input.birthdayLeadDays, "Los días de anticipación de la fecha", 0, 365),
     },
   });
   // Si falla, los ajustes ya quedaron guardados y la revisión de cada hora
@@ -518,6 +520,7 @@ export const resetSettingsSection = safeAction(async function resetSettingsSecti
       birthdayCustomerPercent: d.birthdayCustomerPercent,
       birthdayPetPercent: d.birthdayPetPercent,
       birthdayCouponValidDays: d.birthdayCouponValidDays,
+      birthdayLeadDays: d.birthdayLeadDays,
     },
     descuentos: { maxManualDiscountPercent: d.maxManualDiscountPercent },
     inventario: { shortagePolicy: d.shortagePolicy },

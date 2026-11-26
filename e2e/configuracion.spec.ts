@@ -31,6 +31,7 @@ async function resetSettings() {
       birthdayCustomerPercent: 0,
       birthdayPetPercent: 0,
       birthdayCouponValidDays: 7,
+      birthdayLeadDays: 30,
       maxManualDiscountPercent: null,
       shortagePolicy: "CONFIRMAR",
       pinMaxAttempts: 5,
@@ -170,14 +171,15 @@ test.describe.serial("Configuración del sistema", () => {
     await page.getByLabel("Cliente: % en Cafetería").fill("12");
     await page.getByLabel("Mascota: % en Pet Shop").fill("8");
     await page.getByLabel("Vigencia (días)").fill("5");
+    await page.getByLabel("Fecha registrada con (días de anticipación)").fill("15");
     await save(page, 1);
     // El aviso "guardado" de la tarjeta anterior puede seguir en pantalla: se espera a la base.
     await expect
       .poll(async () => {
         const b = await db.branch.findUniqueOrThrow({ where: { id: "branch-principal" } });
-        return [b.birthdayCustomerPercent, b.birthdayPetPercent, b.birthdayCouponValidDays];
+        return [b.birthdayCustomerPercent, b.birthdayPetPercent, b.birthdayCouponValidDays, b.birthdayLeadDays];
       })
-      .toEqual([12, 8, 5]);
+      .toEqual([12, 8, 5, 15]);
 
     const tierName = `Oro E2E ${Date.now() % 100000}`;
     // En modo separado hay una sección de niveles por negocio.

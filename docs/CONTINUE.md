@@ -2320,13 +2320,14 @@ CRM-01, CRM-02 y la parte de cumpleaños de CRM-05 del POS híbrido.
   arrancar el servidor y cada hora; si la Mac estuvo apagada, se entregan al
   volver mientras sigan vigentes, con el mismo vencimiento. `BirthdayGrant`
   (único por festejado y año) evita duplicados.
-  - **Anti-abuso**: solo cuenta una fecha registrada **al menos 30 días
-    antes** del cumpleaños (`birthDateSetAt` en `Customer` y `Pet`; toda
+  - **Anti-abuso**: solo cuenta una fecha registrada con la anticipación que
+    elige el gerente (`Branch.birthdayLeadDays`, 30 días por defecto; 0 =
+    antes del día mismo) (`birthDateSetAt` en `Customer` y `Pet`; toda
     captura o cambio lo llena, null solo para fechas previas a la migración).
     Los cupones de mascota por cliente y año no pasan del número de mascotas
     con fecha, contando los de mascotas ya borradas. Tampoco hay cupón el
     mismo año en que nació. Riesgo que queda: alguien con permiso de clientes
-    puede inventar mascotas y esperar 30 días; se ve en Clientes → Cumpleaños.
+    puede inventar mascotas y esperar esos días; se ve en Clientes → Cumpleaños.
 - **Clientes → Cumpleaños** (`/clientes/cumpleanos`): próximos 30 días, con
   el cupón y un link de WhatsApp (`wa.me`) con el mensaje y el código. Es el
   paso manual hasta conectar WhatsApp Business.

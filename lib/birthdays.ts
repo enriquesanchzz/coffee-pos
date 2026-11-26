@@ -23,12 +23,13 @@ export type BirthdayConfig = {
   customerPercent: number;
   petPercent: number;
   validDays: number;
+  leadDays: number;
 };
 
 async function loadBirthdayConfig(): Promise<BirthdayConfig | null> {
   const branch = await prisma.branch.findUnique({
     where: { id: DEFAULT_BRANCH_ID },
-    select: { timeZone: true, birthdayCustomerPercent: true, birthdayPetPercent: true, birthdayCouponValidDays: true },
+    select: { timeZone: true, birthdayCustomerPercent: true, birthdayPetPercent: true, birthdayCouponValidDays: true, birthdayLeadDays: true },
   });
   if (!branch) return null;
   // "Hoy" es el de la sucursal (lib/time.ts), también fuera de una petición.
@@ -37,6 +38,7 @@ async function loadBirthdayConfig(): Promise<BirthdayConfig | null> {
     customerPercent: branch.birthdayCustomerPercent,
     petPercent: branch.birthdayPetPercent,
     validDays: Math.max(1, branch.birthdayCouponValidDays),
+    leadDays: Math.max(0, branch.birthdayLeadDays),
   };
 }
 
@@ -78,22 +80,20 @@ type Subject = {
   businessUnit: BusinessUnit;
 };
 
-// Días que la fecha de cumpleaños debe llevar registrada antes del festejo.
-export const BIRTHDATE_LEAD_DAYS = 30;
-
-// Un cumpleaños solo cuenta si la fecha se registró al menos
-// BIRTHDATE_LEAD_DAYS antes (capturar o cambiar la fecha, o dar de alta otra
+// Un cumpleaños solo cuenta si la fecha se registró al menos `leadDays`
+// antes (Configuración → Lealtad; 0 = antes del día mismo) (capturar o cambiar la fecha, o dar de alta otra
 // vez a una mascota con el cumpleaños de mañana, no saca cupón) y si de
 // verdad cumple años (no el mismo año en que nació). birthDateSetAt null =
 // fecha registrada antes de que existiera el campo (la migración); toda
 // captura o cambio posterior lo llena.
 export function qualifiesForCoupon(
   subject: { birthDate: Date; birthDateSetAt: Date | null },
-  occurrence: { day: string; year: number }
+  occurrence: { day: string; year: number },
+  leadDays: number
 ) {
   if (occurrence.year <= subject.birthDate.getUTCFullYear()) return false;
   if (!subject.birthDateSetAt) return true;
-  return subject.birthDateSetAt < zonedStartOfDay(addDaysToKey(occurrence.day, -BIRTHDATE_LEAD_DAYS));
+  return subject.birthDateSetAt < zonedStartOfDay(addDaysToKey(occurrence.day, -leadDays));
 }
 
 async function grantBirthdayCoupon(subject: Subject, occurrence: { day: string; year: number }, validDays: number) {
@@ -171,7 +171,7 @@ export async function issueDueBirthdayCoupons(now: Date = new Date()): Promise<n
     .map((s) => ({ subject: s, occurrence: activeBirthday(s.birthDate, todayKey, config.validDays) }))
     .filter(
       (d): d is { subject: Subject; occurrence: { day: string; year: number } } =>
-        d.occurrence !== null && qualifiesForCoupon(d.subject, d.occurrence)
+        d.occurrence !== null && qualifiesForCoupon(d.subject, d.occurrence, config.leadDays)
     );
   if (due.length === 0) return 0;
 

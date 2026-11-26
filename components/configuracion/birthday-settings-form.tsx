@@ -22,6 +22,7 @@ export function BirthdaySettingsForm({ initial }: { initial: BusinessSettings })
   const [customerPercent, setCustomerPercent] = useSyncedState(String(initial.birthdayCustomerPercent));
   const [petPercent, setPetPercent] = useSyncedState(String(initial.birthdayPetPercent));
   const [validDays, setValidDays] = useSyncedState(String(initial.birthdayCouponValidDays));
+  const [leadDays, setLeadDays] = useSyncedState(String(initial.birthdayLeadDays));
 
   return (
     <SettingsCard
@@ -32,11 +33,12 @@ export function BirthdaySettingsForm({ initial }: { initial: BusinessSettings })
           birthdayCustomerPercent: numberOrNaN(customerPercent),
           birthdayPetPercent: numberOrNaN(petPercent),
           birthdayCouponValidDays: numberOrNaN(validDays),
+          birthdayLeadDays: numberOrNaN(leadDays),
         })
       }
       onReset={() => resetSettingsSection("cumpleanos")}
     >
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="flex flex-col gap-1">
           <Label htmlFor="birthday-customer">Cliente: % en Cafetería</Label>
           <Input
@@ -73,11 +75,24 @@ export function BirthdaySettingsForm({ initial }: { initial: BusinessSettings })
             onChange={(e) => setValidDays(e.target.value)}
           />
         </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="birthday-lead">Fecha registrada con (días de anticipación)</Label>
+          <Input
+            id="birthday-lead"
+            type="number"
+            min="0"
+            max="365"
+            step="1"
+            value={leadDays}
+            onChange={(e) => setLeadDays(e.target.value)}
+          />
+        </div>
       </div>
       <p className="text-xs text-muted-foreground">
         0% = no se regala. El cupón vale desde el día del cumpleaños; si ese día el sistema estuvo apagado, se entrega en
-        cuanto vuelva a encender, con el mismo vencimiento. Solo aplica si la fecha de cumpleaños se registró al menos 30 días antes (una fecha capturada o cambiada después
-        no da cupón hasta el año siguiente), y como máximo un cupón por mascota registrada.
+        cuanto vuelva a encender, con el mismo vencimiento. Anti-abuso: solo da cupón una fecha de cumpleaños registrada con esos días de anticipación (una capturada o
+        cambiada después espera al año siguiente; 0 = basta con registrarla antes del día), y como máximo un cupón
+        por mascota registrada.
       </p>
     </SettingsCard>
   );

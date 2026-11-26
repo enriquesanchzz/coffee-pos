@@ -12,10 +12,15 @@ const RUN = Date.now() % 1000000;
 const TAG = `E2E-Masc-${RUN}`;
 const day = (key: string) => new Date(`${key}T00:00:00.000Z`);
 
-async function setBirthdays(customerPercent: number, petPercent: number, validDays = 7) {
+async function setBirthdays(customerPercent: number, petPercent: number, validDays = 7, leadDays = 30) {
   await db.branch.update({
     where: { id: BRANCH },
-    data: { birthdayCustomerPercent: customerPercent, birthdayPetPercent: petPercent, birthdayCouponValidDays: validDays },
+    data: {
+      birthdayCustomerPercent: customerPercent,
+      birthdayPetPercent: petPercent,
+      birthdayCouponValidDays: validDays,
+      birthdayLeadDays: leadDays,
+    },
   });
 }
 
@@ -146,6 +151,14 @@ test.describe.serial("Cupones de cumpleaños (motor)", () => {
     expect(await couponOf(petSubject(newborn.id), 2026)).toBeNull();
     expect(await couponOf(petSubject(recent.id), 2026)).toBeNull();
     expect(await couponOf(petSubject(old.id), 2026)).not.toBeNull();
+
+    // El gerente baja la anticipación a 5 días: la de hace 10 ya alcanza;
+    // las capturadas el mismo día o durante la vigencia siguen sin cupón.
+    await setBirthdays(10, 15, 7, 5);
+    await issueDueBirthdayCoupons(NOW);
+    expect(await couponOf(petSubject(recent.id), 2026)).not.toBeNull();
+    expect(await couponOf(petSubject(fresh.id), 2026)).toBeNull();
+    expect(await couponOf(petSubject(late.id), 2026)).toBeNull();
   });
 
   test("borrar y volver a dar de alta una mascota no abre lugar para otro cupón ese año", async () => {
