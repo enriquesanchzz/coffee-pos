@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CatalogCategory, CatalogProduct, ExtraIngredientOption } from "@/lib/catalog";
 import type { CustomerOption } from "@/lib/customers";
 import Link from "next/link";
@@ -27,6 +27,7 @@ export function PosWorkspace({
   employee,
   customers,
   extraIngredientOptions,
+  allergenSuggestions,
 }: {
   catalog: CatalogCategory[];
   branchId: string;
@@ -34,7 +35,20 @@ export function PosWorkspace({
   employee: { id: string; name: string };
   customers: CustomerOption[];
   extraIngredientOptions: ExtraIngredientOption[];
+  allergenSuggestions: string[];
 }) {
+  // Lo que contiene cada variante (de su producto), para la alerta de
+  // alergias del carrito.
+  const allergensByVariant = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const category of catalog) {
+      for (const product of category.products) {
+        if (product.allergenTags.length === 0) continue;
+        for (const variant of product.variants) map[variant.id] = product.allergenTags;
+      }
+    }
+    return map;
+  }, [catalog]);
   const [selectedProduct, setSelectedProduct] = useState<CatalogProduct | null>(null);
   const [productDialogOpen, setProductDialogOpen] = useState(false);
   const [movementOpen, setMovementOpen] = useState(false);
@@ -217,6 +231,8 @@ export function PosWorkspace({
             shiftId={shiftId}
             employeeId={employee.id}
             customers={customers}
+            allergensByVariant={allergensByVariant}
+            allergenSuggestions={allergenSuggestions}
             activeTabSummary={activeTabSummary}
             onTabChanged={() => {
               // Se lee el id activo del store al momento (no del render):

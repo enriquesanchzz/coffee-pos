@@ -5,6 +5,7 @@ import { activePrograms, PROGRAM_LABELS } from "@/lib/loyalty-points";
 import { variantLabel } from "@/lib/coupon-label";
 import { ConfigSectionPage } from "@/components/configuracion/config-section-page";
 import { LoyaltySettingsForm } from "@/components/configuracion/loyalty-settings-form";
+import { BirthdaySettingsForm } from "@/components/configuracion/birthday-settings-form";
 import { LoyaltyTiersEditor } from "@/components/configuracion/loyalty-tiers-editor";
 
 export const metadata: Metadata = { title: "Configuración · Lealtad" };
@@ -41,7 +42,7 @@ export default async function ConfiguracionLealtadPage() {
     <ConfigSectionPage
       employeeName={actor.name}
       title="Lealtad"
-      description="Puntos por compra, niveles con recompensa y cupón de bienvenida."
+      description="Puntos por compra, niveles con recompensa, cupón de bienvenida y cupones de cumpleaños."
     >
       <LoyaltySettingsForm initial={settings} />
       <LoyaltyTiersEditor
@@ -69,6 +70,7 @@ export default async function ConfiguracionLealtadPage() {
           description: `$${v.price.toFixed(2)}`,
         }))}
       />
+      <BirthdaySettingsForm initial={settings} />
     </ConfigSectionPage>
   );
 }

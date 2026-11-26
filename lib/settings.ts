@@ -39,6 +39,9 @@ export async function getBusinessSettings(): Promise<BusinessSettings> {
     loyaltyResetAtTopLevel: branch.loyaltyResetAtTopLevel,
     welcomeCouponPercent: branch.welcomeCouponPercent,
     welcomeCouponValidDays: branch.welcomeCouponValidDays,
+    birthdayCustomerPercent: branch.birthdayCustomerPercent,
+    birthdayPetPercent: branch.birthdayPetPercent,
+    birthdayCouponValidDays: branch.birthdayCouponValidDays,
     maxManualDiscountPercent: branch.maxManualDiscountPercent,
     shortagePolicy: SHORTAGE_POLICIES.includes(branch.shortagePolicy as ShortagePolicy)
       ? (branch.shortagePolicy as ShortagePolicy)

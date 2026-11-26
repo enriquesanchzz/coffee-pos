@@ -18,6 +18,8 @@ import { CancelSaleDialog } from "@/components/caja/cancel-sale-dialog";
 import type { ShiftSaleRow } from "@/lib/shift";
 import { isShortageError } from "@/lib/stock";
 import type { CustomerOption } from "@/lib/customers";
+import { findAllergyConflicts } from "@/lib/allergens";
+import { Alert } from "@/components/ui/alert";
 import { withActionErrors, NetworkError } from "@/lib/action-result";
 import { randomId } from "@/lib/id";
 
@@ -46,6 +48,8 @@ export function CartPanel({
   shiftId,
   employeeId,
   customers,
+  allergensByVariant,
+  allergenSuggestions,
   activeTabSummary,
   onTabChanged,
 }: {
@@ -53,6 +57,8 @@ export function CartPanel({
   shiftId: string;
   employeeId: string;
   customers: CustomerOption[];
+  allergensByVariant: Record<string, string[]>;
+  allergenSuggestions: string[];
   // Resumen de la cuenta que se está retomando (null = carrito normal).
   activeTabSummary: OpenTabDetail | null;
   onTabChanged: () => void;
@@ -131,6 +137,27 @@ export function CartPanel({
     setDomicilioAddress("");
     if (!activeTabId) shownTabId.current = null;
   }, [activeTabId]);
+
+  // Productos de la cuenta que contienen algo a lo que es alérgica una
+  // mascota del cliente (CRM-02). Solo avisa: puede ser para otra mascota.
+  const allergyConflicts = selectedCustomer
+    ? findAllergyConflicts(selectedCustomer.pets, [
+        ...(activeTabSummary?.items ?? []).map((item) => ({
+          key: item.id,
+          productName: item.productName,
+          allergenTags: item.allergenTags,
+        })),
+        ...lines.map((line) => ({
+          key: line.lineId,
+          productName: line.productName,
+          allergenTags: allergensByVariant[line.productVariantId] ?? [],
+        })),
+      ])
+    : [];
+  const conflictsByKey = new Map<string, string[]>();
+  for (const c of allergyConflicts) {
+    conflictsByKey.set(c.key, [...(conflictsByKey.get(c.key) ?? []), `${c.petName}: ${c.allergens.join(", ")}`]);
+  }
 
   // Confirmación de la última acción — venta cobrada o cuenta dejada
   // abierta — como popup modal (antes la venta se quedaba como un aviso
@@ -365,10 +392,23 @@ export function CartPanel({
           onDomicilioAddressChange={setDomicilioAddress}
           domicilioOrigen={domicilioOrigen}
           onDomicilioOrigenChange={setDomicilioOrigen}
+          allergenSuggestions={allergenSuggestions}
         />
       </div>
 
       <div className="flex-1 overflow-y-auto p-3">
+        {allergyConflicts.length > 0 && (
+          <Alert variant="warning" className="mb-3">
+            <p className="font-semibold">⚠ Alergias de las mascotas de {selectedCustomer?.name}</p>
+            <ul className="mt-1 list-disc pl-5">
+              {allergyConflicts.map((c) => (
+                <li key={`${c.key}-${c.petName}`}>
+                  {c.productName} contiene {c.allergens.join(", ")} (alergia de {c.petName})
+                </li>
+              ))}
+            </ul>
+          </Alert>
+        )}
         {activeTabSummary && (
           <div className="mb-4 flex flex-col gap-2">
             {/* Salir deja la cuenta en espera tal cual y vuelve a una venta
@@ -426,7 +466,13 @@ export function CartPanel({
               {activeTabSummary.items.map((item) => {
                 const isPending = pendingItemId === item.id;
                 return (
-                  <li key={item.id} className="rounded-xl border border-border p-3">
+                  <li
+                    key={item.id}
+                    className={cn(
+                      "rounded-xl border p-3",
+                      conflictsByKey.has(item.id) ? "border-amber-500 bg-amber-50/60 dark:bg-amber-950/30" : "border-border"
+                    )}
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="text-sm font-medium">
@@ -521,7 +567,13 @@ export function CartPanel({
 
         <ul className="flex flex-col gap-3">
           {lines.map((line) => (
-            <li key={line.lineId} className="flex gap-3 rounded-xl border border-border p-3">
+            <li
+              key={line.lineId}
+              className={cn(
+                "flex gap-3 rounded-xl border p-3",
+                conflictsByKey.has(line.lineId) ? "border-amber-500 bg-amber-50/60 dark:bg-amber-950/30" : "border-border"
+              )}
+            >
               <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
                 {line.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -537,6 +589,11 @@ export function CartPanel({
                     <p className="text-sm font-medium">
                       {line.productName} · {line.variantName}
                     </p>
+                    {conflictsByKey.has(line.lineId) && (
+                      <p className="text-xs font-medium text-amber-800 dark:text-amber-300">
+                        ⚠ Alergia — {conflictsByKey.get(line.lineId)!.join(" / ")}
+                      </p>
+                    )}
                     {(line.modifiers.length > 0 || line.extraIngredients.length > 0) && (
                       <p className="text-xs text-muted-foreground">
                         {[

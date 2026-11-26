@@ -22,10 +22,13 @@ export type CouponForLabel = {
   businessUnit: BusinessUnit | null;
   isReusable: boolean;
   productVariant: { name: string; temperature: VariantTemperature | null; product: { name: string } } | null;
+  // Cupón de cumpleaños (lib/birthdays.ts): del cliente, o de su mascota.
+  birthdayGrant?: { pet: { name: string } | null } | null;
 };
 
 export const COUPON_LABEL_INCLUDE = {
   productVariant: { select: { name: true, temperature: true, product: { select: { name: true } } } },
+  birthdayGrant: { select: { pet: { select: { name: true } } } },
 } as const;
 
 export function couponLabel(code: CouponForLabel): string {
@@ -34,5 +37,6 @@ export function couponLabel(code: CouponForLabel): string {
   const amount =
     code.type === "PORCENTAJE" ? `${value}%` : code.type === "MONTO_FIJO" ? `$${value.toFixed(2)}` : `precio final $${value.toFixed(2)}`;
   const scope = code.businessUnit ? ` en ${BUSINESS_UNIT_LABELS[code.businessUnit]}` : "";
-  return `${amount}${scope}${code.isReusable ? " (permanente)" : ""}`;
+  const birthday = code.birthdayGrant ? ` · cumpleaños${code.birthdayGrant.pet ? ` de ${code.birthdayGrant.pet.name}` : ""}` : "";
+  return `${amount}${scope}${code.isReusable ? " (permanente)" : ""}${birthday}`;
 }

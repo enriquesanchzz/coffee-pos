@@ -237,6 +237,7 @@ export type VariantRecipeDetail = {
   productId: string;
   productName: string;
   productImageUrl: string | null;
+  productAllergenTags: string[];
   productType: ProductType;
   categoryName: string;
   temperature: VariantTemperature | null;
@@ -309,6 +310,7 @@ export async function getVariantRecipeDetail(
     productId: variant.product.id,
     productName: variant.product.name,
     productImageUrl: variant.product.imageUrl,
+    productAllergenTags: variant.product.allergenTags,
     productType: variant.product.type,
     categoryName: variant.product.category.name,
     temperature: variant.temperature,

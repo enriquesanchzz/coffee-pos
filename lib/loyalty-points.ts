@@ -130,7 +130,7 @@ export async function lockLoyaltyConfig(tx: Tx, mode: "shared" | "exclusive") {
 }
 
 // Código legible del cupón (32^6 combinaciones; el @unique lo respalda).
-function rewardCode(prefix: string) {
+export function rewardCode(prefix: string) {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let suffix = "";
   for (let i = 0; i < 6; i++) suffix += alphabet[randomInt(alphabet.length)];

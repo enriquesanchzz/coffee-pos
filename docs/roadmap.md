@@ -10,7 +10,7 @@ migraciones destructivas entre fases.
 | 1 | MVP operativo | POS (venta + descuento de inventario por receta), Caja (turnos), Inventario básico, UI de recetas, Administración (auth + permisos reales). | ✅ Completa — ver `docs/CONTINUE.md` para el detalle de cada módulo. |
 | 2 | Cadena de suministro | Compras: proveedores, órdenes de compra, recepción de mercancía, transferencias entre sucursales, conteos físicos. | ✅ Completa — ver `docs/CONTINUE.md` para el detalle de cada pieza. |
 | 3 | Business Intelligence | Reportes de utilidad, costo de recetas en el tiempo, reportes de inventario, estadísticas consolidadas. | ✅ Completa — ver `docs/CONTINUE.md` para el detalle de cada reporte. |
-| 4 | Retención de clientes | Programa de lealtad (puntos por negocio, niveles con recompensa; antes sellos), códigos de descuento. | ✅ Completa — ver `docs/CONTINUE.md`. |
+| 4 | Retención de clientes | Programa de lealtad (puntos por negocio, niveles con recompensa; antes sellos), códigos de descuento, mascotas con alertas de alergias y cupones de cumpleaños. | ✅ Completa — ver `docs/CONTINUE.md`. |
 | 5 | Multi-sucursal | Habilitar selección de sucursal en la UI, reportes consolidados (`REPORTE_CONSOLIDADO_VER`), gestión de sucursales (`SUCURSAL_GESTIONAR`). | ⚪ Pendiente — el modelo ya es multi-sucursal desde Fase 0; falta remover el `DEFAULT_BRANCH_ID` hardcodeado y construir la UI de selección/gestión. |
 
 ## Fase 1 — cerrada

@@ -12,6 +12,8 @@ import { VariantFields } from "./variant-fields";
 import { withActionErrors } from "@/lib/action-result";
 import { useToast } from "@/components/ui/toast";
 import { ImageUpload } from "@/components/ui/image-upload";
+import { TagInput } from "@/components/ui/tag-input";
+import { COMMON_ALLERGENS } from "@/lib/allergens";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const updateVariantRecipe = withActionErrors(updateVariantRecipeAction);
@@ -57,6 +59,7 @@ export function EditRecipeForm({
 }) {
   const [name, setName] = useState(detail.variantName);
   const [imageUrl, setImageUrl] = useState(detail.productImageUrl ?? "");
+  const [allergenTags, setAllergenTags] = useState(detail.productAllergenTags);
   const [price, setPrice] = useState(String(detail.price));
   const [isActive, setIsActive] = useState(detail.isActive);
   const [temperature, setTemperature] = useState<VariantTemperature | "">(detail.temperature ?? "");
@@ -97,6 +100,7 @@ export function EditRecipeForm({
           isActive,
           lines: lineInputs,
           imageUrl,
+          allergenTags,
           temperature: temperature || undefined,
           sizeOz: sizeOz ? Number(sizeOz) : undefined,
           milkOptions: modifierOptionsToInput(milkOptions),
@@ -131,6 +135,15 @@ export function EditRecipeForm({
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <ImageUpload id="product-image" label="Foto del producto (opcional)" value={imageUrl} onChange={setImageUrl} />
+          <TagInput
+            id="product-allergens"
+            label="Contiene (alérgenos para mascotas, opcional)"
+            value={allergenTags}
+            onChange={setAllergenTags}
+            suggestions={COMMON_ALLERGENS}
+            placeholder="ej. pollo — Enter para agregar"
+            hint="Si una mascota del cliente es alérgica a algo de aquí, caja muestra un aviso. Aplica a todas las variantes."
+          />
 
           <VariantFields
             idPrefix="variant"

@@ -313,6 +313,12 @@ model Branch {
   loyaltyResetAtTopLevel     Boolean     @default(false)
   welcomeCouponPercent   Int  @default(10) // 0 = no se crea cupón de bienvenida
   welcomeCouponValidDays Int? // null = sin vencimiento
+  // Cupones de cumpleaños (lib/birthdays.ts): % para el cliente (en
+  // Cafetería) y para su mascota (en Pet Shop, a nombre del dueño). 0 = no
+  // se regala. Valen desde el día del cumpleaños durante N días.
+  birthdayCustomerPercent Int @default(0)
+  birthdayPetPercent      Int @default(0)
+  birthdayCouponValidDays Int @default(7)
   // Descuentos: tope del descuento manual como % del subtotal (null = sin tope)
   maxManualDiscountPercent Int?
   // Inventario: qué pasa al vender sin insumos suficientes
@@ -597,6 +603,9 @@ model Product {
   // Es un flag explícito y no se infiere de `type` porque hay productos de
   // REVENTA_DIRECTA que también son perecederos (café en grano, postres).
   isPerishable Boolean       @default(true)
+  // Lo que contiene, para las alertas de alergias de mascotas en el POS
+  // (lib/allergens.ts), ej. ["pollo", "lácteos"].
+  allergenTags String[]      @default([])
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
 
@@ -1232,10 +1241,69 @@ enum CustomerGender {
   OTRO
 }
 
+enum PetSpecies {
+  PERRO
+  GATO
+  OTRO
+}
+
+// Mascota de un cliente (un tutor puede tener varias).
+model Pet {
+  id         String     @id @default(cuid())
+  customerId String
+  customer   Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  name       String
+  species    PetSpecies @default(PERRO)
+  breed      String?
+  weightKg   Decimal?   @db.Decimal(5, 2)
+  birthDate  DateTime?  @db.Date
+  // Cuándo se capturó o cambió birthDate: un cupón de cumpleaños solo se
+  // entrega si la fecha ya estaba registrada antes de ese cumpleaños (que
+  // no se pueda capturar "hoy" para sacar un cupón, lib/birthdays.ts).
+  // null = registrada antes de que existiera este campo.
+  birthDateSetAt DateTime?
+  photoUrl   String?
+  // Alergias y restricciones (ej. "pollo", "lácteos"): el POS avisa si se
+  // agrega un producto que las contiene (Product.allergenTags).
+  allergies  String[]   @default([])
+  notes      String?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  birthdayGrants BirthdayGrant[]
+
+  @@index([customerId])
+  @@map("pets")
+}
+
+// Cupón de cumpleaños ya entregado: uno por festejado y año.
+model BirthdayGrant {
+  id             String        @id @default(cuid())
+  // "CLIENTE:<customerId>" o "MASCOTA:<petId>" — una sola llave para el
+  // @@unique (un petId null no cuenta como repetido en Postgres).
+  subjectKey     String
+  year           Int
+  customerId     String
+  customer       Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  petId          String?
+  pet            Pet?          @relation(fields: [petId], references: [id], onDelete: SetNull)
+  discountCodeId String?       @unique
+  discountCode   DiscountCode? @relation(fields: [discountCodeId], references: [id], onDelete: SetNull)
+  createdAt      DateTime      @default(now())
+
+  @@unique([subjectKey, year])
+  @@map("birthday_grants")
+}
+
 model Customer {
   id        String    @id @default(cuid())
   name      String
   birthDate DateTime?
+  // Cuándo se capturó o cambió birthDate: un cupón de cumpleaños solo se
+  // entrega si la fecha ya estaba registrada antes de ese cumpleaños (que
+  // no se pueda capturar "hoy" para sacar un cupón, lib/birthdays.ts).
+  // null = registrada antes de que existiera este campo.
+  birthDateSetAt DateTime?
   // Opcional a propósito — los clientes ya registrados no lo tienen, y no
   // se pide de vuelta a fuerza. Solo para las estadísticas de
   // Administración → Clientes (ver lib/customers.ts getCustomerStats).
@@ -1251,6 +1319,8 @@ model Customer {
   loyaltyBalances LoyaltyBalance[]
   loyaltyEntries  LoyaltyPointsEntry[]
   tierGrants      LoyaltyTierGrant[]
+  pets            Pet[]
+  birthdayGrants  BirthdayGrant[]
 
   @@map("customers")
 }
@@ -1514,6 +1584,7 @@ model DiscountCode {
 
   sales     Sale[]
   tierGrant LoyaltyTierGrant?
+  birthdayGrant BirthdayGrant?
 
   @@unique([customerId, loyaltyProgram])
 

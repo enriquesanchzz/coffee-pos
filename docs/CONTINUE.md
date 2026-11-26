@@ -2298,6 +2298,47 @@ nada los lee; se pueden quitar en una migración posterior.
 5. `npm run loyalty:convert` — recalcula los puntos desde el historial;
    idempotente por venta, se puede repetir.
 
+## Mascotas, alergias y cupones de cumpleaños (rama `mascotas`)
+
+CRM-01, CRM-02 y la parte de cumpleaños de CRM-05 del POS híbrido.
+
+- **Mascotas** (`Pet`, `actions/pets.ts`): un cliente tiene varias; nombre,
+  especie, raza, peso, cumpleaños (`@db.Date`), foto (almacenamiento propio),
+  alergias y notas. Se editan en `/clientes/[id]` y desde caja (botón
+  "Mascotas" junto al cliente elegido), con el permiso `CLIENTE_CONFIGURAR`
+  (el mismo de dar de alta un cliente en el POS).
+- **Alergias** (`lib/allergens.ts`): `Pet.allergies` contra
+  `Product.allergenTags` (se capturan en el formulario del producto). Se
+  comparan sin acentos ni mayúsculas; no hay sinónimos, por eso los campos
+  sugieren las palabras ya usadas. Caja solo **avisa** (alerta ámbar y la
+  línea marcada), no bloquea: el producto puede ser para otra mascota.
+  Revisa el carrito y lo ya registrado en una cuenta abierta.
+- **Cupones de cumpleaños** (`lib/birthdays.ts`): el cliente recibe un % en
+  Cafetería y cada mascota un % en Pet Shop (a nombre del dueño); Configuración
+  → Lealtad → "Cupones de cumpleaños" (apagados por defecto). Valen desde el
+  día del cumpleaños durante N días. `instrumentation.ts` los revisa al
+  arrancar el servidor y cada hora; si la Mac estuvo apagada, se entregan al
+  volver mientras sigan vigentes, con el mismo vencimiento. `BirthdayGrant`
+  (único por festejado y año) evita duplicados.
+  - **Anti-abuso**: solo cuenta una fecha registrada **al menos 30 días
+    antes** del cumpleaños (`birthDateSetAt` en `Customer` y `Pet`; toda
+    captura o cambio lo llena, null solo para fechas previas a la migración).
+    Los cupones de mascota por cliente y año no pasan del número de mascotas
+    con fecha, contando los de mascotas ya borradas. Tampoco hay cupón el
+    mismo año en que nació. Riesgo que queda: alguien con permiso de clientes
+    puede inventar mascotas y esperar 30 días; se ve en Clientes → Cumpleaños.
+- **Clientes → Cumpleaños** (`/clientes/cumpleanos`): próximos 30 días, con
+  el cupón y un link de WhatsApp (`wa.me`) con el mensaje y el código. Es el
+  paso manual hasta conectar WhatsApp Business.
+
+### Desplegar
+
+1. Respaldo: `~/.coffee-pos-scripts/backup-db.sh`.
+2. `npx prisma migrate deploy` (`20261126100000_pets_birthdays`, solo agrega).
+3. `npx prisma generate && npm run build`, luego `pm2 restart coffee-pos`.
+4. Activar los % en Configuración → Lealtad → "Cupones de cumpleaños" y
+   capturar lo que contiene cada producto de Pet Shop (pollo, res…).
+
 
 
 Fases 1, 2, 3 y 4 están cerradas, más los ajustes "Cambios Punto de Venta",

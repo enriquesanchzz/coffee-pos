@@ -1,3 +1,4 @@
+import type { PetSpecies, Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { getLoyaltySummary, PROGRAM_LABELS, type LoyaltyProgramSummary } from "./loyalty-points";
 import { couponLabel, COUPON_LABEL_INCLUDE } from "./coupon-label";
@@ -76,6 +77,36 @@ export type CustomerTopProduct = {
   quantityPurchased: number;
 };
 
+export type CustomerPet = {
+  id: string;
+  name: string;
+  species: PetSpecies;
+  breed: string | null;
+  weightKg: number | null;
+  birthDate: string | null; // "YYYY-MM-DD"
+  photoUrl: string | null;
+  allergies: string[];
+  notes: string | null;
+};
+
+type PetRow = Prisma.PetGetPayload<object>;
+
+export function toCustomerPet(pet: PetRow): CustomerPet {
+  return {
+    id: pet.id,
+    name: pet.name,
+    species: pet.species,
+    breed: pet.breed,
+    weightKg: pet.weightKg?.toNumber() ?? null,
+    birthDate: pet.birthDate?.toISOString().slice(0, 10) ?? null,
+    photoUrl: pet.photoUrl,
+    allergies: pet.allergies,
+    notes: pet.notes,
+  };
+}
+
+export const PET_ORDER = [{ createdAt: "asc" as const }, { id: "asc" as const }];
+
 export type CustomerDetail = {
   id: string;
   name: string;
@@ -84,6 +115,7 @@ export type CustomerDetail = {
   address: string | null;
   birthDate: string | null;
   gender: string | null;
+  pets: CustomerPet[];
   loyalty: LoyaltyProgramSummary[];
   // Todos los cupones personales (bienvenida, recompensas, cumpleaños).
   coupons: { code: string; label: string; status: "disponible" | "usado" | "vencido" | "inactivo" }[];
@@ -101,6 +133,7 @@ export async function getCustomerDetail(id: string): Promise<CustomerDetail> {
     where: { id },
     include: {
       loyaltyCard: { include: { tier: true } },
+      pets: { orderBy: PET_ORDER },
       discountCodes: { include: COUPON_LABEL_INCLUDE, orderBy: { id: "desc" } },
       loyaltyEntries: { orderBy: { createdAt: "desc" }, take: 30 },
       sales: { where: { status: "COMPLETADA" }, orderBy: { createdAt: "desc" }, take: 20 },
@@ -142,6 +175,7 @@ export async function getCustomerDetail(id: string): Promise<CustomerDetail> {
     address: customer.address,
     birthDate: customer.birthDate?.toISOString() ?? null,
     gender: customer.gender,
+    pets: customer.pets.map(toCustomerPet),
     loyalty: await getLoyaltySummary(prisma, customer.id),
     coupons: customer.discountCodes.map((c) => ({
       code: c.code,
@@ -187,14 +221,20 @@ export type CustomerOption = {
   // necesita mostrar.
   birthDate: string | null;
   gender: string | null;
+  // Para las alertas de alergias y el aviso de cumpleaños en el POS.
+  pets: CustomerPet[];
 };
 
-export async function getCustomerOptions(): Promise<CustomerOption[]> {
-  const customers = await prisma.customer.findMany({
-    orderBy: { name: "asc" },
-    include: { loyaltyCard: { select: { code: true } } },
-  });
-  return customers.map((customer) => ({
+// Lo que hace falta cargar de un cliente para toCustomerOption.
+export const CUSTOMER_OPTION_INCLUDE = {
+  loyaltyCard: { select: { code: true } },
+  pets: { orderBy: PET_ORDER },
+} satisfies Prisma.CustomerInclude;
+
+export function toCustomerOption(
+  customer: Prisma.CustomerGetPayload<{ include: typeof CUSTOMER_OPTION_INCLUDE }>
+): CustomerOption {
+  return {
     id: customer.id,
     name: customer.name,
     phone: customer.phone,
@@ -202,7 +242,16 @@ export async function getCustomerOptions(): Promise<CustomerOption[]> {
     loyaltyCode: customer.loyaltyCard?.code ?? null,
     birthDate: customer.birthDate?.toISOString() ?? null,
     gender: customer.gender,
-  }));
+    pets: customer.pets.map(toCustomerPet),
+  };
+}
+
+export async function getCustomerOptions(): Promise<CustomerOption[]> {
+  const customers = await prisma.customer.findMany({
+    orderBy: { name: "asc" },
+    include: CUSTOMER_OPTION_INCLUDE,
+  });
+  return customers.map(toCustomerOption);
 }
 
 const AGE_BUCKETS = ["Menor de 18", "18-25", "26-35", "36-45", "46-55", "56+"] as const;
@@ -261,4 +310,14 @@ export async function getCustomerDemographics(): Promise<CustomerDemographics> {
       .map((bucket) => ({ bucket, count: byAgeBucket.get(bucket)! })),
     byGender: Array.from(byGender.entries()).map(([label, count]) => ({ label, count })),
   };
+}
+
+// Palabras de alergias ya usadas en productos y mascotas — sugerencias al
+// capturar, para que coincidan (la comparación es exacta, lib/allergens.ts).
+export async function getKnownAllergenTags(): Promise<string[]> {
+  const [products, pets] = await Promise.all([
+    prisma.product.findMany({ where: { NOT: { allergenTags: { isEmpty: true } } }, select: { allergenTags: true } }),
+    prisma.pet.findMany({ where: { NOT: { allergies: { isEmpty: true } } }, select: { allergies: true } }),
+  ]);
+  return Array.from(new Set([...products.flatMap((p) => p.allergenTags), ...pets.flatMap((p) => p.allergies)])).sort();
 }

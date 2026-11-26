@@ -75,6 +75,8 @@ export const createCustomer = safeAction(async function createCustomer(input: Cr
         email: normalizeEmail(input.email),
         address: input.address?.trim() || null,
         birthDate: input.birthDate ? new Date(input.birthDate) : null,
+        // Ver Customer.birthDateSetAt (cupones de cumpleaños).
+        birthDateSetAt: new Date(),
         gender: input.gender ?? null,
       },
     });
@@ -152,6 +154,20 @@ export const updateCustomer = safeAction(async function updateCustomer(input: Up
   await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "CLIENTE_CONFIGURAR");
   await validateContact(input, input.customerId);
 
+  // Ver Customer.birthDateSetAt: cambiar la fecha la "reinicia" para los
+  // cupones de cumpleaños.
+  const birthDate =
+    input.birthDate === undefined ? undefined : input.birthDate ? new Date(input.birthDate) : null;
+  let birthDateSetAt: Date | null | undefined;
+  if (birthDate !== undefined) {
+    const current = await prisma.customer.findUnique({ where: { id: input.customerId }, select: { birthDate: true } });
+    if ((current?.birthDate?.getTime() ?? null) !== (birthDate?.getTime() ?? null)) {
+      // También al borrarla: null queda solo para fechas anteriores a la
+      // migración (de confianza).
+      birthDateSetAt = new Date();
+    }
+  }
+
   await prisma.customer.update({
     where: { id: input.customerId },
     data: {
@@ -159,8 +175,8 @@ export const updateCustomer = safeAction(async function updateCustomer(input: Up
       phone: input.phone === undefined ? undefined : normalizePhoneMx(input.phone),
       email: input.email === undefined ? undefined : normalizeEmail(input.email),
       address: optionalText(input.address),
-      birthDate:
-        input.birthDate === undefined ? undefined : input.birthDate ? new Date(input.birthDate) : null,
+      birthDate,
+      birthDateSetAt,
       gender: input.gender,
     },
   });
