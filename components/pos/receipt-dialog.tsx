@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
@@ -8,6 +9,12 @@ import { formatCurrency } from "@/lib/utils";
 import { PAYMENT_METHOD_LABELS } from "@/lib/settings-shared";
 import type { SaleOrderType } from "@prisma/client";
 import type { SaleReceipt } from "./checkout-form";
+import type { SaleLoyaltySummary } from "@/lib/loyalty-points";
+import { fetchSaleLoyalty as fetchSaleLoyaltyAction } from "@/actions/pos";
+import { withActionErrors } from "@/lib/action-result";
+import { LoyaltySummaryBlock } from "@/components/receipts/loyalty-summary-block";
+
+const fetchSaleLoyalty = withActionErrors(fetchSaleLoyaltyAction);
 
 // Confirmación de "Dejar en espera" / "Agregar a la cuenta" — mismo
 // patrón de popup que SaleReceipt, para que esa acción también avise algo
@@ -34,15 +41,35 @@ function tabConfirmationLabel(tc: TabConfirmation): string {
 // que también se puede cerrar con Esc o clic afuera, y no se puede
 // confundir con el resto de la pantalla.
 export function ReceiptDialog({
+  employeeId,
   saleReceipt,
   tabConfirmation,
   onClose,
 }: {
+  employeeId: string;
   saleReceipt: SaleReceipt | null;
   tabConfirmation: TabConfirmation | null;
   onClose: () => void;
 }) {
   const open = saleReceipt !== null || tabConfirmation !== null;
+
+  // Puntos que ganó el cliente con esta venta (si la venta tiene cliente),
+  // para decírselo en el momento, además de en el ticket impreso.
+  const saleId = saleReceipt?.saleId ?? null;
+  const [loyalty, setLoyalty] = useState<SaleLoyaltySummary | null>(null);
+  useEffect(() => {
+    setLoyalty(null);
+    if (!saleId) return;
+    let cancelled = false;
+    fetchSaleLoyalty({ employeeId, saleId })
+      .then((summary) => {
+        if (!cancelled) setLoyalty(summary);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [saleId, employeeId]);
 
   return (
     <Dialog
@@ -90,6 +117,11 @@ export function ReceiptDialog({
                       Pagado con {saleReceipt.payments[0]?.method === "TARJETA" ? "tarjeta" : "transferencia"}.
                     </p>
                   )
+                )}
+                {loyalty && (
+                  <div className="mt-2 rounded-md border border-border bg-muted/40 p-2">
+                    <LoyaltySummaryBlock summary={loyalty} compact />
+                  </div>
                 )}
               </>
             ) : tabConfirmation ? (

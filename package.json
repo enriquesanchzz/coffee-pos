@@ -14,6 +14,7 @@
     "prisma:seed": "prisma db seed",
     "prisma:seed-demo": "dotenv -e .env -- ts-node prisma/seed-demo.ts",
     "prisma:seed-lapso": "dotenv -e .env -- ts-node prisma/seed-lapso.ts",
+    "loyalty:convert": "dotenv -e .env -- ts-node -T -O '{\"module\":\"commonjs\",\"moduleResolution\":\"node\"}' prisma/convert-loyalty-points.ts",
     "test:e2e": "playwright test"
   },
   "prisma": {

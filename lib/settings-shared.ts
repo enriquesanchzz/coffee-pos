@@ -1,4 +1,4 @@
-import type { PaymentMethod } from "@prisma/client";
+import type { LoyaltyMode, PaymentMethod } from "@prisma/client";
 
 // Ajustes del sistema que antes estaban fijos en el código. Viven como
 // columnas de Branch (sucursal única, DEFAULT_BRANCH_ID); lib/settings.ts
@@ -40,6 +40,10 @@ export type BusinessSettings = {
   defaultOpeningCash: number;
   cashDifferenceTolerance: number;
   loyaltyStampsPerReward: number;
+  loyaltyMode: LoyaltyMode;
+  loyaltyPointsPer100Cafe: number;
+  loyaltyPointsPer100PetShop: number;
+  loyaltyResetAtTopLevel: boolean;
   welcomeCouponPercent: number;
   welcomeCouponValidDays: number | null;
   maxManualDiscountPercent: number | null;
@@ -76,6 +80,10 @@ export const DEFAULT_SETTINGS: BusinessSettings = {
   defaultOpeningCash: 0,
   cashDifferenceTolerance: 0,
   loyaltyStampsPerReward: 5,
+  loyaltyMode: "SEPARADO",
+  loyaltyPointsPer100Cafe: 5,
+  loyaltyPointsPer100PetShop: 1,
+  loyaltyResetAtTopLevel: false,
   welcomeCouponPercent: 10,
   welcomeCouponValidDays: null,
   maxManualDiscountPercent: null,

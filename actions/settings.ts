@@ -10,7 +10,8 @@ import { validateThemeSettings, type ThemeSettings } from "@/lib/theme";
 import { setAppTimeZone } from "@/lib/time";
 import { normalizePhoneMx, normalizeRfc, normalizeImageUrl } from "@/lib/validation";
 import { DEFAULT_SETTINGS, isValidTimeZone, type ShortagePolicy, type TaxMode } from "@/lib/settings-shared";
-import type { PaymentMethod } from "@prisma/client";
+import type { LoyaltyProgram, LoyaltyRewardType, PaymentMethod, Prisma } from "@prisma/client";
+import { activePrograms, loadLoyaltyConfig, lockLoyaltyConfig, syncAllPermanentDiscounts } from "@/lib/loyalty-points";
 
 // Configuración global simple (hoy solo el % de food cost objetivo) —
 // exclusiva de Administración, mismo patrón que actions/employees.ts:
@@ -220,62 +221,138 @@ export const updateShiftSettings = safeAction(async function updateShiftSettings
 });
 
 export const updateLoyaltySettings = safeAction(async function updateLoyaltySettings(input: {
-  loyaltyStampsPerReward: number;
+  loyaltyMode: string;
+  loyaltyPointsPer100Cafe: number;
+  loyaltyPointsPer100PetShop: number;
+  loyaltyResetAtTopLevel: boolean;
   welcomeCouponPercent: number;
   welcomeCouponValidDays: number | null;
 }) {
   await requireConfigActor();
-  await prisma.branch.update({
+  if (input.loyaltyMode !== "SEPARADO" && input.loyaltyMode !== "GLOBAL") {
+    throw new Error("Elige cómo se acumulan los puntos.");
+  }
+  const loyaltyMode = input.loyaltyMode;
+  await saveLoyaltyChange((tx) => tx.branch.update({
     where: { id: DEFAULT_BRANCH_ID },
     data: {
-      loyaltyStampsPerReward: wholeNumber(input.loyaltyStampsPerReward, "Los sellos por recompensa", 1, 20),
+      loyaltyMode,
+      loyaltyPointsPer100Cafe: wholeNumber(input.loyaltyPointsPer100Cafe, "Los puntos por $100 en Cafetería", 0, 1000),
+      loyaltyPointsPer100PetShop: wholeNumber(input.loyaltyPointsPer100PetShop, "Los puntos por $100 en Pet Shop", 0, 1000),
+      loyaltyResetAtTopLevel: Boolean(input.loyaltyResetAtTopLevel),
       welcomeCouponPercent: wholeNumber(input.welcomeCouponPercent, "El cupón de bienvenida", 0, 100),
       welcomeCouponValidDays:
         input.welcomeCouponValidDays === null
           ? null
           : wholeNumber(input.welcomeCouponValidDays, "La vigencia del cupón (días)", 1, 3650),
     },
-  });
+  }));
   revalidatePath("/", "layout");
 });
 
-// Niveles de lealtad (LoyaltyTier): antes solo existían en el seed.
+// Todo cambio a los ajustes o niveles de lealtad pasa por aquí: valida la
+// combinación resultante y pone al día los descuentos permanentes de todos
+// los clientes, en la misma transacción.
+async function saveLoyaltyChange(change: (tx: Prisma.TransactionClient) => Promise<unknown>) {
+  await prisma.$transaction(
+    async (tx) => {
+      await lockLoyaltyConfig(tx, "exclusive");
+      await change(tx);
+      const [config, tiers] = await Promise.all([
+        loadLoyaltyConfig(tx),
+        tx.loyaltyTier.findMany({ orderBy: { pointsRequired: "asc" } }),
+      ]);
+      if (config.resetAtTopLevel) {
+        for (const program of activePrograms(config.mode)) {
+          const programTiers = tiers.filter((t) => t.program === program);
+          const topPoints = programTiers.at(-1)?.pointsRequired;
+          const top = programTiers.find((t) => t.pointsRequired === topPoints && t.rewardType === "DESCUENTO_PERMANENTE");
+          if (top) {
+            throw new Error(
+              `Con "Reiniciar al llegar al último nivel", el nivel más alto (${top.name}) no puede ser un descuento permanente: se perdería al momento de ganarlo. Cambia su recompensa o desactiva el reinicio.`
+            );
+          }
+        }
+      }
+      await syncAllPermanentDiscounts(tx);
+    },
+    { timeout: 60_000 }
+  );
+}
+
+// Niveles de lealtad por programa (Cafetería / Pet Shop / Global): puntos
+// para alcanzarlo y la recompensa que entrega (ver lib/loyalty-points.ts).
 export const saveLoyaltyTier = safeAction(async function saveLoyaltyTier(input: {
   id?: string;
+  program: string;
   name: string;
-  minLifetimeStamps: number;
+  pointsRequired: number;
   benefits: string;
+  rewardType: string;
+  rewardPercent: number | null;
+  rewardVariantId: string | null;
+  rewardValidDays: number | null;
 }) {
   await requireConfigActor();
+  const program = input.program as LoyaltyProgram;
+  if (!["CAFE", "PET_SHOP", "GLOBAL"].includes(program)) throw new Error("Programa de lealtad inválido.");
+  const rewardType = input.rewardType as LoyaltyRewardType;
+  if (!["NINGUNA", "CUPON_PORCENTAJE", "PRODUCTO_GRATIS", "DESCUENTO_PERMANENTE"].includes(rewardType)) {
+    throw new Error("Elige qué recompensa da el nivel.");
+  }
   const name = input.name.trim();
   if (!name) throw new Error("El nombre del nivel es obligatorio.");
   if (name.length > 40) throw new Error("El nombre del nivel puede tener hasta 40 caracteres.");
-  const minLifetimeStamps = wholeNumber(input.minLifetimeStamps, "Las compras para alcanzar el nivel", 0, 100_000);
+  // Un nivel con recompensa pide al menos 1 punto: con 0 (o el campo vacío)
+  // se le regalaría a cualquiera en su siguiente compra.
+  const pointsRequired = wholeNumber(
+    input.pointsRequired,
+    "Los puntos para alcanzar el nivel",
+    rewardType === "NINGUNA" ? 0 : 1,
+    10_000_000
+  );
   const benefits = input.benefits.trim();
   if (benefits.length > 200) throw new Error("Los beneficios pueden tener hasta 200 caracteres.");
 
-  const duplicate = await prisma.loyaltyTier.findFirst({
-    where: { name: { equals: name, mode: "insensitive" }, ...(input.id ? { id: { not: input.id } } : {}) },
-  });
-  if (duplicate) throw new Error(`Ya existe un nivel llamado ${duplicate.name}.`);
-
-  const data = { name, minLifetimeStamps, benefits: benefits || null };
-  if (input.id) {
-    await prisma.loyaltyTier.update({ where: { id: input.id }, data });
-  } else {
-    await prisma.loyaltyTier.create({ data });
+  const needsPercent = rewardType === "CUPON_PORCENTAJE" || rewardType === "DESCUENTO_PERMANENTE";
+  const rewardPercent = needsPercent ? wholeNumber(input.rewardPercent ?? NaN, "El % de descuento", 1, 100) : null;
+  let rewardVariantId: string | null = null;
+  if (rewardType === "PRODUCTO_GRATIS") {
+    if (!input.rewardVariantId) throw new Error("Elige qué producto se regala.");
+    const variant = await prisma.productVariant.findUnique({
+      where: { id: input.rewardVariantId },
+      include: { product: { select: { isActive: true } } },
+    });
+    if (!variant) throw new Error("Ese producto ya no existe.");
+    if (!variant.isActive || !variant.product.isActive) throw new Error("Ese producto está inactivo: no se puede regalar.");
+    rewardVariantId = variant.id;
   }
+  const isOneTime = rewardType === "CUPON_PORCENTAJE" || rewardType === "PRODUCTO_GRATIS";
+  const rewardValidDays =
+    isOneTime && input.rewardValidDays !== null ? wholeNumber(input.rewardValidDays, "La vigencia del cupón (días)", 1, 3650) : null;
+
+  const duplicate = await prisma.loyaltyTier.findFirst({
+    where: { program, name: { equals: name, mode: "insensitive" }, ...(input.id ? { id: { not: input.id } } : {}) },
+  });
+  if (duplicate) throw new Error(`Ya existe un nivel llamado ${duplicate.name} en este programa.`);
+
+  const data = { program, name, pointsRequired, benefits: benefits || null, rewardType, rewardPercent, rewardVariantId, rewardValidDays };
+  const { id } = input;
+  await saveLoyaltyChange((tx) =>
+    id ? tx.loyaltyTier.update({ where: { id }, data }) : tx.loyaltyTier.create({ data })
+  );
   revalidatePath("/configuracion/lealtad");
 });
 
-// Borrar un nivel: las tarjetas que lo tenían quedan sin nivel hasta su
-// siguiente compra, que recalcula el nivel con los que queden.
+// Borrar un nivel: el nivel de cada cliente se calcula al vuelo con los
+// que queden. Los cupones de un uso ya entregados se respetan; el descuento
+// permanente baja al del nivel que le quede al cliente, o se desactiva.
 export const deleteLoyaltyTier = safeAction(async function deleteLoyaltyTier(id: string) {
   await requireConfigActor();
-  await prisma.$transaction([
-    prisma.loyaltyCard.updateMany({ where: { tierId: id }, data: { tierId: null } }),
-    prisma.loyaltyTier.delete({ where: { id } }),
-  ]);
+  await saveLoyaltyChange(async (tx) => {
+    await tx.loyaltyCard.updateMany({ where: { tierId: id }, data: { tierId: null } });
+    await tx.loyaltyTier.delete({ where: { id } });
+  });
   revalidatePath("/configuracion/lealtad");
 });
 
@@ -406,7 +483,10 @@ export const resetSettingsSection = safeAction(async function resetSettingsSecti
       cashDifferenceTolerance: d.cashDifferenceTolerance,
     },
     lealtad: {
-      loyaltyStampsPerReward: d.loyaltyStampsPerReward,
+      loyaltyMode: d.loyaltyMode,
+      loyaltyPointsPer100Cafe: d.loyaltyPointsPer100Cafe,
+      loyaltyPointsPer100PetShop: d.loyaltyPointsPer100PetShop,
+      loyaltyResetAtTopLevel: d.loyaltyResetAtTopLevel,
       welcomeCouponPercent: d.welcomeCouponPercent,
       welcomeCouponValidDays: d.welcomeCouponValidDays,
     },
@@ -415,6 +495,10 @@ export const resetSettingsSection = safeAction(async function resetSettingsSecti
     seguridad: { pinMaxAttempts: d.pinMaxAttempts, pinLockMinutes: d.pinLockMinutes, sessionHours: d.sessionHours },
     impuestos: { taxMode: d.taxMode, taxRatePercent: d.taxRatePercent },
   }[section];
-  await prisma.branch.update({ where: { id: DEFAULT_BRANCH_ID }, data });
+  if (section === "lealtad") {
+    await saveLoyaltyChange((tx) => tx.branch.update({ where: { id: DEFAULT_BRANCH_ID }, data }));
+  } else {
+    await prisma.branch.update({ where: { id: DEFAULT_BRANCH_ID }, data });
+  }
   revalidatePath("/", "layout");
 });

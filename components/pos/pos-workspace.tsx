@@ -101,14 +101,23 @@ export function PosWorkspace({
       setActiveTabSummary(null);
       return;
     }
+    // Una respuesta lenta de una cuenta que ya se dejó no debe pisar a la
+    // actual (traería a su cliente).
+    let cancelled = false;
     getTabDetail(activeTabId)
-      .then(setActiveTabSummary)
+      .then((detail) => {
+        if (!cancelled) setActiveTabSummary(detail);
+      })
       .catch(() => {
+        if (cancelled) return;
         // La cuenta ya no existe o se cobró en otra caja (p. ej. al
         // recuperar un carrito guardado): se vuelve a una venta normal.
         setActiveTabSummary(null);
         useCartStore.getState().setActiveTabId(null);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [activeTabId]);
 
   return (

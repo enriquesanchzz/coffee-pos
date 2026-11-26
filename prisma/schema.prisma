@@ -33,6 +33,31 @@ enum IngredientKind {
   // descuenta directo del inventario — ver Recipe.kind = COMPUESTO
 }
 
+enum LoyaltyMode {
+  SEPARADO
+  GLOBAL
+}
+
+enum LoyaltyProgram {
+  CAFE
+  PET_SHOP
+  GLOBAL
+}
+
+enum LoyaltyRewardType {
+  NINGUNA
+  CUPON_PORCENTAJE
+  PRODUCTO_GRATIS
+  DESCUENTO_PERMANENTE
+}
+
+enum LoyaltyEntryReason {
+  VENTA
+  CANCELACION
+  CONVERSION
+  REINICIO
+}
+
 enum BusinessUnit {
   CAFE
   PET_SHOP
@@ -273,7 +298,19 @@ model Branch {
   defaultOpeningCash      Decimal @default(0) @db.Decimal(10, 2)
   cashDifferenceTolerance Decimal @default(0) @db.Decimal(10, 2) // diferencia de corte permitida sin motivo
   // Lealtad
-  loyaltyStampsPerReward Int  @default(5)
+  loyaltyStampsPerReward Int  @default(5) // legado: sellos, reemplazado por puntos (ver LoyaltyBalance)
+  // Lealtad por puntos (Configuración → Lealtad). Puntos por cada $100
+  // cobrados (después de descuentos, sin propina) en cada negocio. En modo
+  // SEPARADO cada negocio tiene su saldo y sus niveles; en GLOBAL se suman
+  // en un solo saldo. Siempre se llevan los tres saldos (ver
+  // lib/loyalty-points.ts), así cambiar de modo no pierde nada.
+  loyaltyMode                LoyaltyMode @default(SEPARADO)
+  loyaltyPointsPer100Cafe    Int         @default(5)
+  loyaltyPointsPer100PetShop Int         @default(1)
+  // true = al llegar al último nivel los puntos vuelven a 0 (el excedente
+  // se conserva) y los niveles se pueden volver a ganar. false = los
+  // puntos se acumulan para siempre y el nivel es un estatus.
+  loyaltyResetAtTopLevel     Boolean     @default(false)
   welcomeCouponPercent   Int  @default(10) // 0 = no se crea cupón de bienvenida
   welcomeCouponValidDays Int? // null = sin vencimiento
   // Descuentos: tope del descuento manual como % del subtotal (null = sin tope)
@@ -606,6 +643,8 @@ model ProductVariant {
   saleItems         SaleItem[]
   comboItems        ComboItem[]
   promotionVariants PromotionVariant[]
+  loyaltyTierRewards LoyaltyTier[]
+  discountCodes      DiscountCode[]
 
   @@map("product_variants")
 }
@@ -1209,6 +1248,9 @@ model Customer {
   loyaltyCard   LoyaltyCard?
   sales         Sale[]
   discountCodes DiscountCode[]
+  loyaltyBalances LoyaltyBalance[]
+  loyaltyEntries  LoyaltyPointsEntry[]
+  tierGrants      LoyaltyTierGrant[]
 
   @@map("customers")
 }
@@ -1230,15 +1272,88 @@ model LoyaltyCard {
   @@map("loyalty_cards")
 }
 
+// Nivel de un programa de lealtad: se alcanza al juntar `pointsRequired`
+// puntos en ese programa y, al alcanzarlo, se entrega su recompensa como
+// cupón personal (ver lib/loyalty-points.ts).
 model LoyaltyTier {
-  id               String   @id @default(cuid())
-  name             String   @unique
-  minLifetimeStamps Int // umbral acumulado histórico para alcanzar el nivel
-  benefits         String?
+  id             String            @id @default(cuid())
+  program        LoyaltyProgram    @default(CAFE)
+  name           String
+  pointsRequired Int               @default(0)
+  // Legado (visitas). Se conserva para que la versión anterior de la app
+  // siga cobrando entre `migrate deploy` y el reinicio, y para poder
+  // regresar a ella; se quita en una migración posterior.
+  minLifetimeStamps Int            @default(0)
+  benefits       String? // texto libre que ve el cliente
+  rewardType     LoyaltyRewardType @default(NINGUNA)
+  rewardPercent  Int? // CUPON_PORCENTAJE / DESCUENTO_PERMANENTE
+  rewardVariantId String? // PRODUCTO_GRATIS
+  rewardVariant   ProductVariant?  @relation(fields: [rewardVariantId], references: [id])
+  rewardValidDays Int? // cupones de un uso; null = sin vencimiento
 
-  cards LoyaltyCard[]
+  cards  LoyaltyCard[] // legado (LoyaltyCard.tierId, de la época de sellos)
+  grants LoyaltyTierGrant[]
 
+  @@unique([program, name])
   @@map("loyalty_tiers")
+}
+
+// Saldo de puntos de un cliente en un programa. Se llevan CAFE, PET_SHOP y
+// GLOBAL (la suma) siempre, sin importar el modo.
+model LoyaltyBalance {
+  id             String         @id @default(cuid())
+  customerId     String
+  customer       Customer       @relation(fields: [customerId], references: [id])
+  program        LoyaltyProgram
+  points         Int            @default(0) // del ciclo actual (= lifetime si no se reinicia)
+  lifetimePoints Int            @default(0)
+  cycle          Int            @default(0) // vueltas completas (loyaltyResetAtTopLevel)
+  updatedAt      DateTime       @updatedAt
+
+  @@unique([customerId, program])
+  @@map("loyalty_balances")
+}
+
+// Bitácora de movimientos de puntos — historial del cliente y, más
+// adelante, la cola de avisos por WhatsApp (notifiedAt).
+model LoyaltyPointsEntry {
+  id         String             @id @default(cuid())
+  customerId String
+  customer   Customer           @relation(fields: [customerId], references: [id])
+  program    LoyaltyProgram
+  points     Int // negativo en cancelaciones y reinicios
+  reason     LoyaltyEntryReason
+  cycle      Int? // REINICIO: ciclo que se cerró (para poder deshacerlo)
+  saleId     String?
+  sale       Sale?              @relation(fields: [saleId], references: [id])
+  createdAt  DateTime           @default(now())
+  notifiedAt DateTime?
+
+  @@index([customerId, createdAt])
+  @@index([saleId])
+  @@map("loyalty_points_entries")
+}
+
+// Nivel cruzado por una compra (una vez por ciclo) y el cupón con que se
+// entregó su recompensa. Guarda el programa y el umbral de ese momento:
+// editar o borrar el nivel después no cambia si este cupón se ganó.
+model LoyaltyTierGrant {
+  id             String         @id @default(cuid())
+  customerId     String
+  customer       Customer       @relation(fields: [customerId], references: [id])
+  tierId         String?
+  tier           LoyaltyTier?   @relation(fields: [tierId], references: [id], onDelete: SetNull)
+  program        LoyaltyProgram
+  pointsRequired Int
+  cycle          Int
+  saleId         String?
+  sale           Sale?         @relation(fields: [saleId], references: [id])
+  discountCodeId String?       @unique
+  discountCode   DiscountCode? @relation(fields: [discountCodeId], references: [id])
+  createdAt      DateTime      @default(now())
+
+  @@unique([customerId, tierId, cycle])
+  @@map("loyalty_tier_grants")
 }
 
 // =========================================================================
@@ -1290,6 +1405,8 @@ model Sale {
   discountCode DiscountCode? @relation(fields: [discountCodeId], references: [id])
   discountCodeId String?
   manualDiscount ManualDiscount?
+  loyaltyEntries LoyaltyPointsEntry[]
+  tierGrants     LoyaltyTierGrant[]
 
   @@map("sales")
 }
@@ -1379,7 +1496,26 @@ model DiscountCode {
   // Subcategoría para el módulo Promociones — ver DiscountCodeCategory.
   category DiscountCodeCategory?
 
-  sales Sale[]
+  // Alcance (cupones de lealtad y de cumpleaños): solo descuenta las
+  // líneas de ese negocio; null = toda la cuenta.
+  businessUnit BusinessUnit?
+  // Producto gratis: descuenta el precio de una pieza de esta variante si
+  // está en la cuenta (type/value no se usan).
+  productVariantId String?
+  // Restrict: con SetNull, un cupón de "100% de este producto" se volvería
+  // 100% de toda la cuenta si se borra la variante.
+  productVariant   ProductVariant? @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
+  // Cupón personal reusable (descuento permanente de un nivel): no se
+  // marca usado.
+  isReusable Boolean @default(false)
+  // Descuento permanente de este programa: uno por cliente; su % y si está
+  // activo los decide el nivel actual (syncPermanentDiscounts).
+  loyaltyProgram LoyaltyProgram?
+
+  sales     Sale[]
+  tierGrant LoyaltyTierGrant?
+
+  @@unique([customerId, loyaltyProgram])
 
   @@map("discount_codes")
 }

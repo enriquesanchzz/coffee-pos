@@ -11,9 +11,15 @@ import { LoyaltyActions } from "@/components/clientes/loyalty-actions";
 import { formatCurrency } from "@/lib/utils";
 import { formatDateTime } from "@/lib/time";
 import { orNotFound } from "@/lib/not-found";
-import { getBusinessSettings } from "@/lib/settings";
 
 export const metadata: Metadata = { title: "Detalle de cliente" };
+
+const POINTS_REASON_LABELS: Record<string, string> = {
+  VENTA: "compra",
+  CANCELACION: "venta anulada",
+  CONVERSION: "conversión de sellos",
+  REINICIO: "reinicio de ciclo",
+};
 
 export default async function DetalleClientePage({
   params,
@@ -28,7 +34,7 @@ export default async function DetalleClientePage({
   }
 
   const { id } = await params;
-  const [customer, settings] = await Promise.all([orNotFound(getCustomerDetail(id)), getBusinessSettings()]);
+  const customer = await orNotFound(getCustomerDetail(id));
 
   return (
     <AuthenticatedShell isAdmin employeeName={employee.name}>
@@ -40,15 +46,63 @@ export default async function DetalleClientePage({
               <CardTitle>Lealtad</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-3 text-sm">
-              <div className="flex items-center justify-between">
-                <p>{customer.stamps % settings.loyaltyStampsPerReward} de {settings.loyaltyStampsPerReward} sellos</p>
-                <p className="text-muted-foreground">{customer.tierName ?? "sin nivel"}</p>
-              </div>
-              {customer.welcomeCoupon && (
-                <p className="text-muted-foreground">
-                  Cupón de bienvenida <span className="font-mono">{customer.welcomeCoupon.code}</span> ·{" "}
-                  {customer.welcomeCoupon.used ? "ya usado" : "disponible"}
-                </p>
+              {customer.loyalty.map((p) => (
+                <div key={p.program} className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between">
+                    <p className="font-medium">{p.label}</p>
+                    <p>
+                      <span className="font-semibold">{p.points} pts</span>
+                      <span className="text-muted-foreground"> · {p.tier ? `nivel ${p.tier.name}` : "sin nivel"}</span>
+                    </p>
+                  </div>
+                  {p.nextTier && (
+                    <>
+                      <div className="h-2 overflow-hidden rounded-full bg-muted" aria-hidden>
+                        <div
+                          className="h-full bg-primary"
+                          style={{ width: `${Math.min(100, (p.points / p.nextTier.pointsRequired) * 100)}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Faltan {p.nextTier.missing} pts para {p.nextTier.name}
+                      </p>
+                    </>
+                  )}
+                </div>
+              ))}
+
+              {customer.coupons.length > 0 && (
+                <div className="flex flex-col gap-1 border-t pt-3">
+                  <p className="font-medium">Cupones</p>
+                  {customer.coupons.map((c) => (
+                    <p key={c.code} className="flex justify-between gap-2">
+                      <span>
+                        {c.label} <span className="font-mono text-xs text-muted-foreground">{c.code}</span>
+                      </span>
+                      <span className={c.status === "disponible" ? "text-emerald-700 dark:text-emerald-400" : "text-muted-foreground"}>
+                        {c.status}
+                      </span>
+                    </p>
+                  ))}
+                </div>
+              )}
+
+              {customer.pointsHistory.length > 0 && (
+                <details className="border-t pt-3">
+                  <summary className="cursor-pointer font-medium">Movimientos de puntos</summary>
+                  <ul className="mt-2 flex flex-col gap-1">
+                    {customer.pointsHistory.map((e) => (
+                      <li key={e.id} className="flex justify-between gap-2 text-xs">
+                        <span className="text-muted-foreground">
+                          {formatDateTime(e.createdAt)} · {e.label} · {POINTS_REASON_LABELS[e.reason] ?? e.reason}
+                        </span>
+                        <span className={e.points < 0 ? "text-destructive" : ""}>
+                          {e.points > 0 ? `+${e.points}` : e.points}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
               )}
               {customer.loyaltyCode && (
                 <LoyaltyActions

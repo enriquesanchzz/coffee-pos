@@ -8,6 +8,9 @@ import { formatCurrency } from "@/lib/utils";
 import { formatDateTime } from "@/lib/time";
 import { TicketPaper, TicketDivider, TicketRow } from "@/components/receipts/ticket-paper";
 import { TicketActions } from "@/components/receipts/ticket-actions";
+import { LoyaltySummaryBlock } from "@/components/receipts/loyalty-summary-block";
+import { prisma } from "@/lib/prisma";
+import { getSaleLoyaltySummary } from "@/lib/loyalty-points";
 
 export const metadata: Metadata = { title: "Ticket de venta" };
 
@@ -22,7 +25,15 @@ export default async function SaleTicketPage({ params }: { params: Promise<{ sal
   if (!employee) redirect("/");
 
   const { saleId } = await params;
-  const [sale, settings] = await Promise.all([getSaleReceiptDetail(saleId), getBusinessSettings()]);
+  const [sale, settings, saleCustomer] = await Promise.all([
+    getSaleReceiptDetail(saleId),
+    getBusinessSettings(),
+    prisma.sale.findUnique({ where: { id: saleId }, select: { customerId: true } }),
+  ]);
+  const loyalty =
+    sale.status === "COMPLETADA" && saleCustomer?.customerId
+      ? await getSaleLoyaltySummary(prisma, saleId, saleCustomer.customerId)
+      : null;
 
   return (
     <div className="min-h-screen bg-muted/30 py-6">
@@ -76,6 +87,13 @@ export default async function SaleTicketPage({ params }: { params: Promise<{ sal
         {sale.payments.map((payment, i) => (
           <TicketRow key={i} label={PAYMENT_METHOD_LABELS[payment.method]} value={formatCurrency(payment.amount)} />
         ))}
+
+        {loyalty && (
+          <>
+            <TicketDivider />
+            <LoyaltySummaryBlock summary={loyalty} />
+          </>
+        )}
 
         <TicketDivider />
         <p className="text-center">{settings.ticketFooterMessage || DEFAULT_TICKET_FOOTER_MESSAGE}</p>
