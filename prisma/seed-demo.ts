@@ -580,10 +580,10 @@ async function main() {
 
   // Sin UI de gestión (ver docs/CONTINUE.md) — igual que los roles, es una
   // decisión de negocio que se siembra, no algo que se edite seguido.
-  const nivelesLealtad: { id: string; name: string; minLifetimeStamps: number; benefits?: string }[] = [
-    { id: "tier-regular", name: "Regular", minLifetimeStamps: 0 },
-    { id: "tier-frecuente", name: "Frecuente", minLifetimeStamps: 10, benefits: "10% de descuento en bebidas frías" },
-    { id: "tier-vip", name: "VIP", minLifetimeStamps: 30, benefits: "Bebida de cortesía en tu cumpleaños" },
+  const nivelesLealtad: { id: string; name: string; pointsRequired: number; benefits?: string }[] = [
+    { id: "tier-regular", name: "Regular", pointsRequired: 0 },
+    { id: "tier-frecuente", name: "Frecuente", pointsRequired: 50, benefits: "10% de descuento en bebidas frías" },
+    { id: "tier-vip", name: "VIP", pointsRequired: 150, benefits: "Bebida de cortesía en tu cumpleaños" },
   ];
 
   for (const tier of nivelesLealtad) {

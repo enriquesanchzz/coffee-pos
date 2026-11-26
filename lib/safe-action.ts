@@ -37,7 +37,7 @@ const UNIQUE_MESSAGES: Record<string, string> = {
   "DiscountCode:code": "Ya existe un código de descuento con ese nombre.",
   "IngredientCategory:name": "Ya existe una categoría de insumos con ese nombre.",
   "ProductCategory:name": "Ya existe una categoría de productos con ese nombre.",
-  "LoyaltyTier:name": "Ya existe un nivel de lealtad con ese nombre.",
+  "LoyaltyTier:program,name": "Ya existe un nivel con ese nombre en este programa.",
   "IngredientSupplier:ingredientId,supplierId": "Ese insumo ya está ligado a este proveedor.",
   "PromotionVariant:promotionId,productVariantId": "Ese producto ya está en la promoción.",
 };

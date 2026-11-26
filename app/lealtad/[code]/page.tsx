@@ -22,12 +22,8 @@ export default async function TarjetaLealtadPage({
   const { code } = await params;
   // Tarjeta inexistente -> 404 real (ver not-found.tsx de esta ruta).
   const [card, settings] = await Promise.all([orNotFound(getPublicLoyaltyCard(code)), getBusinessSettings()]);
-  // Sellos por recompensa: Configuración → Lealtad.
-  const stampsPerReward = settings.loyaltyStampsPerReward;
-
   const qrSvg = await QRCode.toString(card.code, { type: "svg", width: 180, margin: 1 });
   const firstName = card.customerName.trim().split(" ")[0];
-  const filledStamps = card.stamps % stampsPerReward;
 
   return (
     <div className="flex min-h-screen flex-col items-center bg-muted/30 px-4 py-10">
@@ -40,32 +36,43 @@ export default async function TarjetaLealtadPage({
 
         <div className="mt-6 flex justify-center" dangerouslySetInnerHTML={{ __html: qrSvg }} />
 
-        <div className="mt-6 flex flex-col items-center gap-2">
-          <p className="text-sm font-medium">{filledStamps} de {stampsPerReward} sellos</p>
-          <div className="flex flex-wrap justify-center gap-2">
-            {Array.from({ length: stampsPerReward }).map((_, i) => (
-              <span
-                key={i}
-                className={
-                  "h-6 w-6 rounded-full border-2 " +
-                  (i < filledStamps ? "border-primary bg-primary" : "border-border bg-transparent")
-                }
-              />
-            ))}
-          </div>
-          {card.tierName && (
-            <p className="mt-1 text-center text-xs text-muted-foreground">
-              Nivel {card.tierName}
-              {card.tierBenefits && ` — ${card.tierBenefits}`}
-            </p>
-          )}
+        <div className="mt-6 flex flex-col gap-4">
+          {card.programs.map((p) => (
+            <div key={p.program} className="flex flex-col gap-1">
+              <div className="flex items-baseline justify-between">
+                <p className="text-sm font-medium">{card.programs.length > 1 ? p.label : "Tus puntos"}</p>
+                <p className="text-lg font-semibold">{p.points} pts</p>
+              </div>
+              {p.nextTier ? (
+                <>
+                  <div className="h-2 overflow-hidden rounded-full bg-muted" aria-hidden>
+                    <div
+                      className="h-full rounded-full bg-primary"
+                      style={{ width: `${Math.min(100, (p.points / p.nextTier.pointsRequired) * 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {p.tier ? `Nivel ${p.tier.name} · ` : ""}te faltan {p.nextTier.missing} pts para {p.nextTier.name}
+                  </p>
+                </>
+              ) : (
+                p.tier && <p className="text-xs text-muted-foreground">Nivel {p.tier.name} — ¡el más alto!</p>
+              )}
+              {p.tier?.benefits && <p className="text-xs text-muted-foreground">{p.tier.benefits}</p>}
+            </div>
+          ))}
         </div>
 
-        {card.welcomeCoupon && (
-          <div className="mt-6 rounded-xl border border-primary/30 bg-primary/10 p-4 text-center">
-            <p className="text-sm font-semibold">🎉 {card.welcomeCoupon.value}% en tu próxima compra</p>
-            <p className="mt-1 text-xs text-muted-foreground">Muestra este código en caja:</p>
-            <p className="mt-1 font-mono text-sm font-semibold">{card.welcomeCoupon.code}</p>
+        {card.coupons.length > 0 && (
+          <div className="mt-6 flex flex-col gap-2 rounded-xl border border-primary/30 bg-primary/10 p-4 text-center">
+            <p className="text-sm font-semibold">🎉 Tus cupones</p>
+            {card.coupons.map((c) => (
+              <div key={c.code}>
+                <p className="text-sm">{c.label}</p>
+                <p className="font-mono text-sm font-semibold">{c.code}</p>
+              </div>
+            ))}
+            <p className="text-xs text-muted-foreground">Muéstralos en caja.</p>
           </div>
         )}
       </div>

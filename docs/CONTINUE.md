@@ -42,7 +42,7 @@ Configuración, una pantalla por tipo (`CONFIGURACION_SECTIONS` en
 | Caja y turnos | hora de cambio Matutino→Vespertino, fondo sugerido, tolerancia del corte | apertura y cierre de turno (`actions/shift.ts`) |
 | Impuestos | NINGUNO / INCLUIDO + tasa | checkout, comprobante, `Sale.taxAmount`, reporte de Utilidad |
 | Descuentos | tope del descuento manual (% del subtotal) | checkout y `actions/pos.ts` |
-| Lealtad | sellos por recompensa, cupón de bienvenida (% y vigencia), niveles (CRUD) | `applyLoyaltyStamp`, `createCustomer`, `/lealtad/[code]` |
+| Lealtad | modo (tarjetas separadas / puntos globales), puntos por $100 en Cafetería y en Pet Shop, reiniciar al último nivel, cupón de bienvenida, niveles por programa con recompensa | `lib/loyalty-points.ts`, `createCustomer`, ticket, `/lealtad/[code]` |
 | Inventario | política de venta con faltantes (CONFIRMAR / GERENTE / BLOQUEAR), mínimos por insumo (`ReorderPoint`) | checkout/cuentas, Inventario, Dashboard |
 | Costos y precios | % de food cost objetivo | precio sugerido |
 | Seguridad | intentos de PIN, minutos de bloqueo, duración de sesión | `lib/rate-limit.ts`, `lib/session.ts` (`issuedAt`) |
@@ -2250,7 +2250,55 @@ prefijo "QA" en sus líneas.
   documentado desde antes de este frente) — las ventas de prueba de la
   verificación de este frente quedaron en la base de datos real.
 
-## Próximos pasos recomendados (en orden)
+## Lealtad por puntos + unidad de negocio (ramas `unidad-negocio-fotos`, `lealtad-puntos`)
+
+Reemplaza los sellos. **Los sellos quedan en el código solo como legado**
+(`LoyaltyCard.stamps`, `LoyaltyTier.minLifetimeStamps`, `Branch.loyaltyStampsPerReward`):
+nada los lee; se pueden quitar en una migración posterior.
+
+- **Unidad de negocio**: `ProductCategory.businessUnit` (CAFE / PET_SHOP), se
+  elige en la categoría raíz y la heredan sus subcategorías.
+- **Puntos** (`lib/loyalty-points.ts`): por cada $100 cobrados (después de
+  descuentos, sin propina) en cada negocio. El descuento del ticket se le
+  carga solo a las líneas a las que aplicó (`netByUnit`). Siempre se llevan
+  tres saldos (CAFE, PET_SHOP, GLOBAL); el modo solo decide cuáles se usan.
+  `LoyaltyPointsEntry` es la bitácora y siempre suma el saldo.
+- **Niveles** por programa. Las recompensas de una vez (cupón de %, producto
+  gratis) se dan al **cruzar** el umbral con los puntos de una compra, una vez
+  por ciclo — nunca por puntos que ya se tenían (conversión, cambios de
+  configuración). El descuento permanente es un solo cupón reusable por
+  cliente y programa, derivado del nivel actual (`syncPermanentDiscounts`).
+- **Reinicio**: al llegar al nivel más alto, los puntos vuelven a 0 con el
+  excedente. El nivel más alto no puede ser descuento permanente con reinicio.
+- **Anular**: quita los puntos, deshace reinicios que ya no alcanzan y retira
+  cupones sin usar de niveles que se dejaron de alcanzar. Un cupón usado se
+  respeta y su nivel cuenta como entregado en ese ciclo (no se "cultiva").
+- **Concurrencia**: candado de fila del cliente (`FOR NO KEY UPDATE`) primero
+  en cada venta/anulación; candado de aviso compartido al dar/quitar puntos y
+  exclusivo al guardar ajustes de lealtad.
+- **Cupones con alcance** (`DiscountCode.businessUnit` / `productVariantId`):
+  el monto lo calcula siempre el servidor (`previewDiscountCode`). El cupón de
+  producto gratis se guarda como "$0" para que una versión anterior nunca lo
+  lea como 100% de la cuenta.
+- **Ticket y diálogo de venta**: puntos ganados, saldo y nivel por programa.
+- **Fotos propias**: `lib/uploads.ts`, en `~/.coffee-pos-data/uploads`, se
+  respaldan con la base (`~/.coffee-pos-scripts/backup-db.sh`).
+
+### Desplegar (en este orden)
+
+1. Respaldo: `~/.coffee-pos-scripts/backup-db.sh`.
+2. `npx prisma migrate deploy` — solo agrega columnas/tablas; la versión
+   anterior sigue cobrando con la base migrada. Usa `lock_timeout` de 10 s:
+   si falla por una venta en curso, `npx prisma migrate resolve --rolled-back
+   20261125100000_loyalty_points` y repetir.
+3. `npx prisma generate && npm run build`, luego `pm2 restart coffee-pos`.
+   **Nunca compilar una rama en esta carpeta fuera de un despliegue**: pm2
+   sirve desde aquí y `next build` borra `.next` al empezar.
+4. Configurar tasas y niveles en Configuración → Lealtad.
+5. `npm run loyalty:convert` — recalcula los puntos desde el historial;
+   idempotente por venta, se puede repetir.
+
+
 
 Fases 1, 2, 3 y 4 están cerradas, más los ajustes "Cambios Punto de Venta",
 "Reskin visual del POS", el menú real de LAPSO, "Mejoras avanzadas de

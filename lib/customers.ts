@@ -1,4 +1,6 @@
 import { prisma } from "./prisma";
+import { getLoyaltySummary, PROGRAM_LABELS, type LoyaltyProgramSummary } from "./loyalty-points";
+import { couponLabel, COUPON_LABEL_INCLUDE } from "./coupon-label";
 import { matchesSearch } from "./search";
 
 export type CustomerListItem = {
@@ -6,9 +8,15 @@ export type CustomerListItem = {
   name: string;
   phone: string | null;
   email: string | null;
-  stamps: number;
-  tierName: string | null;
+  // Resumen corto de puntos, ej. "Cafetería 45 pts · Fiel / Pet Shop 3 pts".
+  loyaltyLine: string;
 };
+
+function loyaltyLine(summary: LoyaltyProgramSummary[]) {
+  return summary
+    .map((p) => `${summary.length > 1 ? `${p.label} ` : ""}${p.points} pts${p.tier ? ` · ${p.tier.name}` : ""}`)
+    .join(" / ");
+}
 
 // Búsqueda (sin acentos, por nombre/teléfono/email/código de tarjeta) y
 // paginación para la lista de Clientes (QA-020). Se filtra en memoria con
@@ -42,14 +50,15 @@ export async function getCustomers(
     total: filtered.length,
     page: safePage,
     pageCount,
-    items: items.map((customer) => ({
-      id: customer.id,
-      name: customer.name,
-      phone: customer.phone,
-      email: customer.email,
-      stamps: customer.loyaltyCard?.stamps ?? 0,
-      tierName: customer.loyaltyCard?.tier?.name ?? null,
-    })),
+    items: await Promise.all(
+      items.map(async (customer) => ({
+        id: customer.id,
+        name: customer.name,
+        phone: customer.phone,
+        email: customer.email,
+        loyaltyLine: loyaltyLine(await getLoyaltySummary(prisma, customer.id)),
+      }))
+    ),
   };
 }
 
@@ -75,8 +84,10 @@ export type CustomerDetail = {
   address: string | null;
   birthDate: string | null;
   gender: string | null;
-  stamps: number;
-  tierName: string | null;
+  loyalty: LoyaltyProgramSummary[];
+  // Todos los cupones personales (bienvenida, recompensas, cumpleaños).
+  coupons: { code: string; label: string; status: "disponible" | "usado" | "vencido" | "inactivo" }[];
+  pointsHistory: { id: string; createdAt: string; label: string; points: number; reason: string }[];
   // Para las acciones de lealtad del detalle (ver tarjeta, reenviar por
   // WhatsApp) y el estado del cupón de bienvenida (QA-020).
   loyaltyCode: string | null;
@@ -90,7 +101,8 @@ export async function getCustomerDetail(id: string): Promise<CustomerDetail> {
     where: { id },
     include: {
       loyaltyCard: { include: { tier: true } },
-      discountCodes: { where: { code: { startsWith: "BIENVENIDA-" } }, take: 1 },
+      discountCodes: { include: COUPON_LABEL_INCLUDE, orderBy: { id: "desc" } },
+      loyaltyEntries: { orderBy: { createdAt: "desc" }, take: 30 },
       sales: { where: { status: "COMPLETADA" }, orderBy: { createdAt: "desc" }, take: 20 },
     },
   });
@@ -130,12 +142,30 @@ export async function getCustomerDetail(id: string): Promise<CustomerDetail> {
     address: customer.address,
     birthDate: customer.birthDate?.toISOString() ?? null,
     gender: customer.gender,
-    stamps: customer.loyaltyCard?.stamps ?? 0,
-    tierName: customer.loyaltyCard?.tier?.name ?? null,
+    loyalty: await getLoyaltySummary(prisma, customer.id),
+    coupons: customer.discountCodes.map((c) => ({
+      code: c.code,
+      label: couponLabel(c),
+      status: !c.isActive
+        ? "inactivo"
+        : c.usedAt && !c.isReusable
+          ? "usado"
+          : c.expiresAt && c.expiresAt < new Date()
+            ? "vencido"
+            : "disponible",
+    })),
+    pointsHistory: customer.loyaltyEntries.map((e) => ({
+      id: e.id,
+      createdAt: e.createdAt.toISOString(),
+      label: PROGRAM_LABELS[e.program],
+      points: e.points,
+      reason: e.reason,
+    })),
     loyaltyCode: customer.loyaltyCard?.code ?? null,
-    welcomeCoupon: customer.discountCodes[0]
-      ? { code: customer.discountCodes[0].code, used: customer.discountCodes[0].usedAt !== null }
-      : null,
+    welcomeCoupon: (() => {
+      const welcome = customer.discountCodes.find((c) => c.code.startsWith("BIENVENIDA-"));
+      return welcome ? { code: welcome.code, used: welcome.usedAt !== null } : null;
+    })(),
     sales: customer.sales.map((sale) => ({
       id: sale.id,
       createdAt: sale.createdAt.toISOString(),

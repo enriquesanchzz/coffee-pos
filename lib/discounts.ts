@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { couponLabel, COUPON_LABEL_INCLUDE } from "./coupon-label";
 import type { DiscountCodeCategory } from "@prisma/client";
 
 // Estado real del código (QA-008): antes solo se veía isActive, y un cupón
@@ -16,12 +17,16 @@ export type DiscountCodeListItem = {
   category: DiscountCodeCategory | null;
   // Cupón personal (ej. bienvenida): a quién pertenece.
   customerName: string | null;
+  // Recompensas de lealtad: su alcance ("10% en Cafetería") y que no se
+  // edita como un código normal (ver updateDiscountCode).
+  loyaltyLabel: string | null;
+  lock: "NIVEL" | "RECOMPENSA" | null;
 };
 
 export async function getDiscountCodes(): Promise<DiscountCodeListItem[]> {
   const codes = await prisma.discountCode.findMany({
     orderBy: { code: "asc" },
-    include: { customer: true },
+    include: { customer: true, ...COUPON_LABEL_INCLUDE },
   });
   const now = new Date();
   return codes.map((discountCode) => ({
@@ -32,7 +37,7 @@ export async function getDiscountCodes(): Promise<DiscountCodeListItem[]> {
     isActive: discountCode.isActive,
     status: !discountCode.isActive
       ? "INACTIVO"
-      : discountCode.customerId && discountCode.usedAt
+      : discountCode.customerId && discountCode.usedAt && !discountCode.isReusable
         ? "USADO"
         : discountCode.expiresAt && discountCode.expiresAt < now
           ? "VENCIDO"
@@ -40,5 +45,7 @@ export async function getDiscountCodes(): Promise<DiscountCodeListItem[]> {
     expiresAt: discountCode.expiresAt?.toISOString() ?? null,
     category: discountCode.category,
     customerName: discountCode.customer?.name ?? null,
+    loyaltyLabel: discountCode.businessUnit || discountCode.productVariantId || discountCode.loyaltyProgram ? couponLabel(discountCode) : null,
+    lock: discountCode.loyaltyProgram ? "NIVEL" : discountCode.businessUnit || discountCode.productVariantId ? "RECOMPENSA" : null,
   }));
 }

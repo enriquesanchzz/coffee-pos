@@ -81,8 +81,8 @@ export const createCustomer = safeAction(async function createCustomer(input: Cr
 
     // Tarjeta de lealtad creada de una vez (no hasta la primera venta,
     // como antes) para que /lealtad/[code] funcione desde el registro —
-    // ver lib/loyalty.ts. applyLoyaltyStamp (actions/pos.ts) sigue
-    // funcionando igual para clientes viejos sin tarjeta (upsert).
+    // ver lib/loyalty.ts. A clientes viejos sin tarjeta se les crea en su
+    // siguiente compra (awardSalePoints, lib/loyalty-points.ts).
     const loyaltyCard = await tx.loyaltyCard.create({
       data: { customerId: customer.id, stamps: 0 },
     });

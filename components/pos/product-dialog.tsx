@@ -288,6 +288,7 @@ export function ProductDialog({
           </div>
         ))}
 
+        {!product?.isRetail && (
         <div>
           <p className="mb-2 text-sm font-medium">Agregar otro ingrediente</p>
           <div className="flex items-end gap-2">
@@ -358,6 +359,7 @@ export function ProductDialog({
             </ul>
           )}
         </div>
+        )}
 
         <div className="flex flex-col gap-1">
           <Label htmlFor="item-notes">Notas (opcional)</Label>

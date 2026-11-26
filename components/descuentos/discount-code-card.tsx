@@ -31,7 +31,7 @@ export function DiscountCodeCard({
           {label}
         </Badge>
       </div>
-      <p className="text-sm text-muted-foreground">{describeValue(discountCode.type, discountCode.value)}</p>
+      <p className="text-sm text-muted-foreground">{discountCode.loyaltyLabel ?? describeValue(discountCode.type, discountCode.value)}</p>
       {discountCode.customerName && (
         <p className="break-words text-xs text-muted-foreground">Cupón de: {discountCode.customerName}</p>
       )}

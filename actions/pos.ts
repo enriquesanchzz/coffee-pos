@@ -10,6 +10,7 @@ import {
   ManualDiscountReason,
   SaleOrderType,
   DomicilioOrigen,
+  type BusinessUnit,
   type VariantTemperature,
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -21,6 +22,10 @@ import { includedTax, PAYMENT_METHOD_LABELS } from "@/lib/settings-shared";
 import { zonedClock } from "@/lib/time";
 import { unitLabel } from "@/lib/utils";
 import { SHORTAGE_ERROR_PREFIX } from "@/lib/stock";
+import { BUSINESS_UNIT_LABELS } from "@/lib/business-unit";
+import { variantLabel } from "@/lib/coupon-label";
+import type { CustomerOption } from "@/lib/customers";
+import { awardSalePoints, getSaleLoyaltySummary, lockCustomer, revertSalePoints, withdrawReleasedCouponIfUnearned, type SaleLoyaltySummary } from "@/lib/loyalty-points";
 
 export type CreateSaleExtraIngredientInput = {
   ingredientId: string;
@@ -136,10 +141,55 @@ function computeDiscount(
 // usado dentro de la misma transacción de la venta — si la venta
 // termina fallando por otra razón, la transacción entera se revierte
 // junto con esta marca. Compartido por createSale y closeTab.
-async function validateAndConsumeDiscountCode(
-  tx: Prisma.TransactionClient,
-  input: { discountCodeId: string; customerId?: string; subtotal: Prisma.Decimal }
+// Línea de la cuenta vista por un cupón: si es "descontable" (no trae ya
+// una promoción automática), de qué negocio es y su precio por pieza.
+export type DiscountLine = {
+  productVariantId: string | null;
+  businessUnit: BusinessUnit;
+  unitPrice: Prisma.Decimal;
+  variantPrice: Prisma.Decimal | null;
+  lineTotal: Prisma.Decimal;
+  discountable: boolean;
+};
+
+// Sobre qué monto aplica un cupón: toda la cuenta descontable, solo las
+// líneas de su negocio (businessUnit) o una pieza de su producto
+// (productVariantId — precio de lista de la variante, sin extras).
+async function discountBaseForCode(
+  tx: Prisma.TransactionClient | typeof prisma,
+  code: { businessUnit: BusinessUnit | null; productVariantId: string | null },
+  lines: DiscountLine[]
 ): Promise<Prisma.Decimal> {
+  const discountable = lines.filter((l) => l.discountable);
+  if (code.productVariantId) {
+    const line = discountable.find((l) => l.productVariantId === code.productVariantId);
+    if (!line && lines.some((l) => l.productVariantId === code.productVariantId)) {
+      throw new Error("El producto de este cupón ya trae una promoción en esta cuenta: no se acumulan.");
+    }
+    if (!line) {
+      const variant = await tx.productVariant.findUnique({
+        where: { id: code.productVariantId },
+        include: { product: { select: { name: true } } },
+      });
+      const label = variant ? `${variant.product.name} (${variantLabel(variant)})` : "el producto del cupón";
+      throw new Error(`Este cupón es para ${label}: agrégalo a la cuenta.`);
+    }
+    const price = line.variantPrice ?? line.unitPrice;
+    return Prisma.Decimal.min(price, line.unitPrice);
+  }
+  const base = discountable
+    .filter((l) => !code.businessUnit || l.businessUnit === code.businessUnit)
+    .reduce((sum, l) => sum.add(l.lineTotal), new Prisma.Decimal(0));
+  if (code.businessUnit && base.lessThanOrEqualTo(0)) {
+    throw new Error(`Este cupón es solo para productos de ${BUSINESS_UNIT_LABELS[code.businessUnit]}.`);
+  }
+  return base;
+}
+
+async function checkDiscountCode(
+  tx: Prisma.TransactionClient | typeof prisma,
+  input: { discountCodeId: string; customerId?: string; lines: DiscountLine[] }
+) {
   const code = await tx.discountCode.findUniqueOrThrow({ where: { id: input.discountCodeId } });
   if (!code.isActive || (code.expiresAt && code.expiresAt < new Date())) {
     throw new Error("Este código de descuento ya no es válido.");
@@ -148,12 +198,69 @@ async function validateAndConsumeDiscountCode(
     if (code.customerId !== input.customerId) {
       throw new Error("Este cupón es para otro cliente.");
     }
-    if (code.usedAt) {
+    if (code.usedAt && !code.isReusable) {
       throw new Error("Este cupón ya se usó.");
     }
-    await tx.discountCode.update({ where: { id: code.id }, data: { usedAt: new Date() } });
   }
-  return computeDiscount(code.type, code.value, input.subtotal);
+  const base = await discountBaseForCode(tx, code, input.lines);
+  // Redondeado a centavos aquí, para que vista previa, descuento guardado y
+  // total cobrado usen exactamente el mismo número. Producto gratis: la
+  // pieza completa (el cupón se guarda como $0 a propósito, ver
+  // createOneTimeReward en lib/loyalty-points.ts).
+  const amount = (code.productVariantId ? base : computeDiscount(code.type, code.value, base)).toDecimalPlaces(2);
+  if (amount.lessThan(0) || amount.greaterThan(base)) {
+    throw new Error("El descuento no puede ser mayor al subtotal de la venta.");
+  }
+  if (amount.isZero()) {
+    throw new Error("Este código no descuenta nada en esta cuenta: sus productos ya traen promoción.");
+  }
+  return { code, amount };
+}
+
+async function validateAndConsumeDiscountCode(
+  tx: Prisma.TransactionClient,
+  input: { discountCodeId: string; customerId?: string; lines: DiscountLine[] }
+): Promise<Prisma.Decimal> {
+  const { code, amount } = await checkDiscountCode(tx, input);
+  // Personal de un uso → se marca usado; reusable (descuento permanente de
+  // nivel) se queda disponible.
+  // Condicional: si dos cajas cobran el mismo cupón a la vez, solo una gana.
+  if (code.customerId && !code.isReusable) {
+    const claimed = await tx.discountCode.updateMany({
+      where: { id: code.id, usedAt: null, isActive: true },
+      data: { usedAt: new Date() },
+    });
+    if (claimed.count === 0) throw new Error("Este cupón ya se usó.");
+  }
+  return amount;
+}
+
+function resolvedToDiscountLines(items: ResolvedSaleItem[]): DiscountLine[] {
+  return items.map((item) => ({
+    productVariantId: item.productVariantId,
+    businessUnit: item.businessUnit,
+    unitPrice: item.unitPrice,
+    variantPrice: item.variantPrice,
+    lineTotal: item.lineTotal,
+    discountable: !item.hasAutomaticPromotion,
+  }));
+}
+
+// Líneas ya guardadas de una cuenta abierta — mismo criterio de
+// "descontable" que computeDiscountableSubtotal.
+async function persistedDiscountLines(tx: Prisma.TransactionClient | typeof prisma, saleId: string): Promise<DiscountLine[]> {
+  const items = await tx.saleItem.findMany({
+    where: { saleId },
+    include: { productVariant: { select: { price: true, product: { select: { category: { select: { businessUnit: true } } } } } } },
+  });
+  return items.map((item) => ({
+    productVariantId: item.productVariantId,
+    businessUnit: item.productVariant?.product.category.businessUnit ?? "CAFE",
+    unitPrice: item.unitPrice,
+    variantPrice: item.productVariant?.price ?? null,
+    lineTotal: item.lineTotal,
+    discountable: item.comboId === null && item.lineTotal.equals(item.unitPrice.mul(item.quantity)),
+  }));
 }
 
 // -----------------------------------------------------------------------
@@ -209,6 +316,9 @@ type ResolvedSaleItem = {
   // "descontable" por DiscountCode/ManualDiscount (no se apilan).
   comboId: string | null;
   hasAutomaticPromotion: boolean;
+  // Para cupones con alcance (DiscountCode.businessUnit / productVariantId).
+  businessUnit: BusinessUnit;
+  variantPrice: Prisma.Decimal;
 };
 
 // -----------------------------------------------------------------------
@@ -365,6 +475,7 @@ async function applyPromotions(
   }
 
   // --- 2x1 — de cada 2 unidades de la línea, se cobra 1.
+  const claimedByTwoForOne = new Set<ResolvedSaleItem>();
   const dosPorUnoPromotions = await tx.promotion.findMany({
     where: { isActive: true, category: "DOS_POR_UNO" },
     include: { variants: true },
@@ -385,6 +496,13 @@ async function applyPromotions(
     if (!promo) continue;
     const chargeableQuantity = Math.ceil(item.quantity / 2);
     const newTotal = item.unitPrice.mul(chargeableQuantity);
+    // Una sola pieza en 2x1 no ahorra nada: no cuenta como promoción (si
+    // no, bloquearía un cupón; y al cerrar una cuenta se re-deriva así).
+    // Pero sigue "ocupada" por el 2x1 para Día temático, como antes.
+    if (!newTotal.lessThan(item.lineTotal)) {
+      claimedByTwoForOne.add(item);
+      continue;
+    }
     recordSaving(promo.name, item.lineTotal.sub(newTotal));
     item.lineTotal = newTotal;
     item.hasAutomaticPromotion = true;
@@ -410,11 +528,12 @@ async function applyPromotions(
   }
 
   for (const item of saleItemsData) {
-    if (!isEligible(item)) continue;
+    if (!isEligible(item) || claimedByTwoForOne.has(item)) continue;
     const promo = diaTematicoByVariantId.get(item.productVariantId);
     if (!promo || !promo.discountType || !promo.discountValue) continue;
     const discount = computeDiscount(promo.discountType, promo.discountValue, item.lineTotal);
     const newTotal = Prisma.Decimal.max(0, item.lineTotal.sub(discount));
+    if (!newTotal.lessThan(item.lineTotal)) continue;
     recordSaving(promo.name, item.lineTotal.sub(newTotal));
     item.lineTotal = newTotal;
     item.hasAutomaticPromotion = true;
@@ -551,7 +670,10 @@ async function resolveSaleItems(
       throw new Error("La cantidad de cada línea debe ser mayor a cero.");
     }
 
-    const variant = await tx.productVariant.findUniqueOrThrow({ where: { id: item.productVariantId } });
+    const variant = await tx.productVariant.findUniqueOrThrow({
+      where: { id: item.productVariantId },
+      include: { product: { select: { category: { select: { businessUnit: true } } } } },
+    });
 
     if (variant.sizeOz) {
       const cup = cupIngredients.find((c) => c.cupCapacityOz!.gte(variant.sizeOz!));
@@ -607,6 +729,8 @@ async function resolveSaleItems(
       extraIngredients: resolvedExtras,
       comboId: null,
       hasAutomaticPromotion: false,
+      businessUnit: variant.product.category.businessUnit,
+      variantPrice: variant.price,
     });
 
     const substitutionCategories = new Set<string>();
@@ -804,44 +928,6 @@ async function applyConsumption(
   }
 }
 
-// Lealtad: +1 sello por venta COMPLETADA con cliente ligado, se reinicia
-// a 0 al llegar a los sellos por recompensa (Configuración → Lealtad,
-// antes fijo en 5). El nivel
-// se deriva contando ventas históricas del cliente — el schema no guarda
-// un acumulado aparte, y esta cuenta ya incluye la venta recién creada
-// por correr dentro de la misma transacción.
-async function loyaltyStampsPerReward(tx: Prisma.TransactionClient) {
-  const branch = await tx.branch.findUnique({
-    where: { id: DEFAULT_BRANCH_ID },
-    select: { loyaltyStampsPerReward: true },
-  });
-  return Math.max(1, branch?.loyaltyStampsPerReward ?? 5);
-}
-
-async function applyLoyaltyStamp(tx: Prisma.TransactionClient, customerId: string) {
-  const perReward = await loyaltyStampsPerReward(tx);
-  const card = await tx.loyaltyCard.upsert({
-    where: { customerId },
-    update: {},
-    create: { customerId, stamps: 0 },
-  });
-
-  const incrementedStamps = card.stamps + 1;
-  const newStamps = incrementedStamps >= perReward ? 0 : incrementedStamps;
-
-  const lifetimeStamps = await tx.sale.count({ where: { customerId, status: "COMPLETADA" } });
-
-  const eligibleTier = await tx.loyaltyTier.findFirst({
-    where: { minLifetimeStamps: { lte: lifetimeStamps } },
-    orderBy: { minLifetimeStamps: "desc" },
-  });
-
-  await tx.loyaltyCard.update({
-    where: { customerId },
-    data: { stamps: newStamps, tierId: eligibleTier?.id ?? null },
-  });
-}
-
 async function findSaleByClientRequestId(clientRequestId: string | undefined) {
   if (!clientRequestId) return null;
   return prisma.sale.findUnique({ where: { clientRequestId } });
@@ -909,6 +995,47 @@ export const previewSaleTotal = safeAction(async function previewSaleTotal(
   };
 });
 
+// Monto exacto que descontaría un cupón sobre la cuenta actual (ronda en el
+// carrito + lo ya registrado de una cuenta abierta). Con el mismo cálculo
+// que createSale/closeTab — los cupones con alcance (solo Cafetería / Pet
+// Shop, o producto gratis) no se pueden estimar en el navegador con solo el
+// subtotal. Lanza el mismo error que daría al cobrar.
+export const previewDiscountCode = safeAction(async function previewDiscountCode(input: {
+  employeeId: string;
+  discountCodeId: string;
+  customerId?: string;
+  items: CreateSaleItemInput[];
+  tabId?: string;
+}): Promise<{ amount: number }> {
+  await assertSessionEmployee(input.employeeId);
+  await requirePermission(input.employeeId, DEFAULT_BRANCH_ID, "DESCUENTO_APLICAR_CODIGO");
+  const roundLines =
+    input.items.length > 0 ? resolvedToDiscountLines((await resolveSaleItems(prisma, input.items)).saleItemsData) : [];
+  const tabLines = input.tabId ? await persistedDiscountLines(prisma, input.tabId) : [];
+  // Mismo criterio que closeTab: si no se eligió cliente, cuenta el de la
+  // cuenta abierta.
+  const tab = input.tabId
+    ? await prisma.sale.findUnique({ where: { id: input.tabId }, select: { customerId: true } })
+    : null;
+  const { amount } = await checkDiscountCode(prisma, {
+    discountCodeId: input.discountCodeId,
+    customerId: input.customerId || tab?.customerId || undefined,
+    lines: [...tabLines, ...roundLines],
+  });
+  return { amount: amount.toNumber() };
+});
+
+// Puntos de la venta recién cobrada, para el diálogo "Venta registrada".
+export const fetchSaleLoyalty = safeAction(async function fetchSaleLoyalty(input: {
+  employeeId: string;
+  saleId: string;
+}): Promise<SaleLoyaltySummary | null> {
+  await assertSessionEmployee(input.employeeId);
+  const sale = await prisma.sale.findUnique({ where: { id: input.saleId }, select: { customerId: true, status: true } });
+  if (!sale?.customerId || sale.status !== "COMPLETADA") return null;
+  return getSaleLoyaltySummary(prisma, input.saleId, sale.customerId);
+});
+
 export const createSale = safeAction(async function createSale(input: CreateSaleInput) {
   await assertSessionEmployee(input.employeeId);
   if (input.items.length === 0) {
@@ -925,6 +1052,9 @@ export const createSale = safeAction(async function createSale(input: CreateSale
     if (!shift || shift.status !== "ABIERTO" || shift.branchId !== input.branchId) {
       throw new Error("No hay un turno abierto válido para esta venta.");
     }
+    // Primero el cliente (sus cupones y puntos), luego inventario: el mismo
+    // orden que closeTab y cancelSale, para no bloquearse entre cajas.
+    if (input.customerId) await lockCustomer(tx, input.customerId);
 
     const { saleItemsData, consumption, subtotal, discountableSubtotal } = await resolveSaleItems(tx, input.items);
     await assertStockOrAllowed(tx, consumption, input.allowShortage, input.employeeId, input.branchId);
@@ -965,7 +1095,7 @@ export const createSale = safeAction(async function createSale(input: CreateSale
       discountTotal = await validateAndConsumeDiscountCode(tx, {
         discountCodeId: input.discountCodeId,
         customerId: input.customerId,
-        subtotal: discountableSubtotal,
+        lines: resolvedToDiscountLines(saleItemsData),
       });
     }
 
@@ -1038,7 +1168,7 @@ export const createSale = safeAction(async function createSale(input: CreateSale
     });
 
     if (input.customerId) {
-      await applyLoyaltyStamp(tx, input.customerId);
+      await awardSalePoints(tx, createdSale.id, input.customerId);
     }
 
     return createdSale;
@@ -1190,6 +1320,11 @@ async function computeDiscountableSubtotal(tx: Prisma.TransactionClient, saleId:
 }
 
 async function loadOpenTab(tx: Prisma.TransactionClient, saleId: string, branchId: string, shiftId: string) {
+  // Toma la fila de la cuenta (UPDATE sin cambios, condicionado a seguir
+  // abierta) antes de leerla: una anulación, otra ronda o un cobro en otra
+  // caja esperan a que esta transacción termine, y si la cuenta ya se cerró
+  // o anuló, aquí se entera en vez de sobrescribirla.
+  await tx.sale.updateMany({ where: { id: saleId, status: "ABIERTA" }, data: { status: "ABIERTA" } });
   const sale = await tx.sale.findUniqueOrThrow({ where: { id: saleId } });
   if (sale.status !== "ABIERTA") {
     throw new Error("Esta cuenta ya no está abierta.");
@@ -1288,6 +1423,8 @@ export const closeTab = safeAction(async function closeTab(input: CloseTabInput)
 
   const sale = await prisma.$transaction(async (tx) => {
     let existing = await loadOpenTab(tx, input.saleId, input.branchId, input.shiftId);
+    const tabCustomerId = input.customerId || existing.customerId;
+    if (tabCustomerId) await lockCustomer(tx, tabCustomerId);
 
     if (input.items && input.items.length > 0) {
       const { saleItemsData, consumption, subtotal: roundSubtotal } = await resolveSaleItems(tx, input.items);
@@ -1348,7 +1485,7 @@ export const closeTab = safeAction(async function closeTab(input: CloseTabInput)
       discountTotal = await validateAndConsumeDiscountCode(tx, {
         discountCodeId: input.discountCodeId,
         customerId: input.customerId || existing.customerId || undefined,
-        subtotal: discountableSubtotal,
+        lines: await persistedDiscountLines(tx, existing.id),
       });
     }
 
@@ -1410,7 +1547,7 @@ export const closeTab = safeAction(async function closeTab(input: CloseTabInput)
     });
 
     if (customerId) {
-      await applyLoyaltyStamp(tx, customerId);
+      await awardSalePoints(tx, closedSale.id, customerId);
     }
 
     return closedSale;
@@ -1471,6 +1608,9 @@ export type OpenTabDetail = {
   id: string;
   tableNumber: string | null;
   total: number;
+  // Cliente ligado a la cuenta: al retomarla, el POS lo vuelve a
+  // seleccionar (sus cupones y sus puntos).
+  customer: CustomerOption | null;
   items: OpenTabItem[];
 };
 
@@ -1485,6 +1625,7 @@ export const getTabDetail = safeAction(async function getTabDetail(saleId: strin
   const sale = await prisma.sale.findUniqueOrThrow({
     where: { id: saleId },
     include: {
+      customer: { include: { loyaltyCard: true } },
       items: {
         include: {
           productVariant: { include: { product: true } },
@@ -1498,6 +1639,17 @@ export const getTabDetail = safeAction(async function getTabDetail(saleId: strin
     id: sale.id,
     tableNumber: sale.tableNumber,
     total: sale.total.toNumber(),
+    customer: sale.customer
+      ? {
+          id: sale.customer.id,
+          name: sale.customer.name,
+          phone: sale.customer.phone,
+          address: sale.customer.address,
+          loyaltyCode: sale.customer.loyaltyCard?.code ?? null,
+          birthDate: sale.customer.birthDate?.toISOString() ?? null,
+          gender: sale.customer.gender,
+        }
+      : null,
     items: sale.items.map((item) => ({
       id: item.id,
       productVariantName: item.productVariant?.name ?? "(producto eliminado)",
@@ -1629,16 +1781,18 @@ export const removeTabItem = safeAction(async function removeTabItem(
   let removedItem: RemovedTabItemForUndo = null;
 
   const sale = await prisma.$transaction(async (tx) => {
+    // Primero se toma la cuenta (como en loadOpenTab) y luego el inventario:
+    // el mismo orden que agregar una ronda, cobrar o anular, para que no se
+    // bloqueen entre sí ni se corrija una cuenta que otra caja ya cerró.
+    const { saleId } = await tx.saleItem.findUniqueOrThrow({
+      where: { id: input.saleItemId },
+      select: { saleId: true },
+    });
+    await loadOpenTab(tx, saleId, input.branchId, input.shiftId);
     const item = await tx.saleItem.findUniqueOrThrow({
       where: { id: input.saleItemId },
-      include: { sale: true, modifiers: true },
+      include: { modifiers: true },
     });
-    if (item.sale.status !== "ABIERTA") {
-      throw new Error("Esta cuenta ya no está abierta.");
-    }
-    if (item.sale.branchId !== input.branchId || item.sale.shiftId !== input.shiftId) {
-      throw new Error("Esta cuenta no pertenece al turno/sucursal actual.");
-    }
 
     const reconstructed = await reconstructTabItem(tx, item);
     if (reconstructed) {
@@ -1696,16 +1850,18 @@ export const updateTabItemQuantity = safeAction(async function updateTabItemQuan
   await requirePermission(input.employeeId, input.branchId, "VENTA_REALIZAR");
 
   const sale = await prisma.$transaction(async (tx) => {
+    // Primero se toma la cuenta (como en loadOpenTab) y luego el inventario:
+    // el mismo orden que agregar una ronda, cobrar o anular, para que no se
+    // bloqueen entre sí ni se corrija una cuenta que otra caja ya cerró.
+    const { saleId } = await tx.saleItem.findUniqueOrThrow({
+      where: { id: input.saleItemId },
+      select: { saleId: true },
+    });
+    await loadOpenTab(tx, saleId, input.branchId, input.shiftId);
     const item = await tx.saleItem.findUniqueOrThrow({
       where: { id: input.saleItemId },
-      include: { sale: true, modifiers: true },
+      include: { modifiers: true },
     });
-    if (item.sale.status !== "ABIERTA") {
-      throw new Error("Esta cuenta ya no está abierta.");
-    }
-    if (item.sale.branchId !== input.branchId || item.sale.shiftId !== input.shiftId) {
-      throw new Error("Esta cuenta no pertenece al turno/sucursal actual.");
-    }
     const reconstructed = await reconstructTabItem(tx, item);
     if (!reconstructed) {
       throw new Error("Este producto ya no existe, no se puede ajustar — quítalo.");
@@ -1782,6 +1938,23 @@ export const cancelSale = safeAction(async function cancelSale(input: CancelSale
       throw new Error("Solo se pueden anular ventas del turno abierto.");
     }
 
+    // Se reclama la anulación antes de regresar inventario y puntos: dos
+    // anulaciones a la vez (o un cobro a la mitad) no la aplican doble.
+    const claimed = await tx.sale.updateMany({
+      where: { id: sale.id, status: sale.status },
+      data: {
+        status: "CANCELADA",
+        cancelledAt: new Date(),
+        cancelledById: authorizer.id,
+        cancelReason: reason,
+      },
+    });
+    if (claimed.count === 0) {
+      throw new Error("La venta cambió mientras se anulaba. Vuelve a intentarlo.");
+    }
+    // Orden de bloqueo igual que closeTab: venta → cliente → inventario.
+    if (sale.customerId) await lockCustomer(tx, sale.customerId);
+
     const movements = await tx.inventoryMovement.groupBy({
       by: ["ingredientId", "stockLocationId", "unit"],
       where: { notes: { in: [`Venta ${sale.id}`, `Corrección cuenta ${sale.id}`] } },
@@ -1822,18 +1995,11 @@ export const cancelSale = safeAction(async function cancelSale(input: CancelSale
       }
     }
 
-    await tx.sale.update({
-      where: { id: sale.id },
-      data: {
-        status: "CANCELADA",
-        cancelledAt: new Date(),
-        cancelledById: authorizer.id,
-        cancelReason: reason,
-      },
-    });
-
     if (sale.status === "COMPLETADA" && sale.customerId) {
-      await removeLoyaltyStamp(tx, sale.customerId);
+      await revertSalePoints(tx, sale.id, sale.customerId);
+    }
+    if (sale.discountCodeId) {
+      await withdrawReleasedCouponIfUnearned(tx, sale.discountCodeId);
     }
   });
 
@@ -1841,24 +2007,3 @@ export const cancelSale = safeAction(async function cancelSale(input: CancelSale
   revalidatePath("/caja");
 });
 
-// Inverso de applyLoyaltyStamp: los sellos se reinician a 0 al llegar a
-// los sellos por recompensa, así que quitar uno desde 0 regresa a N−1 (la
-// venta anulada fue la que completó la tarjeta). El nivel se recalcula con las ventas COMPLETADA
-// restantes.
-async function removeLoyaltyStamp(tx: Prisma.TransactionClient, customerId: string) {
-  const card = await tx.loyaltyCard.findUnique({ where: { customerId } });
-  if (!card) return;
-
-  const lifetimeStamps = await tx.sale.count({ where: { customerId, status: "COMPLETADA" } });
-  const perReward = await loyaltyStampsPerReward(tx);
-  const newStamps = card.stamps > 0 ? card.stamps - 1 : lifetimeStamps > 0 ? perReward - 1 : 0;
-  const eligibleTier = await tx.loyaltyTier.findFirst({
-    where: { minLifetimeStamps: { lte: lifetimeStamps } },
-    orderBy: { minLifetimeStamps: "desc" },
-  });
-
-  await tx.loyaltyCard.update({
-    where: { customerId },
-    data: { stamps: newStamps, tierId: eligibleTier?.id ?? null },
-  });
-}

@@ -22,7 +22,10 @@ async function resetSettings() {
       shiftChangeHour: 14,
       defaultOpeningCash: 0,
       cashDifferenceTolerance: 0,
-      loyaltyStampsPerReward: 5,
+      loyaltyMode: "SEPARADO",
+      loyaltyPointsPer100Cafe: 5,
+      loyaltyPointsPer100PetShop: 1,
+      loyaltyResetAtTopLevel: false,
       welcomeCouponPercent: 10,
       welcomeCouponValidDays: null,
       maxManualDiscountPercent: null,
@@ -151,20 +154,25 @@ test.describe.serial("Configuración del sistema", () => {
     await db.reorderPoint.delete({ where: { ingredientId_stockLocationId: MILK } });
   });
 
-  test("Lealtad: sellos por recompensa, cupón y niveles", async ({ page }) => {
+  test("Lealtad: puntos por negocio, cupón y niveles", async ({ page }) => {
     await loginAdmin(page);
     await page.goto("/configuracion/lealtad");
-    await page.getByLabel("Sellos por recompensa").fill("3");
+    await page.getByLabel("Puntos por cada $100 en Cafetería").fill("7");
     await page.getByLabel("Cupón de bienvenida (%)").fill("0");
+    await expect(page.getByText("14 puntos de Cafetería y 3 de Pet Shop")).toBeVisible();
     await save(page);
 
     const tierName = `Oro E2E ${Date.now() % 100000}`;
-    await page.getByRole("button", { name: "+ Agregar nivel" }).click();
+    // En modo separado hay una sección de niveles por negocio.
+    await page.getByRole("button", { name: "+ Agregar nivel" }).first().click();
     await page.getByLabel("Nombre", { exact: true }).fill(tierName);
-    await page.getByLabel("Desde cuántas compras").fill("50");
-    await page.getByLabel("Beneficio (opcional)").fill("Café gratis cada mes");
+    await page.getByLabel("Puntos para alcanzarlo").fill("9999");
+    await page.getByRole("radio", { name: "Descuento permanente" }).click();
+    await page.getByLabel("% de descuento").fill("5");
+    await page.getByLabel("Texto para el cliente (opcional)").fill("Eres Oro");
     await page.getByRole("button", { name: "Guardar nivel" }).click();
     await expect(page.getByText(tierName)).toBeVisible();
+    await expect(page.getByText("5% permanente en Cafetería · Eres Oro")).toBeVisible();
 
     // Cliente nuevo: sin cupón de bienvenida (0%).
     await page.goto("/clientes/nuevo");
@@ -179,7 +187,9 @@ test.describe.serial("Configuración del sistema", () => {
     expect(customer.discountCodes).toHaveLength(0);
 
     await page.goto(`/lealtad/${customer.loyaltyCard!.code}`);
-    await expect(page.getByText("0 de 3 sellos")).toBeVisible();
+    await expect(page.getByText("Cafetería", { exact: true })).toBeVisible();
+    await expect(page.getByText("Pet Shop", { exact: true })).toBeVisible();
+    await expect(page.getByText("0 pts").first()).toBeVisible();
     await db.loyaltyTier.deleteMany({ where: { name: tierName } });
   });
 

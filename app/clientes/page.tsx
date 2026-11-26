@@ -83,8 +83,7 @@ export default async function ClientesPage({
                   </p>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {customer.stamps} sello{customer.stamps === 1 ? "" : "s"}
-                  {customer.tierName && ` · ${customer.tierName}`}
+                  {customer.loyaltyLine}
                 </p>
               </Link>
             ))}

@@ -15,10 +15,16 @@ import {
   createSale as createSaleAction,
   closeTab as closeTabAction,
   previewSaleTotal as previewSaleTotalAction,
+  previewDiscountCode as previewDiscountCodeAction,
   type AppliedPromotion,
+  type OpenTabDetail,
   type StockShortage,
 } from "@/actions/pos";
-import { findDiscountCodeByCode as findDiscountCodeByCodeAction, type FoundDiscountCode } from "@/actions/discounts";
+import {
+  findDiscountCodeByCode as findDiscountCodeByCodeAction,
+  listCustomerCoupons as listCustomerCouponsAction,
+  type FoundDiscountCode,
+} from "@/actions/discounts";
 import { updateCustomer as updateCustomerAction } from "@/actions/customers";
 import type { CustomerOption } from "@/lib/customers";
 import { useCartStore, cartLineToSaleItemInput } from "./cart-store";
@@ -30,6 +36,8 @@ const createSale = withActionErrors(createSaleAction);
 const closeTab = withActionErrors(closeTabAction);
 const previewSaleTotal = withActionErrors(previewSaleTotalAction);
 const findDiscountCodeByCode = withActionErrors(findDiscountCodeByCodeAction);
+const listCustomerCoupons = withActionErrors(listCustomerCouponsAction);
+const previewDiscountCode = withActionErrors(previewDiscountCodeAction);
 const updateCustomer = withActionErrors(updateCustomerAction);
 
 
@@ -91,7 +99,7 @@ export function CheckoutForm({
   branchId,
   shiftId,
   employeeId,
-  activeTabBaseTotal,
+  activeTabSummary,
   selectedCustomer,
   domicilioAddress,
   domicilioOrigen,
@@ -101,7 +109,7 @@ export function CheckoutForm({
   branchId: string;
   shiftId: string;
   employeeId: string;
-  activeTabBaseTotal?: number;
+  activeTabSummary: OpenTabDetail | null;
   selectedCustomer: CustomerOption | null;
   domicilioAddress: string;
   domicilioOrigen: DomicilioOrigen;
@@ -109,6 +117,7 @@ export function CheckoutForm({
   onCancel: () => void;
 }) {
   const { lines, subtotal, clear, orderType, tableNumber, activeTabId } = useCartStore();
+  const activeTabBaseTotal = activeTabSummary?.total;
   // Configuración → Cobro / Descuentos / Impuestos.
   const settings = useBusinessSettings();
   const paymentMethods = settings.paymentMethods.map((value) => ({ value, label: PAYMENT_METHOD_LABELS[value] }));
@@ -220,6 +229,65 @@ export function CheckoutForm({
   const [resolvedCode, setResolvedCode] = useState<FoundDiscountCode | null>(null);
   const [codeError, setCodeError] = useState<string | null>(null);
   const [isCheckingCode, startCheckingCode] = useTransition();
+  // Monto exacto del cupón según el servidor (previewDiscountCode): los
+  // cupones de un solo negocio o de producto gratis dependen de qué líneas
+  // trae la cuenta. null mientras se calcula.
+  const [codeAmount, setCodeAmount] = useState<number | null>(null);
+  const [isCodeAmountLoading, setIsCodeAmountLoading] = useState(false);
+  useEffect(() => {
+    setCodeAmount(null);
+    if (discountMode !== "CODIGO" || !resolvedCode) return;
+    let cancelled = false;
+    setIsCodeAmountLoading(true);
+    previewDiscountCode({
+      employeeId,
+      discountCodeId: resolvedCode.id,
+      customerId: selectedCustomer?.id,
+      items: lines.map(cartLineToSaleItemInput),
+      tabId: activeTabId ?? undefined,
+    })
+      .then(({ amount }) => {
+        if (!cancelled) {
+          setCodeAmount(amount);
+          setCodeError(null);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setCodeError(err instanceof Error ? err.message : "No se pudo calcular el descuento.");
+      })
+      .finally(() => {
+        if (!cancelled) setIsCodeAmountLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // activeTabSummary: quitar o ajustar algo ya registrado en la cuenta
+    // retomada cambia el descuento aunque el carrito no se mueva.
+  }, [discountMode, resolvedCode, lines, activeTabId, activeTabSummary, selectedCustomer?.id, employeeId]);
+
+  // Cupones personales del cliente seleccionado (bienvenida, recompensas
+  // de nivel): se ofrecen para aplicarlos con un toque.
+  const [customerCoupons, setCustomerCoupons] = useState<FoundDiscountCode[]>([]);
+  useEffect(() => {
+    setCustomerCoupons([]);
+    if (!selectedCustomer) return;
+    let cancelled = false;
+    listCustomerCoupons({ employeeId, customerId: selectedCustomer.id })
+      .then((coupons) => {
+        if (!cancelled) setCustomerCoupons(coupons);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCustomer, employeeId]);
+
+  function applyCustomerCoupon(coupon: FoundDiscountCode) {
+    setDiscountMode("CODIGO");
+    setCodeInput(coupon.code);
+    setCodeError(null);
+    setResolvedCode(coupon);
+  }
 
   const [manualType, setManualType] = useState<DiscountType>("PORCENTAJE");
   const [manualValue, setManualValue] = useState("0");
@@ -244,7 +312,7 @@ export function CheckoutForm({
   const discountableBase = (verifiedDiscountableSubtotal ?? subtotal()) + (activeTabBaseTotal ?? 0);
   const discountPreview =
     discountMode === "CODIGO" && resolvedCode
-      ? previewDiscountAmount(resolvedCode.type, resolvedCode.value, discountableBase)
+      ? codeAmount ?? (resolvedCode.scoped ? 0 : previewDiscountAmount(resolvedCode.type, resolvedCode.value, discountableBase))
       : discountMode === "MANUAL"
         ? previewDiscountAmount(manualType, Number(manualValue) || 0, discountableBase)
         : 0;
@@ -562,7 +630,7 @@ export function CheckoutForm({
     (tipMode === "MONTO" && Number(tipCustom) < 0) ||
     verifiedSubtotal === null ||
     (lines.length === 0 && !activeTabId) ||
-    (discountMode === "CODIGO" && !resolvedCode) ||
+    (discountMode === "CODIGO" && (!resolvedCode || isCodeAmountLoading || codeAmount === null)) ||
     (discountMode === "MANUAL" && (!authorizingPin || manualDiscountError !== null)) ||
     (isSplit
       ? splitRows!.length === 0 ||
@@ -602,6 +670,29 @@ export function CheckoutForm({
           Cerrando {orderType === "CONSUMO_LOCAL" ? `cuenta de Mesa ${tableNumber || "—"}` : `pedido en espera${tableNumber ? ` (${tableNumber})` : ""}`} · ya registrado: {formatCurrency(activeTabBaseTotal ?? 0)}
           {lines.length > 0 && ` + esta ronda: ${formatCurrency(subtotal())}`}
         </p>
+      )}
+
+      {customerCoupons.length > 0 && (
+        <div className="flex flex-col gap-2 rounded-md border border-primary/40 bg-primary/5 p-3">
+          <p className="text-sm font-medium">Cupones de {selectedCustomer?.name}</p>
+          <div className="flex flex-wrap gap-2">
+            {customerCoupons.map((coupon) => {
+              const isApplied = discountMode === "CODIGO" && resolvedCode?.id === coupon.id;
+              return (
+                <Button
+                  key={coupon.id}
+                  type="button"
+                  variant={isApplied ? "default" : "outline"}
+                  aria-pressed={isApplied}
+                  onClick={() => (isApplied ? (setDiscountMode("NINGUNO"), resetDiscountState()) : applyCustomerCoupon(coupon))}
+                >
+                  {coupon.label}
+                  <span className="font-mono text-xs opacity-70">{coupon.code}</span>
+                </Button>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       <div>
@@ -656,9 +747,10 @@ export function CheckoutForm({
             </Button>
           </div>
           {codeError && <p role="alert" className="text-sm text-destructive">{codeError}</p>}
-          {resolvedCode && (
+          {resolvedCode && !codeError && (
             <p className="text-sm text-muted-foreground">
-              Válido — {discountTypeLabels[resolvedCode.type]}, descuento de {formatCurrency(discountPreview)}
+              Válido — {resolvedCode.label}
+              {isCodeAmountLoading || codeAmount === null ? ", calculando..." : `, descuento de ${formatCurrency(discountPreview)}`}
             </p>
           )}
         </div>

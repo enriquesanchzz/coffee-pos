@@ -37,6 +37,7 @@ export function DiscountCodeFormDialog({
   onSaved: () => void;
 }) {
   const isEdit = Boolean(discountCode);
+  const locked = Boolean(discountCode?.lock);
   const [code, setCode] = useState(discountCode?.code ?? "");
   const [type, setType] = useState<DiscountType>((discountCode?.type as DiscountType) ?? "PORCENTAJE");
   const [value, setValue] = useState(discountCode ? String(discountCode.value) : "10");
@@ -98,15 +99,25 @@ export function DiscountCodeFormDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange} title={isEdit ? "Editar código" : "Nuevo código"}>
       <div className="flex flex-col gap-4">
+        {discountCode?.lock && (
+          <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+            <span className="font-medium">{discountCode.loyaltyLabel}</span>
+            <span className="block text-muted-foreground">
+              {discountCode.lock === "NIVEL"
+                ? "Lo maneja el nivel del cliente: se cambia en Configuración → Lealtad."
+                : "Recompensa de lealtad: solo se puede cambiar su vencimiento o desactivarla."}
+            </span>
+          </p>
+        )}
         <div className="flex flex-col gap-1">
           <Label htmlFor="discount-code">Código</Label>
-          <Input id="discount-code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="ej. VERANO10" />
+          <Input id="discount-code" disabled={locked} value={code} onChange={(e) => setCode(e.target.value)} placeholder="ej. VERANO10" />
         </div>
 
         <div className="flex gap-4">
           <div className="flex flex-1 flex-col gap-1">
             <Label htmlFor="discount-type">Tipo</Label>
-            <Select id="discount-type" value={type} onChange={(e) => setType(e.target.value as DiscountType)}>
+            <Select id="discount-type" disabled={locked} value={type} onChange={(e) => setType(e.target.value as DiscountType)}>
               {Object.entries(discountTypeLabels).map(([v, label]) => (
                 <option key={v} value={v}>
                   {label}
@@ -118,6 +129,7 @@ export function DiscountCodeFormDialog({
             <Label htmlFor="discount-value">Valor</Label>
             <Input
               id="discount-value"
+              disabled={locked}
               type="number"
               min="0"
               step="0.01"
@@ -157,7 +169,7 @@ export function DiscountCodeFormDialog({
 
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
-        <Button onClick={handleSave} disabled={isPending}>
+        <Button onClick={handleSave} disabled={isPending || discountCode?.lock === "NIVEL"}>
           {isPending ? "Guardando..." : isEdit ? "Guardar cambios" : "Crear código"}
         </Button>
       </div>

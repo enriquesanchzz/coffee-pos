@@ -110,6 +110,28 @@ export function CartPanel({
     setSelectedCustomer(customer);
   }
 
+  // Al retomar una cuenta, el cliente (y su domicilio) pasan a ser los de
+  // ESA cuenta — o ninguno. Sin esto, pasar de la cuenta de Ana a otra sin
+  // cliente le abonaba a Ana los puntos de la segunda. Solo al cambiar de
+  // cuenta: un cliente elegido a mano se respeta mientras se siga en ella.
+  const shownTabId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!activeTabSummary || activeTabSummary.id !== activeTabId) return;
+    if (shownTabId.current === activeTabSummary.id) return;
+    shownTabId.current = activeTabSummary.id;
+    setSelectedCustomer(activeTabSummary.customer);
+    setDomicilioAddress(activeTabSummary.customer?.address ?? "");
+  }, [activeTabSummary, activeTabId]);
+  // Al cambiar de cuenta (o salir de una, p. ej. si no se pudo cargar), el
+  // cliente anterior se quita de inmediato: mientras llega el detalle de la
+  // nueva no debe poder cobrarse a nombre de quien estaba antes.
+  useEffect(() => {
+    if (activeTabId === shownTabId.current) return;
+    setSelectedCustomer(null);
+    setDomicilioAddress("");
+    if (!activeTabId) shownTabId.current = null;
+  }, [activeTabId]);
+
   // Confirmación de la última acción — venta cobrada o cuenta dejada
   // abierta — como popup modal (antes la venta se quedaba como un aviso
   // fijo en la lista que había que cerrar a mano, y dejar una cuenta
@@ -288,7 +310,7 @@ export function CartPanel({
             branchId={branchId}
             shiftId={shiftId}
             employeeId={employeeId}
-            activeTabBaseTotal={activeTabSummary?.total}
+            activeTabSummary={activeTabSummary}
             selectedCustomer={selectedCustomer}
             domicilioAddress={domicilioAddress}
             domicilioOrigen={domicilioOrigen}
@@ -608,6 +630,7 @@ export function CartPanel({
         </div>
       </div>
       <ReceiptDialog
+        employeeId={employeeId}
         saleReceipt={lastReceipt}
         tabConfirmation={tabConfirmation}
         onClose={() => {

@@ -51,6 +51,7 @@ async function routes() {
     "/productos",
     "/promociones",
     "/reportes",
+    "/ventas",
     card && `/lealtad/${card.code}`,
     "/ruta-que-no-existe",
   ].filter((r): r is string => Boolean(r));

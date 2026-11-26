@@ -40,3 +40,40 @@ export function allocateByUnit(
   result[heavier] += cents - assigned;
   return { CAFE: result.CAFE / 100, PET_SHOP: result.PET_SHOP / 100 };
 }
+
+// Igual que allocateByUnit, pero el descuento del ticket se le carga solo a
+// las líneas a las que aplicó: las del negocio o producto del cupón, sin
+// contar las que ya traían una promoción automática. Un Latte gratis no
+// debe restarle puntos (ni ingreso en reportes) al costal de alimento.
+export type UnitLine = {
+  unit: BusinessUnit;
+  amount: number;
+  productVariantId: string | null;
+  discountable: boolean;
+};
+
+export function netByUnit(
+  lines: UnitLine[],
+  paidTotal: number,
+  scope: { businessUnit: BusinessUnit | null; productVariantId: string | null } | null = null
+): Record<BusinessUnit, number> {
+  const toCents = (n: number) => Math.round(n * 100);
+  const grossCents: Record<BusinessUnit, number> = { CAFE: 0, PET_SHOP: 0 };
+  for (const line of lines) grossCents[line.unit] += toCents(line.amount);
+  const discountCents = grossCents.CAFE + grossCents.PET_SHOP - toCents(paidTotal);
+  const eligible = lines.filter(
+    (l) =>
+      l.discountable &&
+      (scope?.productVariantId
+        ? l.productVariantId === scope.productVariantId
+        : !scope?.businessUnit || l.unit === scope.businessUnit)
+  );
+  const eligibleCents = eligible.reduce((sum, l) => sum + toCents(l.amount), 0);
+  // Ventas viejas o casos raros en que el descuento no cabe en sus líneas.
+  if (discountCents <= 0 || discountCents > eligibleCents) return allocateByUnit(lines, paidTotal);
+  const discount = allocateByUnit(eligible, discountCents / 100);
+  return {
+    CAFE: (grossCents.CAFE - toCents(discount.CAFE)) / 100,
+    PET_SHOP: (grossCents.PET_SHOP - toCents(discount.PET_SHOP)) / 100,
+  };
+}

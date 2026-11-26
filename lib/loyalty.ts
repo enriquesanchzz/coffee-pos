@@ -1,39 +1,44 @@
 import { prisma } from "./prisma";
+import { getLoyaltySummary, type LoyaltyProgramSummary } from "./loyalty-points";
+import { couponLabel, COUPON_LABEL_INCLUDE } from "./coupon-label";
 
 export type PublicLoyaltyCard = {
   customerName: string;
   code: string;
-  stamps: number;
-  tierName: string | null;
-  tierBenefits: string | null;
-  welcomeCoupon: { code: string; value: number } | null;
+  programs: LoyaltyProgramSummary[];
+  coupons: { code: string; label: string }[];
 };
 
-// DTO mínimo para /lealtad/[code] — la única ruta pública (sin sesión)
-// de la app, así que solo trae lo que es seguro mostrar a cualquiera
-// que tenga el link: nombre, sellos, nivel y el cupón de bienvenida si
-// sigue sin usar. Nada de teléfono/email/historial de compras (eso vive
-// en getCustomerDetail, de uso exclusivo del staff).
+// DTO mínimo para /lealtad/[code] — ruta pública (sin sesión), así que
+// solo trae lo que es seguro mostrar a cualquiera que tenga el link:
+// nombre, puntos y nivel por programa y los cupones vigentes. Nada de
+// teléfono/email/historial de compras (eso vive en getCustomerDetail, de
+// uso exclusivo del staff).
 export async function getPublicLoyaltyCard(code: string): Promise<PublicLoyaltyCard | null> {
   const card = await prisma.loyaltyCard.findUnique({
     where: { code },
-    include: { customer: true, tier: true },
+    include: { customer: true },
   });
   if (!card) return null;
 
-  const welcomeCoupon = await prisma.discountCode.findFirst({
-    where: { customerId: card.customerId, usedAt: null, isActive: true },
-    orderBy: { id: "desc" },
-  });
+  const [programs, coupons] = await Promise.all([
+    getLoyaltySummary(prisma, card.customerId),
+    prisma.discountCode.findMany({
+      where: {
+        customerId: card.customerId,
+        isActive: true,
+        OR: [{ usedAt: null }, { isReusable: true }],
+        AND: [{ OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }],
+      },
+      include: COUPON_LABEL_INCLUDE,
+      orderBy: { id: "asc" },
+    }),
+  ]);
 
   return {
     customerName: card.customer.name,
     code: card.code!,
-    stamps: card.stamps,
-    tierName: card.tier?.name ?? null,
-    tierBenefits: card.tier?.benefits ?? null,
-    welcomeCoupon: welcomeCoupon
-      ? { code: welcomeCoupon.code, value: welcomeCoupon.value.toNumber() }
-      : null,
+    programs,
+    coupons: coupons.map((c) => ({ code: c.code, label: couponLabel(c) })),
   };
 }

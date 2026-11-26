@@ -12,8 +12,8 @@ const variantClasses: Record<Variant, string> = {
   secondary: "bg-secondary text-secondary-foreground",
   outline: "border border-border text-foreground",
   destructive: "bg-destructive text-destructive-foreground",
-  success: "bg-emerald-600 text-white",
-  warning: "bg-amber-500 text-white",
+  success: "bg-emerald-700 text-white",
+  warning: "bg-amber-400 text-amber-950",
 };
 
 export function Badge({

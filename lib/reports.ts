@@ -1,6 +1,6 @@
 import "server-only";
 import { Prisma, type BusinessUnit, type VariantTemperature } from "@prisma/client";
-import { allocateByUnit, BUSINESS_UNITS } from "./business-unit";
+import { netByUnit, BUSINESS_UNITS } from "./business-unit";
 import { prisma } from "./prisma";
 import { DEFAULT_BRANCH_ID, DEFAULT_STOCK_LOCATION_ID } from "./constants";
 import { calculateRecipeVersionCost } from "./recipe-cost";
@@ -389,6 +389,7 @@ export async function getStatsReport(from: Date, to: Date): Promise<StatsReport>
   const sales = await prisma.sale.findMany({
     where: { branchId: DEFAULT_BRANCH_ID, status: "COMPLETADA", createdAt: { gte: from, lte: to } },
     include: {
+      discountCode: { select: { businessUnit: true, productVariantId: true } },
       items: {
         include: { productVariant: { include: { product: { include: { category: { select: { businessUnit: true } } } } } } },
       },
@@ -414,8 +415,10 @@ export async function getStatsReport(from: Date, to: Date): Promise<StatsReport>
     const unitLines = sale.items.map((item) => ({
       unit: item.productVariant?.product.category.businessUnit ?? ("CAFE" as const),
       amount: item.lineTotal.toNumber(),
+      productVariantId: item.productVariantId,
+      discountable: item.comboId === null && item.lineTotal.equals(item.unitPrice.mul(item.quantity)),
     }));
-    const split = allocateByUnit(unitLines, sale.total.toNumber());
+    const split = netByUnit(unitLines, sale.total.toNumber(), sale.discountCode);
     const touched = new Set(unitLines.map((l) => l.unit));
     for (const unit of BUSINESS_UNITS) {
       byUnit[unit].revenue += split[unit];
