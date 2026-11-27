@@ -30,7 +30,7 @@ export default defineConfig({
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1366, height: 900 } } }],
   webServer: {
-    command: `node e2e/prepare-db.mjs && npx next start -p ${PORT}`,
+    command: `node e2e/prepare-db.mjs && PORT=${PORT} NODE_ENV=production node server.js`,
     url: `http://localhost:${PORT}`,
     reuseExistingServer: false,
     timeout: 240_000,

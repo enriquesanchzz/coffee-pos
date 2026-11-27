@@ -17,6 +17,8 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CancelSaleDialog } from "@/components/caja/cancel-sale-dialog";
 import type { ShiftSaleRow } from "@/lib/shift";
 import { isShortageError } from "@/lib/stock";
+import { isAuthorizationRequiredError } from "@/lib/tab-corrections";
+import { Dialog } from "@/components/ui/dialog";
 import type { CustomerOption } from "@/lib/customers";
 import { findAllergyConflicts } from "@/lib/allergens";
 import { Alert } from "@/components/ui/alert";
@@ -99,6 +101,17 @@ export function CartPanel({
   // la vez sobre la misma línea.
   const [pendingItemId, setPendingItemId] = useState<string | null>(null);
   const [registeredError, setRegisteredError] = useState<string | null>(null);
+  // Corrección de un producto con más de unos minutos en la cuenta: el
+  // servidor pide el PIN de un gerente (ver authorizeTabCorrection en
+  // actions/pos.ts) y aquí se captura para reintentarla.
+  const [authRequest, setAuthRequest] = useState<{
+    item: OpenTabItem;
+    newQuantity: number | null; // null = quitar
+    message: string;
+  } | null>(null);
+  const [authPin, setAuthPin] = useState("");
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isAuthorizing, startAuthorizing] = useTransition();
 
   // "Cobrar" ya no abre un <Dialog> flotante — el panel de cobro (antes
   // CheckoutDialog) ahora es un segundo "modo" de este mismo panel, que
@@ -276,11 +289,27 @@ export function CartPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabOfflineRetry]);
 
-  async function handleRemoveRegistered(item: OpenTabItem) {
+  // Si el servidor exige autorización, abre el diálogo de PIN en vez de
+  // mostrar el error; con PIN, un error (PIN incorrecto) se queda en el
+  // diálogo. Regresa true si la corrección se aplicó.
+  function handleCorrectionError(err: unknown, item: OpenTabItem, newQuantity: number | null, authorizingPin?: string) {
+    const message = err instanceof Error ? err.message : "No se pudo corregir el producto.";
+    if (authorizingPin !== undefined) {
+      setAuthError(message);
+    } else if (isAuthorizationRequiredError(message)) {
+      setAuthPin("");
+      setAuthError(null);
+      setAuthRequest({ item, newQuantity, message });
+    } else {
+      setRegisteredError(message);
+    }
+  }
+
+  async function handleRemoveRegistered(item: OpenTabItem, authorizingPin?: string): Promise<boolean> {
     setRegisteredError(null);
     setPendingItemId(item.id);
     try {
-      const { removedItem } = await removeTabItem({ saleItemId: item.id, branchId, shiftId, employeeId });
+      const { removedItem } = await removeTabItem({ saleItemId: item.id, branchId, shiftId, employeeId, authorizingPin });
       onTabChanged();
       if (removedItem && activeTabId) {
         notify(`"${item.productName}" quitado.`, "info", {
@@ -301,25 +330,45 @@ export function CartPanel({
           },
         });
       }
+      return true;
     } catch (err) {
-      setRegisteredError(err instanceof Error ? err.message : "No se pudo quitar el producto.");
+      handleCorrectionError(err, item, null, authorizingPin);
+      return false;
     } finally {
       setPendingItemId(null);
     }
   }
 
-  async function handleAdjustRegistered(saleItemId: string, newQuantity: number, item: OpenTabItem) {
+  async function handleAdjustRegistered(saleItemId: string, newQuantity: number, item: OpenTabItem, authorizingPin?: string): Promise<boolean> {
     setRegisteredError(null);
-    if (newQuantity <= 0) return handleRemoveRegistered(item);
+    if (newQuantity <= 0) return handleRemoveRegistered(item, authorizingPin);
     setPendingItemId(saleItemId);
     try {
-      await updateTabItemQuantity({ saleItemId, branchId, shiftId, employeeId, quantity: newQuantity });
+      await updateTabItemQuantity({ saleItemId, branchId, shiftId, employeeId, quantity: newQuantity, authorizingPin });
       onTabChanged();
+      return true;
     } catch (err) {
-      setRegisteredError(err instanceof Error ? err.message : "No se pudo ajustar la cantidad.");
+      handleCorrectionError(err, item, newQuantity, authorizingPin);
+      return false;
     } finally {
       setPendingItemId(null);
     }
+  }
+
+  function handleAuthorize() {
+    if (!authRequest) return;
+    const { item, newQuantity } = authRequest;
+    setAuthError(null);
+    startAuthorizing(async () => {
+      const ok =
+        newQuantity === null
+          ? await handleRemoveRegistered(item, authPin)
+          : await handleAdjustRegistered(item.id, newQuantity, item, authPin);
+      if (ok) {
+        setAuthRequest(null);
+        setAuthPin("");
+      }
+    });
   }
 
   // El cobro y la cuenta se montan juntos y solo se oculta el que no está
@@ -720,6 +769,47 @@ export function CartPanel({
         }}
         onCancel={() => setConfirmExitTab(false)}
       />
+      <Dialog
+        open={authRequest !== null}
+        onOpenChange={(open) => {
+          if (!open) setAuthRequest(null);
+        }}
+        title="Autorizar corrección"
+      >
+        {authRequest && (
+          <form
+            className="flex flex-col gap-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleAuthorize();
+            }}
+          >
+            <p className="text-sm text-muted-foreground">
+              {authRequest.newQuantity === null
+                ? `Quitar "${authRequest.item.productName}" de la cuenta.`
+                : `Bajar "${authRequest.item.productName}" de ${authRequest.item.quantity} a ${authRequest.newQuantity}.`}{" "}
+              {authRequest.message.replace(/^[^:]*:\s*/, "")} Queda registrado en el detalle de la venta.
+            </p>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="tab-correction-pin">PIN de quien autoriza</Label>
+              <Input
+                id="tab-correction-pin"
+                type="password"
+                inputMode="numeric"
+                autoComplete="off"
+                autoFocus
+                value={authPin}
+                onChange={(e) => setAuthPin(e.target.value)}
+                placeholder="PIN de un empleado con permiso"
+              />
+            </div>
+            {authError && <p role="alert" className="text-sm text-destructive">{authError}</p>}
+            <Button type="submit" variant="destructive" disabled={isAuthorizing || !authPin}>
+              {isAuthorizing ? "Autorizando..." : "Autorizar"}
+            </Button>
+          </form>
+        )}
+      </Dialog>
       <CancelSaleDialog
         sale={tabToCancel}
         onOpenChange={(open) => {

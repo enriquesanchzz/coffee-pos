@@ -131,7 +131,12 @@ export const approvePhysicalCount = safeAction(async function approvePhysicalCou
               stockLocationId: DEFAULT_STOCK_LOCATION_ID,
             },
           },
-          update: { quantity: line.physicalQty },
+          // Se aplica la diferencia contada, no el valor físico tal cual:
+          // las ventas entre el conteo y la aprobación ya descontaron
+          // stock, y fijarlo en physicalQty las "regresaba" al inventario.
+          // Sin fila de stock (create) no hubo movimientos desde entonces,
+          // así que el físico es el valor correcto.
+          update: { quantity: { increment: diff } },
           create: {
             ingredientId: line.ingredientId,
             stockLocationId: DEFAULT_STOCK_LOCATION_ID,

@@ -144,11 +144,17 @@ async function computeExpectedCash(
 }
 
 export const previewShiftClose = safeAction(async function previewShiftClose(shiftId: string) {
-  // Expone los totales de caja del turno — solo para una sesión activa.
-  if (!(await getSessionEmployeeId())) {
+  // Expone el efectivo esperado del turno: solo a quien lo cierra (cajero
+  // del turno) o a quien puede autorizar cierres. La pantalla lo pide hasta
+  // después de registrar el conteo (corte ciego, close-shift-dialog.tsx).
+  const employeeId = await getSessionEmployeeId();
+  if (!employeeId) {
     throw new SessionExpiredError("Necesitas iniciar sesión para ver el corte de caja.");
   }
   const shift = await prisma.shift.findUniqueOrThrow({ where: { id: shiftId } });
+  if (shift.cashierId !== employeeId && !(await hasPermission(employeeId, shift.branchId, "CAJA_CERRAR"))) {
+    throw new Error("Solo el cajero del turno o un gerente pueden ver el corte de caja.");
+  }
   const openingCash = shift.openingCash.toNumber();
   const {
     salesTotal,
@@ -184,6 +190,8 @@ export type CloseShiftInput = {
 
 export const closeShift = safeAction(async function closeShift(input: CloseShiftInput) {
   await assertSessionEmployee(input.cashierId);
+  if (typeof input.closingCash !== "number") throw new Error("Captura el efectivo contado.");
+  assertMoney(input.closingCash, "El efectivo contado", { max: 1_000_000 });
 
   await prisma.$transaction(async (tx) => {
     const shift = await tx.shift.findUnique({ where: { id: input.shiftId } });

@@ -22,6 +22,7 @@ import { includedTax, PAYMENT_METHOD_LABELS } from "@/lib/settings-shared";
 import { zonedClock } from "@/lib/time";
 import { unitLabel } from "@/lib/utils";
 import { SHORTAGE_ERROR_PREFIX } from "@/lib/stock";
+import { AUTHORIZATION_REQUIRED_PREFIX, TAB_FREE_CORRECTION_MINUTES } from "@/lib/tab-corrections";
 import { BUSINESS_UNIT_LABELS } from "@/lib/business-unit";
 import { variantLabel } from "@/lib/coupon-label";
 import { CUSTOMER_OPTION_INCLUDE, toCustomerOption, type CustomerOption } from "@/lib/customers";
@@ -666,8 +667,8 @@ async function resolveSaleItems(
   const saleItemsData: ResolvedSaleItem[] = [];
 
   for (const item of items) {
-    if (item.quantity <= 0) {
-      throw new Error("La cantidad de cada línea debe ser mayor a cero.");
+    if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+      throw new Error("La cantidad de cada línea debe ser un número entero mayor a cero.");
     }
 
     const variant = await tx.productVariant.findUniqueOrThrow({
@@ -838,7 +839,18 @@ async function assertStockOrAllowed(
 
 // Reglas de cobro de Configuración (Cobro, Descuentos, Impuestos) que el
 // servidor vuelve a validar aunque el POS ya las aplique.
-async function assertPaymentMethodsEnabled(payments: { method: PaymentMethod }[]) {
+async function assertPaymentMethodsEnabled(payments: PaymentInput[]) {
+  // Cada renglón por separado, no solo la suma: un pago dividido de
+  // "EFECTIVO −$100 + TARJETA $200" cuadra con una cuenta de $100, pero
+  // baja en $100 el efectivo esperado del corte y oculta un faltante.
+  for (const p of payments) {
+    if (typeof p.amount !== "number" || !Number.isFinite(p.amount) || p.amount < 0) {
+      throw new Error("Cada pago debe ser un monto válido, mayor o igual a cero.");
+    }
+    if (!Object.values(PaymentMethod).includes(p.method)) {
+      throw new Error("Método de pago inválido.");
+    }
+  }
   const { paymentMethods } = await getBusinessSettings();
   const disabled = payments.find((p) => !paymentMethods.includes(p.method));
   if (disabled) {
@@ -1756,7 +1768,53 @@ export type RemoveTabItemInput = {
   branchId: string;
   shiftId: string;
   employeeId: string;
+  // PIN de quien autoriza (VENTA_CANCELAR) — solo hace falta pasada la
+  // ventana de corrección libre (ver authorizeTabCorrection).
+  authorizingPin?: string;
 };
+
+// Quitar o reducir un producto que lleva más de TAB_FREE_CORRECTION_MINUTES
+// en la cuenta ya no es un error de captura: es la forma clásica de cobrar
+// de menos algo que sí se sirvió. Exige el PIN de otra persona con
+// VENTA_CANCELAR (sin PIN si quien opera es gerente/administrador).
+// Regresa quién autorizó, o null si fue dentro de la ventana libre.
+async function authorizeTabCorrection(
+  item: { createdAt: Date },
+  employeeId: string,
+  branchId: string,
+  authorizingPin: string | undefined
+): Promise<string | null> {
+  if (Date.now() - item.createdAt.getTime() < TAB_FREE_CORRECTION_MINUTES * 60_000) return null;
+  // Gerente/administrador corrigen sin pedirle a nadie. Un barista no:
+  // aunque tenga VENTA_CANCELAR (así está la matriz de roles), su propio
+  // PIN no basta — tiene que verlo otra persona.
+  const role = await prisma.employeeBranch.findUnique({
+    where: { employeeId_branchId: { employeeId, branchId } },
+    select: { role: { select: { name: true } } },
+  });
+  if (role?.role.name === "ADMINISTRADOR" || role?.role.name === "GERENTE") return employeeId;
+  const pin = authorizingPin?.trim();
+  if (!pin) {
+    throw new Error(
+      `${AUTHORIZATION_REQUIRED_PREFIX} Este producto lleva más de ${TAB_FREE_CORRECTION_MINUTES} minutos en la cuenta. Pide a otra persona con permiso de anular que ingrese su PIN.`
+    );
+  }
+  const authorizer = await findEmployeeByPin(pin);
+  if (!authorizer) throw new Error("PIN de autorización incorrecto.");
+  if (authorizer.id === employeeId) throw new Error("La autorización debe ser de otra persona.");
+  await requirePermission(authorizer.id, branchId, "VENTA_CANCELAR");
+  return authorizer.id;
+}
+
+const TAB_ITEM_VOID_INCLUDE = {
+  modifiers: true,
+  productVariant: { select: { name: true, product: { select: { name: true } } } },
+} satisfies Prisma.SaleItemInclude;
+
+function voidDescription(item: { productVariant: { name: string; product: { name: string } } | null }) {
+  if (!item.productVariant) return "(producto eliminado)";
+  return `${item.productVariant.product.name} (${item.productVariant.name})`;
+}
 
 // Lo que hace falta para volver a agregar (addItemsToTab) exactamente el
 // mismo producto que se acaba de quitar — ver "Deshacer" en cart-panel.tsx.
@@ -1786,7 +1844,18 @@ export const removeTabItem = safeAction(async function removeTabItem(
     await loadOpenTab(tx, saleId, input.branchId, input.shiftId);
     const item = await tx.saleItem.findUniqueOrThrow({
       where: { id: input.saleItemId },
-      include: { modifiers: true },
+      include: TAB_ITEM_VOID_INCLUDE,
+    });
+    const authorizedById = await authorizeTabCorrection(item, input.employeeId, input.branchId, input.authorizingPin);
+    await tx.saleItemVoid.create({
+      data: {
+        saleId: item.saleId,
+        description: voidDescription(item),
+        quantity: item.quantity,
+        amount: item.lineTotal,
+        employeeId: input.employeeId,
+        authorizedById,
+      },
     });
 
     const reconstructed = await reconstructTabItem(tx, item);
@@ -1827,6 +1896,8 @@ export type UpdateTabItemQuantityInput = {
   shiftId: string;
   employeeId: string;
   quantity: number;
+  // Solo al reducir, pasada la ventana libre — ver authorizeTabCorrection.
+  authorizingPin?: string;
 };
 
 // Ajustar la cantidad de un producto ya registrado en una cuenta
@@ -1838,8 +1909,8 @@ export type UpdateTabItemQuantityInput = {
 // la cantidad vieja y la nueva.
 export const updateTabItemQuantity = safeAction(async function updateTabItemQuantity(input: UpdateTabItemQuantityInput) {
   await assertSessionEmployee(input.employeeId);
-  if (input.quantity <= 0) {
-    throw new Error("La cantidad debe ser mayor a cero — para quitar el producto, usa \"Quitar\".");
+  if (!Number.isInteger(input.quantity) || input.quantity <= 0) {
+    throw new Error("La cantidad debe ser un número entero mayor a cero — para quitar el producto, usa \"Quitar\".");
   }
 
   await requirePermission(input.employeeId, input.branchId, "VENTA_REALIZAR");
@@ -1855,11 +1926,25 @@ export const updateTabItemQuantity = safeAction(async function updateTabItemQuan
     await loadOpenTab(tx, saleId, input.branchId, input.shiftId);
     const item = await tx.saleItem.findUniqueOrThrow({
       where: { id: input.saleItemId },
-      include: { modifiers: true },
+      include: TAB_ITEM_VOID_INCLUDE,
     });
     const reconstructed = await reconstructTabItem(tx, item);
     if (!reconstructed) {
       throw new Error("Este producto ya no existe, no se puede ajustar — quítalo.");
+    }
+    // Subir la cantidad es libre; bajarla es quitar piezas ya registradas.
+    if (input.quantity < item.quantity) {
+      const authorizedById = await authorizeTabCorrection(item, input.employeeId, input.branchId, input.authorizingPin);
+      await tx.saleItemVoid.create({
+        data: {
+          saleId: item.saleId,
+          description: voidDescription(item),
+          quantity: item.quantity - input.quantity,
+          amount: item.unitPrice.mul(item.quantity - input.quantity),
+          employeeId: input.employeeId,
+          authorizedById,
+        },
+      });
     }
 
     const oldConsumption = await computeTabItemConsumption(tx, reconstructed, item.quantity);

@@ -66,6 +66,48 @@ Convenciones:
   (`resetSettingsSection`). Las pruebas están en `e2e/configuracion.spec.ts`
   y restauran los valores al terminar.
 
+## Auditoría de seguridad y procesos (noviembre 2026, rama `auditoria-seguridad`)
+
+Corregido (pruebas en `e2e/auditoria.spec.ts` y `e2e/zz-limite-pin.spec.ts`):
+
+- **Servidor propio (`server.js`, `npm start`)**: la app se sirve directo
+  en la red del café, sin proxy, así que `X-Forwarded-For` lo escribía el
+  cliente y bastaba cambiarlo para saltarse el límite de intentos de PIN.
+  `server.js` lo reemplaza por la IP real del socket (`TRUST_PROXY=1` si
+  algún día se pone un proxy enfrente). **pm2 debe seguir usando
+  `npm start`.**
+- **Pagos**: cada renglón debe ser ≥ 0 (un pago dividido con efectivo
+  negativo cuadraba la suma y bajaba el efectivo esperado del corte).
+- **Conteo físico**: al aprobar se aplica la diferencia (`increment`), no se
+  fija el valor físico (borraba las ventas hechas entre contar y aprobar).
+- **Sesión**: `getSessionEmployeeId` exige `isActive` — un empleado
+  desactivado ya no opera con la pestaña que tenía abierta.
+- **Reactivar empleado** exige PIN nuevo (el PIN solo es único entre activos).
+- **Correcciones de cuenta abierta** (`removeTabItem`/
+  `updateTabItemQuantity` al bajar): libres los primeros
+  `TAB_FREE_CORRECTION_MINUTES` (5, `lib/tab-corrections.ts`); después,
+  PIN de **otra persona** con `VENTA_CANCELAR` salvo que quien opera sea
+  GERENTE/ADMINISTRADOR. Todo queda en `SaleItemVoid` y se ve en
+  `/ventas/[id]`. Migración `20261127200000_sale_item_voids` (también
+  agrega `SaleItem.createdAt`).
+- **Corte ciego**: el cajero registra el conteo antes de ver el esperado y
+  ya no lo edita; `previewShiftClose` solo para el cajero del turno o quien
+  tenga `CAJA_CERRAR`. `closeShift` valida el monto.
+- Cantidades de venta enteras; `next` 15.5.29 y `sharp` 0.35.5 (avisos de
+  seguridad).
+
+Pendiente (decisiones del negocio o de infraestructura):
+
+- HTTPS y separar la red del POS de la WiFi de clientes (hoy PIN, password y
+  cookie viajan en texto plano).
+- BARISTA tiene `VENTA_CANCELAR` en la matriz: puede anular sus propias
+  ventas con su propio PIN (`cancelSale`).
+- El POS manda toda la base de clientes al navegador (`getCustomerOptions`).
+- El PIN de 4 dígitos del admin abre Ventas/Clientes/Reportes/Compras.
+- Respaldo: `find` en `~/.coffee-pos-scripts/backup-db.sh` falla por
+  permisos de iCloud bajo launchd (no purga ni respalda fotos).
+- Tope de descuento manual en Configuración está vacío (permite 100 %).
+
 ## Auditoría QA/UX/A11y y plan de acción (octubre 2026, fases 0–6)
 
 Segunda ronda: auditoría senior (tickets QA-001..030, A11Y-01..09, mejoras D/E)
