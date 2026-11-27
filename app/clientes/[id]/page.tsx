@@ -3,11 +3,12 @@ import { redirect } from "next/navigation";
 import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
-import { getCustomerDetail } from "@/lib/customers";
+import { getCustomerDetail, getKnownAllergenTags } from "@/lib/customers";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CustomerForm } from "@/components/clientes/customer-form";
 import { LoyaltyActions } from "@/components/clientes/loyalty-actions";
+import { PetsEditor } from "@/components/clientes/pets-editor";
 import { formatCurrency } from "@/lib/utils";
 import { formatDateTime } from "@/lib/time";
 import { orNotFound } from "@/lib/not-found";
@@ -34,7 +35,7 @@ export default async function DetalleClientePage({
   }
 
   const { id } = await params;
-  const customer = await orNotFound(getCustomerDetail(id));
+  const [customer, allergenTags] = await Promise.all([orNotFound(getCustomerDetail(id)), getKnownAllergenTags()]);
 
   return (
     <AuthenticatedShell isAdmin employeeName={employee.name}>
@@ -111,6 +112,20 @@ export default async function DetalleClientePage({
                   welcomeCouponCode={customer.welcomeCoupon && !customer.welcomeCoupon.used ? customer.welcomeCoupon.code : null}
                 />
               )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Mascotas</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <PetsEditor
+                employeeId={employee.id}
+                customerId={customer.id}
+                pets={customer.pets}
+                allergenSuggestions={allergenTags}
+              />
             </CardContent>
           </Card>
 

@@ -12,6 +12,7 @@ import { normalizePhoneMx, normalizeRfc, normalizeImageUrl } from "@/lib/validat
 import { DEFAULT_SETTINGS, isValidTimeZone, type ShortagePolicy, type TaxMode } from "@/lib/settings-shared";
 import type { LoyaltyProgram, LoyaltyRewardType, PaymentMethod, Prisma } from "@prisma/client";
 import { activePrograms, loadLoyaltyConfig, lockLoyaltyConfig, syncAllPermanentDiscounts } from "@/lib/loyalty-points";
+import { issueDueBirthdayCoupons } from "@/lib/birthdays";
 
 // Configuración global simple (hoy solo el % de food cost objetivo) —
 // exclusiva de Administración, mismo patrón que actions/employees.ts:
@@ -250,6 +251,31 @@ export const updateLoyaltySettings = safeAction(async function updateLoyaltySett
   revalidatePath("/", "layout");
 });
 
+// Cupones de cumpleaños (lib/birthdays.ts). No tocan puntos ni niveles, así
+// que no pasan por saveLoyaltyChange. Al activarlos se entregan de una vez
+// los de quien esté festejando hoy (dentro de la vigencia).
+export const updateBirthdaySettings = safeAction(async function updateBirthdaySettings(input: {
+  birthdayCustomerPercent: number;
+  birthdayPetPercent: number;
+  birthdayCouponValidDays: number;
+  birthdayLeadDays: number;
+}) {
+  await requireConfigActor();
+  await prisma.branch.update({
+    where: { id: DEFAULT_BRANCH_ID },
+    data: {
+      birthdayCustomerPercent: wholeNumber(input.birthdayCustomerPercent, "El cupón de cumpleaños del cliente", 0, 100),
+      birthdayPetPercent: wholeNumber(input.birthdayPetPercent, "El cupón de cumpleaños de la mascota", 0, 100),
+      birthdayCouponValidDays: wholeNumber(input.birthdayCouponValidDays, "La vigencia del cupón de cumpleaños (días)", 1, 60),
+      birthdayLeadDays: wholeNumber(input.birthdayLeadDays, "Los días de anticipación de la fecha", 0, 365),
+    },
+  });
+  // Si falla, los ajustes ya quedaron guardados y la revisión de cada hora
+  // los entrega (instrumentation.ts).
+  await issueDueBirthdayCoupons().catch((err) => console.error("[cumpleaños]", err));
+  revalidatePath("/", "layout");
+});
+
 // Todo cambio a los ajustes o niveles de lealtad pasa por aquí: valida la
 // combinación resultante y pone al día los descuentos permanentes de todos
 // los clientes, en la misma transacción.
@@ -466,7 +492,7 @@ export const updateTaxSettings = safeAction(async function updateTaxSettings(inp
 
 // Restaura una sección a los valores originales (los @default del schema).
 export const resetSettingsSection = safeAction(async function resetSettingsSection(
-  section: "cobro" | "caja" | "lealtad" | "descuentos" | "inventario" | "seguridad" | "impuestos"
+  section: "cobro" | "caja" | "lealtad" | "cumpleanos" | "descuentos" | "inventario" | "seguridad" | "impuestos"
 ) {
   await requireConfigActor();
   const d = DEFAULT_SETTINGS;
@@ -489,6 +515,12 @@ export const resetSettingsSection = safeAction(async function resetSettingsSecti
       loyaltyResetAtTopLevel: d.loyaltyResetAtTopLevel,
       welcomeCouponPercent: d.welcomeCouponPercent,
       welcomeCouponValidDays: d.welcomeCouponValidDays,
+    },
+    cumpleanos: {
+      birthdayCustomerPercent: d.birthdayCustomerPercent,
+      birthdayPetPercent: d.birthdayPetPercent,
+      birthdayCouponValidDays: d.birthdayCouponValidDays,
+      birthdayLeadDays: d.birthdayLeadDays,
     },
     descuentos: { maxManualDiscountPercent: d.maxManualDiscountPercent },
     inventario: { shortagePolicy: d.shortagePolicy },

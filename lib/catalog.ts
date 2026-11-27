@@ -45,6 +45,8 @@ export type CatalogProduct = {
   categoryIcon: string | null;
   // Reventa directa (pechera, taza…): no se le agregan ingredientes.
   isRetail: boolean;
+  // Lo que contiene (Product.allergenTags), para la alerta de alergias.
+  allergenTags: string[];
   variants: CatalogVariant[];
   // True cuando algún insumo directo de la receta de TODAS las variantes
   // tiene existencia registrada en 0 o menos. Solo informativo: el POS no
@@ -167,6 +169,7 @@ export async function getCatalog(
         imageUrl: product.imageUrl,
         categoryIcon: category.icon ?? category.parent?.icon ?? null,
         isRetail: product.type === "REVENTA_DIRECTA",
+        allergenTags: product.allergenTags,
         outOfStock:
           product.variants.length > 0 && product.variants.every((v) => unavailableVariantIds.has(v.id)),
         variants: product.variants.map((variant) => {

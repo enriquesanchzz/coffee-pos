@@ -45,7 +45,12 @@ export default async function ClientesPage({
             Buscar
           </Button>
         </form>
-        <p className="-mt-2 text-xs text-muted-foreground">Por nombre, teléfono, email o código de tarjeta.</p>
+        <p className="-mt-2 text-xs text-muted-foreground">
+          Por nombre, teléfono, email o código de tarjeta. ·{" "}
+          <Link href="/clientes/cumpleanos" className="underline">
+            Ver cumpleaños próximos
+          </Link>
+        </p>
 
         <Card>
           <CardHeader>

@@ -24,7 +24,7 @@ import { unitLabel } from "@/lib/utils";
 import { SHORTAGE_ERROR_PREFIX } from "@/lib/stock";
 import { BUSINESS_UNIT_LABELS } from "@/lib/business-unit";
 import { variantLabel } from "@/lib/coupon-label";
-import type { CustomerOption } from "@/lib/customers";
+import { CUSTOMER_OPTION_INCLUDE, toCustomerOption, type CustomerOption } from "@/lib/customers";
 import { awardSalePoints, getSaleLoyaltySummary, lockCustomer, revertSalePoints, withdrawReleasedCouponIfUnearned, type SaleLoyaltySummary } from "@/lib/loyalty-points";
 
 export type CreateSaleExtraIngredientInput = {
@@ -1594,6 +1594,9 @@ export const listOpenTabs = safeAction(async function listOpenTabs(branchId: str
 
 export type OpenTabItem = {
   id: string;
+  productVariantId: string | null;
+  // Lo que contiene el producto, para la alerta de alergias (lib/allergens.ts).
+  allergenTags: string[];
   productVariantName: string;
   temperature: VariantTemperature | null;
   productName: string;
@@ -1625,7 +1628,7 @@ export const getTabDetail = safeAction(async function getTabDetail(saleId: strin
   const sale = await prisma.sale.findUniqueOrThrow({
     where: { id: saleId },
     include: {
-      customer: { include: { loyaltyCard: true } },
+      customer: { include: CUSTOMER_OPTION_INCLUDE },
       items: {
         include: {
           productVariant: { include: { product: true } },
@@ -1639,19 +1642,11 @@ export const getTabDetail = safeAction(async function getTabDetail(saleId: strin
     id: sale.id,
     tableNumber: sale.tableNumber,
     total: sale.total.toNumber(),
-    customer: sale.customer
-      ? {
-          id: sale.customer.id,
-          name: sale.customer.name,
-          phone: sale.customer.phone,
-          address: sale.customer.address,
-          loyaltyCode: sale.customer.loyaltyCard?.code ?? null,
-          birthDate: sale.customer.birthDate?.toISOString() ?? null,
-          gender: sale.customer.gender,
-        }
-      : null,
+    customer: sale.customer ? toCustomerOption(sale.customer) : null,
     items: sale.items.map((item) => ({
       id: item.id,
+      productVariantId: item.productVariantId,
+      allergenTags: item.productVariant?.product.allergenTags ?? [],
       productVariantName: item.productVariant?.name ?? "(producto eliminado)",
       temperature: item.productVariant?.temperature ?? null,
       productName: item.productVariant?.product.name ?? "",

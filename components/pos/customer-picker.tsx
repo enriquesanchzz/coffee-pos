@@ -12,6 +12,11 @@ import type { CustomerOption } from "@/lib/customers";
 import { withActionErrors } from "@/lib/action-result";
 import { useToast } from "@/components/ui/toast";
 import { Combobox } from "@/components/ui/combobox";
+import { Dialog } from "@/components/ui/dialog";
+import { PawPrint } from "lucide-react";
+import { PetsEditor } from "@/components/clientes/pets-editor";
+import { isBirthdayOn } from "@/lib/birthday-dates";
+import { zonedDateKey } from "@/lib/time";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const createCustomer = withActionErrors(createCustomerAction);
@@ -33,6 +38,7 @@ export function CustomerPicker({
   onDomicilioAddressChange,
   domicilioOrigen,
   onDomicilioOrigenChange,
+  allergenSuggestions = [],
 }: {
   customers: CustomerOption[];
   employeeId: string;
@@ -43,7 +49,13 @@ export function CustomerPicker({
   onDomicilioAddressChange: (value: string) => void;
   domicilioOrigen: DomicilioOrigen;
   onDomicilioOrigenChange: (value: DomicilioOrigen) => void;
+  allergenSuggestions?: string[];
 }) {
+  const [petsOpen, setPetsOpen] = useState(false);
+  // "Hoy" en la zona de la sucursal; solo en el navegador (evita un
+  // desfase de hidratación cerca de medianoche).
+  const [todayKey, setTodayKey] = useState<string | null>(null);
+  useEffect(() => setTodayKey(zonedDateKey(new Date())), []);
   // Lo que se teclea en el buscador — sirve para precargar "Crear X".
   const [customerQuery, setCustomerQuery] = useState("");
   // Clientes creados desde este mismo picker — el prop `customers` viene
@@ -114,6 +126,7 @@ export function CustomerPicker({
           loyaltyCode: created.loyaltyCardCode,
           birthDate: null,
           gender: null,
+          pets: [],
         };
         setLocalCustomers((prev) => [...prev, option]);
         handleSelect(option);
@@ -168,6 +181,28 @@ export function CustomerPicker({
             Quitar
           </button>
         </p>
+      )}
+
+      {selectedCustomer && (
+        <SelectedCustomerPets
+          customer={selectedCustomer}
+          todayKey={todayKey}
+          onManagePets={() => setPetsOpen(true)}
+        />
+      )}
+      {selectedCustomer && (
+        <Dialog open={petsOpen} onOpenChange={setPetsOpen} title={`Mascotas de ${selectedCustomer.name}`}>
+          <PetsEditor
+            employeeId={employeeId}
+            customerId={selectedCustomer.id}
+            pets={selectedCustomer.pets}
+            allergenSuggestions={allergenSuggestions}
+            onPetsChange={(pets) => {
+              onSelectCustomer({ ...selectedCustomer, pets });
+              setLocalCustomers((prev) => prev.map((c) => (c.id === selectedCustomer.id ? { ...c, pets } : c)));
+            }}
+          />
+        </Dialog>
       )}
 
       {justCreatedCustomer && justCreatedCustomer.id === selectedCustomer?.id && (
@@ -246,6 +281,56 @@ export function CustomerPicker({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Mascotas del cliente elegido (con sus alergias, para tenerlas a la vista
+// al armar la cuenta) y aviso de cumpleaños de hoy.
+function SelectedCustomerPets({
+  customer,
+  todayKey,
+  onManagePets,
+}: {
+  customer: CustomerOption;
+  todayKey: string | null;
+  onManagePets: () => void;
+}) {
+  const birthdays = todayKey
+    ? [
+        ...(isBirthdayOn(customer.birthDate, todayKey) ? [`¡Hoy es el cumpleaños de ${customer.name}!`] : []),
+        ...customer.pets.filter((p) => isBirthdayOn(p.birthDate, todayKey)).map((p) => `¡Hoy cumple ${p.name}!`),
+      ]
+    : [];
+  return (
+    <div className="flex flex-col gap-1">
+      {birthdays.map((text) => (
+        <p key={text} className="text-xs font-medium">
+          🎂 {text}
+        </p>
+      ))}
+      <div className="flex flex-wrap items-center gap-1">
+        {customer.pets.map((pet) => (
+          <span
+            key={pet.id}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs",
+              pet.allergies.length > 0 ? "border-amber-500/60 bg-amber-50 text-amber-950 dark:bg-amber-950/40 dark:text-amber-100" : "border-border"
+            )}
+          >
+            <PawPrint className="h-3 w-3" aria-hidden />
+            {pet.name}
+            {pet.allergies.length > 0 && ` · alergias: ${pet.allergies.join(", ")}`}
+          </span>
+        ))}
+        <button
+          type="button"
+          onClick={onManagePets}
+          className={buttonVariants({ variant: "outline", size: "sm", className: "h-8" })}
+        >
+          {customer.pets.length > 0 ? `Mascotas (${customer.pets.length})` : "+ Mascota"}
+        </button>
+      </div>
     </div>
   );
 }

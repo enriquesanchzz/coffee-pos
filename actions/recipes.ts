@@ -11,6 +11,7 @@ import { recordRecipeCostSnapshot } from "@/lib/recipe-cost";
 import { getVariantRecipeDetail } from "@/lib/recipes";
 import { assertMoney, normalizeImageUrl } from "@/lib/validation";
 import { isBusinessUnit } from "@/lib/business-unit";
+import { normalizeAllergenTags } from "@/lib/allergens";
 
 export type CreateIngredientInput = {
   employeeId: string;
@@ -248,6 +249,8 @@ export type CreateProductWithRecipeInput = {
   employeeId: string;
   productName: string;
   imageUrl?: string;
+  // Lo que contiene, para las alertas de alergias de mascotas.
+  allergenTags?: string[];
   categoryId?: string;
   newCategoryName?: string;
   newCategoryIcon?: string;
@@ -310,7 +313,13 @@ export const createProductWithRecipe = safeAction(async function createProductWi
       : await tx.productCategory.findUniqueOrThrow({ where: { id: input.categoryId } });
 
     const product = await tx.product.create({
-      data: { name: productName, imageUrl: normalizeImageUrl(input.imageUrl), categoryId: category.id, type },
+      data: {
+        name: productName,
+        imageUrl: normalizeImageUrl(input.imageUrl),
+        allergenTags: normalizeAllergenTags(input.allergenTags, "Lo que contiene"),
+        categoryId: category.id,
+        type,
+      },
     });
 
     await tx.branchProduct.create({
@@ -454,6 +463,7 @@ export type UpdateVariantRecipeInput = {
   // Nivel producto (no de la variante) — se actualiza vía el producto
   // dueño de esta variante.
   imageUrl?: string;
+  allergenTags?: string[];
 };
 
 // Editar la receta de una variante existente NO sobreescribe las líneas de
@@ -493,10 +503,13 @@ export const updateVariantRecipe = safeAction(async function updateVariantRecipe
       include: { product: true },
     });
 
-    if (input.imageUrl !== undefined) {
+    if (input.imageUrl !== undefined || input.allergenTags !== undefined) {
       await tx.product.update({
         where: { id: updatedVariant.productId },
-        data: { imageUrl: normalizeImageUrl(input.imageUrl) },
+        data: {
+          imageUrl: input.imageUrl === undefined ? undefined : normalizeImageUrl(input.imageUrl),
+          allergenTags: input.allergenTags === undefined ? undefined : normalizeAllergenTags(input.allergenTags, "Lo que contiene"),
+        },
       });
     }
 

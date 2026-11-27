@@ -19,6 +19,8 @@ import { withActionErrors } from "@/lib/action-result";
 import { useToast } from "@/components/ui/toast";
 import { randomId } from "@/lib/id";
 import { ImageUpload } from "@/components/ui/image-upload";
+import { TagInput } from "@/components/ui/tag-input";
+import { COMMON_ALLERGENS } from "@/lib/allergens";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const createProductWithRecipe = withActionErrors(createProductWithRecipeAction);
@@ -108,6 +110,7 @@ export function NewProductForm({
   const [productType, setProductType] = useState<ProductType>("RECETA");
   const [productName, setProductName] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [allergenTags, setAllergenTags] = useState<string[]>([]);
   // Sin preselección: antes quedaba en la primera categoría ("Bagels") y
   // un producto nuevo podía terminar ahí sin que nadie lo eligiera (QA-009).
   const [categoryId, setCategoryId] = useState(categories.length > 0 ? "" : NEW_CATEGORY_VALUE);
@@ -151,6 +154,7 @@ export function NewProductForm({
           productName,
           type: productType,
           imageUrl: imageUrl || undefined,
+          allergenTags,
           categoryId: categoryId === NEW_CATEGORY_VALUE ? undefined : categoryId,
           newCategoryName: categoryId === NEW_CATEGORY_VALUE ? newCategoryName : undefined,
           newCategoryIcon: categoryId === NEW_CATEGORY_VALUE ? newCategoryIcon || undefined : undefined,
@@ -226,6 +230,15 @@ export function NewProductForm({
           </div>
 
           <ImageUpload id="product-image" label="Foto (opcional)" value={imageUrl} onChange={setImageUrl} />
+          <TagInput
+            id="product-allergens"
+            label="Contiene (alérgenos para mascotas, opcional)"
+            value={allergenTags}
+            onChange={setAllergenTags}
+            suggestions={COMMON_ALLERGENS}
+            placeholder="ej. pollo — Enter para agregar"
+            hint="Si una mascota del cliente es alérgica a algo de aquí, caja muestra un aviso. Aplica a todas las variantes."
+          />
 
           <div className="flex flex-col gap-1">
             <Label htmlFor="product-category">Categoría</Label>

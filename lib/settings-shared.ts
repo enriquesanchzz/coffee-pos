@@ -46,6 +46,10 @@ export type BusinessSettings = {
   loyaltyResetAtTopLevel: boolean;
   welcomeCouponPercent: number;
   welcomeCouponValidDays: number | null;
+  birthdayCustomerPercent: number;
+  birthdayPetPercent: number;
+  birthdayCouponValidDays: number;
+  birthdayLeadDays: number;
   maxManualDiscountPercent: number | null;
   shortagePolicy: ShortagePolicy;
   pinMaxAttempts: number;
@@ -86,6 +90,10 @@ export const DEFAULT_SETTINGS: BusinessSettings = {
   loyaltyResetAtTopLevel: false,
   welcomeCouponPercent: 10,
   welcomeCouponValidDays: null,
+  birthdayCustomerPercent: 0,
+  birthdayPetPercent: 0,
+  birthdayCouponValidDays: 7,
+  birthdayLeadDays: 30,
   maxManualDiscountPercent: null,
   shortagePolicy: "CONFIRMAR",
   pinMaxAttempts: 5,
