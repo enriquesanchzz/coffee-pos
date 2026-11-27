@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { Alert } from "@/components/ui/alert";
 import { useRouter } from "next/navigation";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -107,13 +108,13 @@ export function CancelSaleDialog({
               placeholder="PIN de un empleado con permiso"
             />
           </div>
-          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+          {error && <Alert variant="error">{error}</Alert>}
           <Button
             variant="destructive"
             onClick={handleConfirm}
             disabled={isPending || !reason.trim() || !pin}
           >
-            {isPending ? "Anulando..." : isOpenTab ? "Cancelar cuenta" : "Anular venta"}
+            {isPending ? "Anulando…" : isOpenTab ? "Cancelar cuenta" : "Anular venta"}
           </Button>
         </div>
       )}

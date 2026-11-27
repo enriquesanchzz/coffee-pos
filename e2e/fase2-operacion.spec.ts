@@ -15,10 +15,10 @@ test.describe("QA-003 stock insuficiente", () => {
       await page.getByRole("button", { name: "Cobrar" }).click();
       await expect(page.getByText("Leche entera: faltan 180 ml")).toBeVisible();
       await page.getByRole("button", { name: "Exacto" }).click();
-      await expect(page.getByRole("button", { name: "Confirmar venta" })).toBeDisabled();
+      await expect(page.getByRole("button", { name: /^(Cobrar \$|Faltan \$|Calculando…|Cobrando…)/ })).toBeDisabled();
 
-      await page.getByLabel("Vender de todos modos").check();
-      await page.getByRole("button", { name: "Confirmar venta" }).click();
+      await page.getByLabel(/^Cobrar de todos modos/).check();
+      await page.getByRole("button", { name: /^(Cobrar \$|Faltan \$|Calculando…|Cobrando…)/ }).click();
       await expectSaleRegistered(page);
       expect(await stockOf("ing-leche")).toBe(-180);
 
@@ -67,9 +67,9 @@ test.describe("QA-015 red", () => {
       await route.continue();
     });
 
-    await page.getByRole("button", { name: "Confirmar venta" }).click();
+    await page.getByRole("button", { name: /^(Cobrar \$|Faltan \$|Calculando…|Cobrando…)/ }).click();
     await expect(page.getByText("Sin conexión con el servidor")).toBeVisible();
-    await page.getByRole("button", { name: "Confirmar venta" }).click();
+    await page.getByRole("button", { name: /^(Cobrar \$|Faltan \$|Calculando…|Cobrando…)/ }).click();
     await expectSaleRegistered(page);
     expect(await db.sale.count()).toBe(before + 1);
   });
@@ -82,7 +82,7 @@ test.describe("QA-011 sesión expirada", () => {
     await page.getByRole("button", { name: "Cobrar" }).click();
     await page.getByRole("button", { name: "Exacto" }).click();
     await context.clearCookies();
-    await page.getByRole("button", { name: "Confirmar venta" }).click();
+    await page.getByRole("button", { name: /^(Cobrar \$|Faltan \$|Calculando…|Cobrando…)/ }).click();
     await page.waitForURL("**/?error=sesion");
     await expect(page.getByText("Tu sesión expiró")).toBeVisible();
   });

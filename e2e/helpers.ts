@@ -44,7 +44,7 @@ export async function addProduct(page: Page, name: string, options: string[] = [
 export async function payExactCash(page: Page) {
   await page.getByRole("button", { name: "Cobrar" }).click();
   await page.getByRole("button", { name: "Exacto" }).click();
-  await page.getByRole("button", { name: "Confirmar venta" }).click();
+  await page.getByRole("button", { name: /^(Cobrar \$|Faltan \$|Calculando…|Cobrando…)/ }).click();
   await expectSaleRegistered(page);
 }
 

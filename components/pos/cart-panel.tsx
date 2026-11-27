@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Coffee, LogOut, Minus, Plus, Trash2, XCircle } from "lucide-react";
+import { Coffee, LogOut, Minus, Plus, Trash2, TriangleAlert, XCircle } from "lucide-react";
 import type { SaleOrderType, DomicilioOrigen } from "@prisma/client";
 import { useCartStore, lineUnitPrice, cartLineToSaleItemInput } from "./cart-store";
 import { openTab as openTabAction, addItemsToTab as addItemsToTabAction, removeTabItem as removeTabItemAction, updateTabItemQuantity as updateTabItemQuantityAction, type OpenTabDetail, type OpenTabItem } from "@/actions/pos";
@@ -216,13 +216,31 @@ export function CartPanel({
   // SHORTAGE_ERROR_PREFIX y aquí se ofrece reintentar confirmando.
   const [shortageMessage, setShortageMessage] = useState<string | null>(null);
 
+  // "Imprimir cuenta" con una ronda sin agregar: se agrega la ronda y luego
+  // se abre la pre-cuenta (UX-06). La pestaña se abre en el clic (si se
+  // abre después de esperar al servidor, el navegador la bloquea) y se
+  // dirige a la cuenta cuando la ronda ya quedó guardada.
+  const [confirmPrint, setConfirmPrint] = useState(false);
+  const printWindowRef = useRef<{ win: Window; url: string } | null>(null);
+  function closePendingPrint() {
+    printWindowRef.current?.win.close();
+    printWindowRef.current = null;
+  }
+  function addRoundAndPrint() {
+    setConfirmPrint(false);
+    if (!activeTabId) return;
+    const win = window.open("about:blank", "_blank");
+    if (win) printWindowRef.current = { win, url: `/pos/cuenta/${activeTabId}` };
+    handleLeaveOpen();
+  }
+
   function handleLeaveOpen(allowShortage = false) {
     setTabError(null);
     setShortageMessage(null);
     if (lines.length === 0) return;
     if (!activeTabId && !tableNumber.trim()) {
       setTabError(
-        orderType === "CONSUMO_LOCAL" ? "Captura el número de mesa." : "Captura un nombre o nota para identificar el pedido."
+        orderType === "CONSUMO_LOCAL" ? "Escribe el número de mesa para dejarla en espera." : "Escribe a nombre de quién va el pedido para dejarlo en espera."
       );
       return;
     }
@@ -256,6 +274,10 @@ export function CartPanel({
         }
         tabRequestIdRef.current = null;
         setTabOfflineRetry(false);
+        if (printWindowRef.current) {
+          printWindowRef.current.win.location.href = printWindowRef.current.url;
+          printWindowRef.current = null;
+        }
         useCartStore.getState().clear();
         setLastReceipt(null);
         setTabConfirmation({ tableNumber: resolvedTableNumber, orderType, itemCount, total, isNewTab });
@@ -267,6 +289,7 @@ export function CartPanel({
           setShortageMessage(message);
         } else {
           setTabError(message);
+          if (!(err instanceof NetworkError)) closePendingPrint();
         }
         // Solo una falla de red reintenta sola — un error de negocio real
         // (mesa duplicada, stock, etc.) se queda mostrado para que el
@@ -420,13 +443,13 @@ export function CartPanel({
         </div>
         <div className="flex flex-col gap-1">
           <Label htmlFor="table-number">
-            {orderType === "CONSUMO_LOCAL" ? "Número de mesa" : "Nombre o nota (para dejar en espera)"}
+            {orderType === "CONSUMO_LOCAL" ? "Número de mesa" : "¿A nombre de quién?"}
           </Label>
           <Input
             id="table-number"
             value={tableNumber}
             onChange={(e) => setTableNumber(e.target.value)}
-            placeholder={orderType === "CONSUMO_LOCAL" ? "Número de mesa" : "ej. Juan, chamarra roja"}
+            placeholder={orderType === "CONSUMO_LOCAL" ? "Número de mesa" : "Juan, chamarra roja"}
             className="h-9"
             disabled={Boolean(activeTabId)}
           />
@@ -448,7 +471,10 @@ export function CartPanel({
       <div className="flex-1 overflow-y-auto p-3">
         {allergyConflicts.length > 0 && (
           <Alert variant="warning" className="mb-3">
-            <p className="font-semibold">⚠ Alergias de las mascotas de {selectedCustomer?.name}</p>
+            <p className="flex items-center gap-2 font-semibold">
+              <TriangleAlert className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
+              Alergias de las mascotas de {selectedCustomer?.name}
+            </p>
             <ul className="mt-1 list-disc pl-5">
               {allergyConflicts.map((c) => (
                 <li key={`${c.key}-${c.petName}`}>
@@ -456,13 +482,16 @@ export function CartPanel({
                 </li>
               ))}
             </ul>
+            <p className="mt-1">Confirma con el cliente o quita el producto.</p>
           </Alert>
         )}
         {activeTabSummary && (
           <div className="mb-4 flex flex-col gap-2">
             {/* Salir deja la cuenta en espera tal cual y vuelve a una venta
                 nueva; Cancelar la anula (motivo + PIN, igual que en Caja). */}
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/40 p-2">
+            {/* Cancelar (destructiva) queda separada de Salir, al extremo
+                derecho y sin borde, para no tocarla por error (UX-05). */}
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/40 p-2">
               <p className="text-sm font-semibold">
                 {activeTabSummary.tableNumber
                   ? orderType === "CONSUMO_LOCAL"
@@ -470,19 +499,19 @@ export function CartPanel({
                     : activeTabSummary.tableNumber
                   : "Cuenta en espera"}
               </p>
-              <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => (lines.length > 0 ? setConfirmExitTab(true) : exitTab())}
+              >
+                <LogOut className="h-4 w-4" aria-hidden="true" />
+                Salir
+              </Button>
+              <div className="ml-auto">
                 <Button
                   type="button"
-                  variant="outline"
-                  onClick={() => (lines.length > 0 ? setConfirmExitTab(true) : exitTab())}
-                >
-                  <LogOut className="h-4 w-4" aria-hidden="true" />
-                  Salir
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="text-destructive hover:text-destructive"
+                  variant="ghost"
+                  className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                   onClick={() =>
                     setTabToCancel({
                       id: activeTabSummary.id,
@@ -502,12 +531,10 @@ export function CartPanel({
                 </Button>
               </div>
             </div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Ya registrado en la cuenta — revisa con el cliente antes de cobrar
-            </p>
-            {registeredError && <p role="alert" className="text-xs text-destructive">{registeredError}</p>}
+            <p className="text-sm font-semibold">Ya en la cuenta (confírmalo con el cliente)</p>
+            {registeredError && <Alert variant="error">{registeredError}</Alert>}
             {activeTabSummary.items.length === 0 && (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 Todavía no hay nada registrado (se quitó todo) — la cuenta sigue abierta.
               </p>
             )}
@@ -541,9 +568,9 @@ export function CartPanel({
                         onClick={() => handleRemoveRegistered(item)}
                         disabled={isPending}
                         className="flex h-11 w-11 flex-shrink-0 items-center justify-center text-muted-foreground hover:text-destructive disabled:opacity-50"
-                        aria-label="Quitar"
+                        aria-label={`Quitar ${item.productName} ${item.productVariantName} de la cuenta`}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-5 w-5" aria-hidden="true" />
                       </button>
                     </div>
                     <div className="mt-2 flex items-center justify-between">
@@ -554,18 +581,22 @@ export function CartPanel({
                           className="h-11 w-11 rounded-full"
                           disabled={isPending}
                           onClick={() => handleAdjustRegistered(item.id, item.quantity - 1, item)}
+                          aria-label={`Quitar uno de ${item.productName} ${item.productVariantName}`}
                         >
-                          <Minus className="h-3 w-3" />
+                          <Minus className="h-4 w-4" aria-hidden="true" />
                         </Button>
-                        <span className="w-6 text-center text-sm">{item.quantity}</span>
+                        <span className="w-8 text-center text-base font-semibold tabular-nums" aria-label={`Cantidad: ${item.quantity}`}>
+                          {item.quantity}
+                        </span>
                         <Button
                           size="icon"
                           variant="outline"
                           className="h-11 w-11 rounded-full"
                           disabled={isPending}
                           onClick={() => handleAdjustRegistered(item.id, item.quantity + 1, item)}
+                          aria-label={`Agregar uno de ${item.productName} ${item.productVariantName}`}
                         >
-                          <Plus className="h-3 w-3" />
+                          <Plus className="h-4 w-4" aria-hidden="true" />
                         </Button>
                       </div>
                       <span className="text-sm font-medium">{formatCurrency(item.lineTotal)}</span>
@@ -581,27 +612,20 @@ export function CartPanel({
                 href={`/pos/cuenta/${activeTabSummary.id}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                aria-disabled={lines.length > 0}
                 onClick={(e) => {
-                  if (lines.length > 0) e.preventDefault();
+                  if (lines.length > 0) {
+                    e.preventDefault();
+                    setConfirmPrint(true);
+                  }
                 }}
-                title={lines.length > 0 ? "Agrega la ronda actual a la cuenta antes de imprimirla" : undefined}
-                className={cn(
-                  "flex min-h-11 items-center rounded-md border border-border px-3 text-sm font-medium",
-                  lines.length > 0 ? "cursor-not-allowed opacity-50" : "hover:bg-muted"
-                )}
+                className="flex min-h-11 items-center rounded-md border border-border px-3 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
               >
                 Imprimir cuenta
               </a>
-              <p className="text-right text-xs text-muted-foreground">
+              <p className="text-right text-sm text-muted-foreground tabular-nums">
                 Ya registrado: {formatCurrency(activeTabSummary.total)}
               </p>
             </div>
-            {lines.length > 0 && (
-              <p className="text-xs text-muted-foreground">
-                Para imprimir la cuenta, primero agrega la ronda actual (&ldquo;Agregar a la cuenta&rdquo;).
-              </p>
-            )}
             <div className="border-t border-border pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Ronda actual
             </div>
@@ -639,8 +663,9 @@ export function CartPanel({
                       {line.productName} · {line.variantName}
                     </p>
                     {conflictsByKey.has(line.lineId) && (
-                      <p className="text-xs font-medium text-amber-800 dark:text-amber-300">
-                        ⚠ Alergia — {conflictsByKey.get(line.lineId)!.join(" / ")}
+                      <p className="flex items-center gap-1 text-sm font-medium text-amber-800 dark:text-amber-300">
+                        <TriangleAlert className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
+                        Alergia — {conflictsByKey.get(line.lineId)!.join(" / ")}
                       </p>
                     )}
                     {(line.modifiers.length > 0 || line.extraIngredients.length > 0) && (
@@ -666,9 +691,9 @@ export function CartPanel({
                       });
                     }}
                     className="flex h-11 w-11 flex-shrink-0 items-center justify-center text-muted-foreground hover:text-destructive"
-                    aria-label="Quitar"
+                    aria-label={`Quitar ${line.productName} ${line.variantName}`}
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-5 w-5" aria-hidden="true" />
                   </button>
                 </div>
 
@@ -679,17 +704,21 @@ export function CartPanel({
                       variant="outline"
                       className="h-11 w-11 rounded-full"
                       onClick={() => decrementLine(line.lineId)}
+                      aria-label={`Quitar uno de ${line.productName} ${line.variantName}`}
                     >
-                      <Minus className="h-3 w-3" />
+                      <Minus className="h-4 w-4" aria-hidden="true" />
                     </Button>
-                    <span className="w-6 text-center text-sm">{line.quantity}</span>
+                    <span className="w-8 text-center text-base font-semibold tabular-nums" aria-label={`Cantidad: ${line.quantity}`}>
+                      {line.quantity}
+                    </span>
                     <Button
                       size="icon"
                       variant="outline"
                       className="h-11 w-11 rounded-full"
                       onClick={() => incrementLine(line.lineId)}
+                      aria-label={`Agregar uno de ${line.productName} ${line.variantName}`}
                     >
-                      <Plus className="h-3 w-3" />
+                      <Plus className="h-4 w-4" aria-hidden="true" />
                     </Button>
                   </div>
                   <span className="text-sm font-medium">
@@ -703,15 +732,20 @@ export function CartPanel({
       </div>
 
       <div className="border-t border-border p-4">
-        <div className="mb-3 flex items-end justify-between">
-          <span className="text-sm font-medium">Total{activeTabSummary && " (esta ronda)"}</span>
-          <span className="text-2xl font-bold">{formatCurrency(subtotal())}</span>
+        {/* Subtotal, no total: promociones, descuentos y propina se aplican
+            al cobrar (auditoría UX-07). */}
+        <div className="mb-3 flex items-end justify-between gap-2">
+          <div>
+            <p className="text-sm font-medium">Subtotal{activeTabSummary && " de esta ronda"}</p>
+            <p className="text-sm text-muted-foreground">Descuentos y propina, al cobrar</p>
+          </div>
+          <span className="text-2xl font-bold tabular-nums">{formatCurrency(subtotal())}</span>
         </div>
-        {tabError && <p role="alert" className="mb-2 text-xs text-destructive">{tabError}</p>}
+        {tabError && <Alert variant="error" className="mb-2">{tabError}</Alert>}
         {tabOfflineRetry && (
-          <p role="status" className="mb-2 text-xs text-amber-600">
-            Se enviará sola en cuanto vuelva la conexión — no hace falta volver a intentar.
-          </p>
+          <Alert variant="warning" className="mb-2">
+            Sin conexión. Se envía solo al volver; no lo repitas.
+          </Alert>
         )}
         <div className="flex gap-2">
           <Button
@@ -720,7 +754,7 @@ export function CartPanel({
             disabled={lines.length === 0 || isSavingTab}
             onClick={() => handleLeaveOpen()}
           >
-            {isSavingTab ? "Guardando..." : activeTabId ? "Agregar a la cuenta" : "Dejar en espera"}
+            {isSavingTab ? "Guardando…" : activeTabId ? "Agregar a la cuenta" : "Dejar en espera"}
           </Button>
           <Button
             className={cn("flex-1", posAccentClass)}
@@ -755,7 +789,18 @@ export function CartPanel({
         }
         confirmLabel="Registrar de todos modos"
         onConfirm={() => handleLeaveOpen(true)}
-        onCancel={() => setShortageMessage(null)}
+        onCancel={() => {
+          setShortageMessage(null);
+          closePendingPrint();
+        }}
+      />
+      <ConfirmDialog
+        open={confirmPrint}
+        title="Imprimir cuenta"
+        message={`¿Agregar ${lines.reduce((n, l) => n + l.quantity, 0) === 1 ? "este producto" : `estos ${lines.reduce((n, l) => n + l.quantity, 0)} productos`} a la cuenta y luego imprimir?`}
+        confirmLabel="Agregar e imprimir"
+        onConfirm={addRoundAndPrint}
+        onCancel={() => setConfirmPrint(false)}
       />
       <ConfirmDialog
         open={confirmExitTab}
@@ -803,9 +848,9 @@ export function CartPanel({
                 placeholder="PIN de un empleado con permiso"
               />
             </div>
-            {authError && <p role="alert" className="text-sm text-destructive">{authError}</p>}
+            {authError && <Alert variant="error">{authError}</Alert>}
             <Button type="submit" variant="destructive" disabled={isAuthorizing || !authPin}>
-              {isAuthorizing ? "Autorizando..." : "Autorizar"}
+              {isAuthorizing ? "Autorizando…" : "Autorizar"}
             </Button>
           </form>
         )}

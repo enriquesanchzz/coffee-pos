@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { Alert } from "@/components/ui/alert";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, pluralize } from "@/lib/utils";
@@ -59,8 +60,8 @@ export function OpenTabsDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange} title="Cuentas en espera">
       <div className="flex flex-col gap-3">
-        {isPending && <p className="text-sm text-muted-foreground">Cargando...</p>}
-        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        {isPending && <p className="text-sm text-muted-foreground">Cargando…</p>}
+        {error && <Alert variant="error">{error}</Alert>}
         {!isPending && !error && tabs.length === 0 && (
           <p className="text-sm text-muted-foreground">No hay cuentas en espera por ahora.</p>
         )}

@@ -14,7 +14,7 @@ test.describe("QA-005 POS en celular", () => {
     await expect(sheet).toBeVisible();
     await sheet.getByRole("button", { name: "Cobrar" }).click();
     await sheet.getByRole("button", { name: "Exacto" }).click();
-    const confirm = sheet.getByRole("button", { name: "Confirmar venta" });
+    const confirm = sheet.getByRole("button", { name: /^(Cobrar \$|Faltan \$|Calculando…|Cobrando…)/ });
     await expect(confirm).toBeInViewport();
     await confirm.click();
     await expectSaleRegistered(page);

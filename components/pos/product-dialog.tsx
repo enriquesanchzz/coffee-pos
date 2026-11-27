@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Alert } from "@/components/ui/alert";
 import { Dialog } from "@/components/ui/dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -254,9 +255,7 @@ export function ProductDialog({
         )}
 
         {!variant && (sizes.length > 0 || temperatures.length > 0) && (
-          <p role="alert" className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            Esta combinación no está disponible.
-          </p>
+          <Alert variant="error">Esta combinación no está disponible.</Alert>
         )}
 
         {variant?.modifierGroups.map((group) => (
@@ -335,7 +334,7 @@ export function ProductDialog({
               Agregar
             </Button>
           </div>
-          {extraQtyError && <p role="alert" className="mt-1 text-xs text-destructive">{extraQtyError}</p>}
+          {extraQtyError && <p role="alert" className="mt-1 text-sm text-destructive">{extraQtyError}</p>}
 
           {extras.length > 0 && (
             <ul className="mt-2 flex flex-col gap-1">

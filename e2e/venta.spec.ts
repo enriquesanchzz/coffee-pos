@@ -11,7 +11,7 @@ test.describe("Punto de venta", () => {
     await addProduct(page, "Latte", ["Chico", "Caliente"]);
     await page.getByRole("button", { name: "Cobrar" }).click();
     await page.getByRole("button", { name: "+$100", exact: true }).click();
-    await page.getByRole("button", { name: "Confirmar venta" }).click();
+    await page.getByRole("button", { name: /^(Cobrar \$|Faltan \$|Calculando…|Cobrando…)/ }).click();
 
     await expectSaleRegistered(page, "Cambio a entregar: $57.00");
     expect(await stockOf("ing-leche")).toBe(milkBefore - 180);
@@ -33,7 +33,7 @@ test.describe("Punto de venta", () => {
     await page.fill("#table-number", table);
     await page.getByRole("button", { name: "Dejar en espera" }).click();
     await expect(page.getByText(`La mesa ${table} ya tiene una cuenta abierta`)).toBeVisible();
-    await page.getByRole("button", { name: "Quitar" }).click();
+    await page.getByRole("button", { name: /^Quitar (?!uno de )/ }).click();
 
     await page.getByRole("button", { name: /Cuentas en espera/ }).click();
     await page.getByRole("dialog").locator("li", { hasText: `Mesa ${table}` }).getByRole("button", { name: "Retomar" }).click();

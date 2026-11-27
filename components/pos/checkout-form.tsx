@@ -1,6 +1,7 @@
 "use client";
 
 import { useBusinessSettings } from "@/components/layout/business-settings-context";
+import { Alert } from "@/components/ui/alert";
 import { includedTax, PAYMENT_METHOD_LABELS } from "@/lib/settings-shared";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { PaymentMethod, DiscountType, ManualDiscountReason } from "@prisma/client";
@@ -643,6 +644,26 @@ export function CheckoutForm({
   // dentro de un <textarea> (ahí Enter es un salto de línea) o mientras se
   // escribe el código de descuento (ahí Enter valida el código, ver su
   // propio onKeyDown más abajo).
+  // Texto del botón final: dice cuánto y cómo se cobra, para que sea la
+  // última verificación del monto antes de confirmar (auditoría UX-02).
+  const METHOD_PHRASE: Partial<Record<PaymentMethod, string>> = {
+    EFECTIVO: "en efectivo",
+    TARJETA: "con tarjeta",
+    TRANSFERENCIA: "por transferencia",
+  };
+  const methodPhrase = METHOD_PHRASE[method] ?? `con ${PAYMENT_METHOD_LABELS[method].toLowerCase()}`;
+  const missingCashCents =
+    !isSplit && method === "EFECTIVO" && cashReceived !== "" ? totalToCollectCents - cashReceivedCents : 0;
+  const confirmLabel = isPending
+    ? "Cobrando…"
+    : isPreviewLoading || verifiedSubtotal === null
+      ? "Calculando…"
+      : missingCashCents > 0
+        ? `Faltan ${formatCurrency(missingCashCents / 100)}`
+        : isSplit
+          ? `Cobrar ${formatCurrency(totalToCollect)} en ${splitRows!.length} ${splitRows!.length === 1 ? "pago" : "pagos"}`
+          : `Cobrar ${formatCurrency(totalToCollect)} ${methodPhrase}`;
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     if (e.key !== "Enter") return;
     const target = e.target as HTMLElement;
@@ -743,14 +764,14 @@ export function CheckoutForm({
               />
             </div>
             <Button type="button" variant="outline" onClick={handleCheckCode} disabled={isCheckingCode || !codeInput}>
-              {isCheckingCode ? "Validando..." : "Validar"}
+              {isCheckingCode ? "Validando…" : "Validar"}
             </Button>
           </div>
-          {codeError && <p role="alert" className="text-sm text-destructive">{codeError}</p>}
+          {codeError && <Alert variant="error">{codeError}</Alert>}
           {resolvedCode && !codeError && (
             <p className="text-sm text-muted-foreground">
               Válido — {resolvedCode.label}
-              {isCodeAmountLoading || codeAmount === null ? ", calculando..." : `, descuento de ${formatCurrency(discountPreview)}`}
+              {isCodeAmountLoading || codeAmount === null ? ", calculando…" : `, descuento de ${formatCurrency(discountPreview)}`}
             </p>
           )}
         </div>
@@ -807,7 +828,7 @@ export function CheckoutForm({
               onChange={(e) => setAuthorizingPin(e.target.value)}
             />
           </div>
-          {manualDiscountError && <p role="alert" className="text-sm text-destructive">{manualDiscountError}</p>}
+          {manualDiscountError && <Alert variant="error">{manualDiscountError}</Alert>}
         </div>
       )}
 
@@ -910,7 +931,7 @@ export function CheckoutForm({
           />
         )}
         {tipMode === "MONTO" && Number(tipCustom) < 0 && (
-          <p role="alert" className="mt-1 text-xs text-destructive">La propina no puede ser negativa.</p>
+          <p role="alert" className="mt-1 text-sm text-destructive">La propina no puede ser negativa.</p>
         )}
         </>
         )}
@@ -1189,10 +1210,10 @@ export function CheckoutForm({
         </div>
       )}
 
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {error && <Alert variant="error">{error}</Alert>}
       {offlineRetry && (
         <p role="status" className="text-sm text-amber-600">
-          La venta se enviará sola en cuanto vuelva la conexión — no se va a duplicar, no hace falta volver a cobrar.
+          Sin conexión. La venta se envía sola al volver; no la cobres otra vez.
         </p>
       )}
 
@@ -1213,7 +1234,7 @@ export function CheckoutForm({
                 checked={allowShortage}
                 onChange={(e) => setAllowShortage(e.target.checked)}
               />
-              Vender de todos modos (el inventario quedará en negativo)
+              Cobrar de todos modos. Inventario lo verá como faltante para ajustarlo después.
             </label>
           ) : (
             <p className="text-destructive">
@@ -1229,11 +1250,12 @@ export function CheckoutForm({
           más alto que la pantalla y "Confirmar" quedaba fuera de vista. */}
       <div className="sticky bottom-0 -mx-4 -mb-4 border-t border-border bg-background p-4">
         <Button
-          className={cn("w-full", posAccentClass)}
+          size="lg"
+          className={cn("w-full tabular-nums", posAccentClass)}
           onClick={handleConfirm}
           disabled={confirmDisabled}
         >
-          {isPending ? "Procesando..." : isPreviewLoading ? "Calculando total..." : "Confirmar venta"}
+          {confirmLabel}
         </Button>
       </div>
     </div>

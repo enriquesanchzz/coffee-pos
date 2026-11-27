@@ -1,6 +1,7 @@
 "use client";
 
 import { useBusinessSettings } from "@/components/layout/business-settings-context";
+import { Alert } from "@/components/ui/alert";
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { Dialog } from "@/components/ui/dialog";
@@ -152,16 +153,16 @@ export function CloseShiftDialog({
               onChange={(e) => setClosingCash(e.target.value)}
             />
           </div>
-          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+          {error && <Alert variant="error">{error}</Alert>}
           <Button type="submit" disabled={!hasCount}>
             Registrar conteo
           </Button>
         </form>
       ) : !preview ? (
         error ? (
-          <p role="alert" className="text-sm text-destructive">{error}</p>
+          <Alert variant="error">{error}</Alert>
         ) : (
-          <p className="text-sm text-muted-foreground">Calculando efectivo esperado...</p>
+          <p className="text-sm text-muted-foreground">Calculando efectivo esperado…</p>
         )
       ) : (
         <div className="flex flex-col gap-4">
@@ -253,10 +254,10 @@ export function CloseShiftDialog({
             />
           </div>
 
-          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+          {error && <Alert variant="error">{error}</Alert>}
 
           <Button onClick={handleConfirm} disabled={isPending || !hasCount}>
-            {isPending ? "Cerrando..." : "Confirmar cierre"}
+            {isPending ? "Cerrando…" : "Confirmar cierre"}
           </Button>
         </div>
       )}

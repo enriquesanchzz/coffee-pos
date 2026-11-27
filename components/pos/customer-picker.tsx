@@ -1,6 +1,7 @@
 "use client";
 
 import { useBusinessSettings } from "@/components/layout/business-settings-context";
+import { Alert } from "@/components/ui/alert";
 import { useEffect, useState, useTransition } from "react";
 import type { SaleOrderType, DomicilioOrigen } from "@prisma/client";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -229,7 +230,7 @@ export function CustomerPicker({
             onChange={(e) => setNewCustomerPhone(e.target.value)}
             placeholder={orderType === "DOMICILIO" ? "Teléfono (obligatorio)" : "Teléfono (opcional)"}
           />
-          {newCustomerError && <p role="alert" className="text-sm text-destructive">{newCustomerError}</p>}
+          {newCustomerError && <Alert variant="error">{newCustomerError}</Alert>}
           <div className="flex gap-2">
             <Button type="button" size="sm" onClick={handleCreateCustomer} disabled={isCreatingCustomer}>
               {isCreatingCustomer ? "Creando…" : "Crear y seleccionar"}
