@@ -166,6 +166,19 @@ export const updateEmployee = safeAction(async function updateEmployee(input: Up
   if (pin && (await isPinTaken(pin, input.employeeId))) {
     throw new Error(PIN_TAKEN_MESSAGE);
   }
+  // El PIN solo es único entre empleados ACTIVOS: mientras éste estuvo
+  // desactivado, su PIN pudo asignarse a otra persona. Como está hasheado
+  // no se puede comparar contra los demás, así que al reactivar se pide
+  // uno nuevo (que sí pasa por isPinTaken).
+  if (input.isActive && !pin) {
+    const current = await prisma.employee.findUnique({
+      where: { id: input.employeeId },
+      select: { isActive: true, pin: true },
+    });
+    if (current && !current.isActive && current.pin) {
+      throw new Error("Para reactivar a este empleado, asígnale un PIN nuevo (el anterior pudo quedar en uso por otra persona).");
+    }
+  }
   await assertKeepsAnAdmin(input.employeeId, input.roleId, input.isActive);
 
   const newPinHash = pin ? await hashSecret(pin) : undefined;

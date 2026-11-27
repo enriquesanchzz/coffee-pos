@@ -927,6 +927,8 @@ model Employee {
   manualDiscountsAuthorized ManualDiscount[]    @relation("ManualDiscountAuthorizedBy")
   transfersInitiated        TransferManifest[]  @relation("TransferInitiatedBy")
   transfersReceived         TransferManifest[]  @relation("TransferReceivedBy")
+  saleItemVoids             SaleItemVoid[]      @relation("SaleItemVoidBy")
+  saleItemVoidsAuthorized   SaleItemVoid[]      @relation("SaleItemVoidAuthorizedBy")
 
   @@map("employees")
 }
@@ -1524,6 +1526,7 @@ model Sale {
   manualDiscount ManualDiscount?
   loyaltyEntries LoyaltyPointsEntry[]
   tierGrants     LoyaltyTierGrant[]
+  itemVoids      SaleItemVoid[]
 
   @@map("sales")
 }
@@ -1542,12 +1545,40 @@ model SaleItem {
   unitPrice        Decimal         @db.Decimal(10, 2)
   lineTotal        Decimal         @db.Decimal(10, 2)
   notes            String? // ej. "sin azúcar", "bien caliente"
+  // Para la ventana de corrección libre de una cuenta abierta (ver
+  // TAB_FREE_CORRECTION_MINUTES en actions/pos.ts). Las filas anteriores a
+  // esta columna quedan con la fecha de la migración.
+  createdAt        DateTime        @default(now())
 
   modifiers             SaleItemModifier[]
   ingredientAdjustments SaleItemIngredientAdjustment[]
   inventoryMovements    InventoryMovement[]
 
   @@map("sale_items")
+}
+
+// Bitácora de productos quitados (o con cantidad reducida) de una cuenta
+// abierta antes de cobrarla — removeTabItem/updateTabItemQuantity. Sin
+// esto, servir un producto, quitarlo de la cuenta y cobrar el resto no
+// dejaba ningún rastro más que un movimiento de inventario. Pasada la
+// ventana de corrección libre, la exige un PIN con VENTA_CANCELAR
+// (authorizedById); dentro de ella queda null.
+model SaleItemVoid {
+  id             String    @id @default(cuid())
+  saleId         String
+  sale           Sale      @relation(fields: [saleId], references: [id])
+  // Texto, no FK: el SaleItem se borra al quitarlo por completo.
+  description    String
+  quantity       Int
+  amount         Decimal   @db.Decimal(10, 2)
+  employeeId     String
+  employee       Employee  @relation("SaleItemVoidBy", fields: [employeeId], references: [id])
+  authorizedById String?
+  authorizedBy   Employee? @relation("SaleItemVoidAuthorizedBy", fields: [authorizedById], references: [id])
+  createdAt      DateTime  @default(now())
+
+  @@index([saleId])
+  @@map("sale_item_voids")
 }
 
 // Ajustes libres a nivel de ingrediente sobre la receta base de una línea

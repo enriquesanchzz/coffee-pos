@@ -129,6 +129,14 @@ export async function getSessionEmployeeId(): Promise<string | null> {
   if (session.issuedAt && Date.now() - session.issuedAt > (await sessionHours()) * 60 * 60 * 1000) {
     return null;
   }
+  // La cookie es autocontenida: sin esto, un empleado desactivado seguía
+  // vendiendo/anulando desde la pestaña que ya tenía abierta hasta que la
+  // sesión venciera (las Server Actions solo comparaban el id).
+  const active = await prisma.employee.findFirst({
+    where: { id: session.employeeId, isActive: true },
+    select: { id: true },
+  });
+  if (!active) return null;
   // Cada página autenticada pasa por aquí: aplica la zona horaria
   // configurada antes de calcular fechas (ver lib/settings.ts).
   await syncAppTimeZone();

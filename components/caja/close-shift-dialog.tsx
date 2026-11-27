@@ -50,6 +50,12 @@ export function CloseShiftDialog({
   // para imprimir el corte — antes se cerraba solo y esa oportunidad se
   // perdía (no había otra forma de llegar al comprobante).
   const [closed, setClosed] = useState(false);
+  // Corte ciego: primero se cuenta y se registra el efectivo, y solo después
+  // se pide y se muestra lo esperado. Antes el esperado salía en pantalla
+  // desde el principio y el conteo se podía "ajustar" para que cuadrara.
+  // El conteo registrado ya no se edita: un error de conteo se explica en
+  // el motivo de la diferencia.
+  const [countLocked, setCountLocked] = useState(false);
   const notify = useToast();
 
   useEffect(() => {
@@ -60,10 +66,21 @@ export function CloseShiftDialog({
     setConfirmingPin("");
     setError(null);
     setClosed(false);
+    setCountLocked(false);
+  }, [open, shiftId]);
+
+  function handleLockCount() {
+    const value = Number(closingCash);
+    if (closingCash.trim() === "" || !Number.isFinite(value) || value < 0) {
+      setError("Captura el efectivo contado.");
+      return;
+    }
+    setError(null);
+    setCountLocked(true);
     previewShiftClose(shiftId)
       .then(setPreview)
       .catch((err) => setError(err instanceof Error ? err.message : "No se pudo calcular el corte."));
-  }, [open, shiftId]);
+  }
 
   // La diferencia solo se evalúa una vez capturado el conteo — antes salía
   // "Diferencia de -$581.70" en cuanto se abría el diálogo.
@@ -79,7 +96,7 @@ export function CloseShiftDialog({
         await closeShift({
           shiftId,
           cashierId,
-          closingCash: Number(closingCash) || 0,
+          closingCash: Number(closingCash),
           differenceReason: hasDifference ? differenceReason : undefined,
           confirmingPin,
         });
@@ -109,6 +126,37 @@ export function CloseShiftDialog({
             </Button>
           </div>
         </div>
+      ) : !countLocked ? (
+        <form
+          className="flex flex-col gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleLockCount();
+          }}
+        >
+          <p className="text-sm text-muted-foreground">
+            Cuenta el efectivo de la caja (incluye el fondo inicial y las propinas en efectivo) y captúralo. El
+            efectivo esperado se muestra después de registrar el conteo, y el conteo ya no se puede cambiar.
+          </p>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="closingCash">Efectivo contado</Label>
+            <Input
+              id="closingCash"
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="0.01"
+              placeholder="0.00"
+              autoFocus
+              value={closingCash}
+              onChange={(e) => setClosingCash(e.target.value)}
+            />
+          </div>
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+          <Button type="submit" disabled={!hasCount}>
+            Registrar conteo
+          </Button>
+        </form>
       ) : !preview ? (
         error ? (
           <p role="alert" className="text-sm text-destructive">{error}</p>
@@ -173,17 +221,9 @@ export function CloseShiftDialog({
             </div>
           </div>
 
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="closingCash">Efectivo contado</Label>
-            <Input
-              id="closingCash"
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="0.00"
-              value={closingCash}
-              onChange={(e) => setClosingCash(e.target.value)}
-            />
+          <div className="flex justify-between text-sm font-medium">
+            <span>Efectivo contado</span>
+            <span>{formatCurrency(Number(closingCash))}</span>
           </div>
 
           {hasDifference && (

@@ -45,7 +45,17 @@ export default async function VentaDetallePage({
   const exists = await prisma.sale.findFirst({ where: { id: saleId, branchId: DEFAULT_BRANCH_ID }, select: { id: true } });
   if (!exists) notFound();
 
-  const [sale, extras] = await Promise.all([getSaleReceiptDetail(saleId), getSaleAdminExtras(saleId)]);
+  const [sale, extras, voids] = await Promise.all([
+    getSaleReceiptDetail(saleId),
+    getSaleAdminExtras(saleId),
+    // Productos quitados/reducidos de la cuenta antes de cobrar (ver
+    // SaleItemVoid y authorizeTabCorrection en actions/pos.ts).
+    prisma.saleItemVoid.findMany({
+      where: { saleId },
+      orderBy: { createdAt: "asc" },
+      include: { employee: { select: { name: true } }, authorizedBy: { select: { name: true } } },
+    }),
+  ]);
 
   // Regresa al listado con los mismos filtros y página.
   const back = new URLSearchParams();
@@ -163,6 +173,34 @@ export default async function VentaDetallePage({
             </dl>
           </CardContent>
         </Card>
+
+        {voids.length > 0 && (
+          <Card className="border-amber-400/60">
+            <CardContent className="flex flex-col gap-2 pt-4 text-sm">
+              <h2 className="font-medium">Quitado de la cuenta antes de cobrar</h2>
+              <ul className="flex flex-col gap-2">
+                {voids.map((v) => (
+                  <li key={v.id} className="flex justify-between gap-4">
+                    <div className="min-w-0">
+                      <p>
+                        {v.quantity} × {v.description}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDateTime(v.createdAt)} · {v.employee.name}
+                        {v.authorizedBy
+                          ? v.authorizedById === v.employeeId
+                            ? " (gerente o administrador)"
+                            : ` · autorizó ${v.authorizedBy.name}`
+                          : " · corrección inmediata"}
+                      </p>
+                    </div>
+                    <span className="shrink-0">− {formatCurrency(v.amount.toNumber())}</span>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        )}
 
         {extras.payments.length > 0 && (
           <Card>
