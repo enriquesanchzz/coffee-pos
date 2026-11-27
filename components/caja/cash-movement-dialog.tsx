@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { Alert } from "@/components/ui/alert";
 import { CashMovementType } from "@prisma/client";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -101,10 +102,10 @@ export function CashMovementDialog({
           />
         </div>
 
-        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        {error && <Alert variant="error">{error}</Alert>}
 
         <Button onClick={handleConfirm} disabled={isPending}>
-          {isPending ? "Registrando..." : "Registrar movimiento"}
+          {isPending ? "Registrando…" : "Registrar movimiento"}
         </Button>
       </div>
     </Dialog>

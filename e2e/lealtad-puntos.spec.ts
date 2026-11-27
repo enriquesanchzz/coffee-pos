@@ -83,7 +83,7 @@ test.describe.serial("Lealtad por puntos", () => {
     await page.getByRole("dialog").getByRole("button", { name: "Agregar al carrito" }).click();
     await page.getByRole("button", { name: "Cobrar" }).click();
     await page.getByRole("button", { name: "Exacto" }).click();
-    await page.getByRole("button", { name: "Confirmar venta" }).click();
+    await page.getByRole("button", { name: /^(Cobrar \$|Faltan \$|Calculando…|Cobrando…)/ }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toContainText("Tus puntos");
     await expect(dialog).toContainText(`¡Subiste a ${TIER}!`);
@@ -125,7 +125,7 @@ test.describe.serial("Lealtad por puntos", () => {
     await page.getByRole("button", { name: new RegExp(couponCode) }).click();
     await expect(page.getByText("Este cupón es solo para productos de Cafetería.")).toBeVisible();
     await page.getByRole("button", { name: "Exacto" }).click();
-    await expect(page.getByRole("button", { name: "Confirmar venta" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: /^(Cobrar \$|Faltan \$|Calculando…|Cobrando…)/ })).toBeDisabled();
     await page.getByRole("button", { name: "Atrás" }).click();
 
     await addProduct(page, "Latte", ["Chico", "Caliente"]);
@@ -133,7 +133,7 @@ test.describe.serial("Lealtad por puntos", () => {
     await page.getByRole("button", { name: "Cobrar" }).click();
     await expect(page.getByText(/Válido — 10% en Cafetería, descuento de/)).toBeVisible();
     await page.getByRole("button", { name: "Exacto" }).click();
-    await page.getByRole("button", { name: "Confirmar venta" }).click();
+    await page.getByRole("button", { name: /^(Cobrar \$|Faltan \$|Calculando…|Cobrando…)/ }).click();
     await expectSaleRegistered(page);
 
     const sale = await db.sale.findFirstOrThrow({ where: { customerId }, include: { items: true }, orderBy: { createdAt: "desc" } });

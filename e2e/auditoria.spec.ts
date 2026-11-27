@@ -33,7 +33,7 @@ test.describe.serial("Auditoría", () => {
 
     await page.getByRole("button", { name: "Cobrar" }).click();
     await page.getByRole("button", { name: "Exacto" }).click();
-    await page.getByRole("button", { name: "Confirmar venta" }).click();
+    await page.getByRole("button", { name: /^(Cobrar \$|Faltan \$|Calculando…|Cobrando…)/ }).click();
     await expect(page.getByText("Cada pago debe ser un monto válido")).toBeVisible();
     expect(await db.sale.count()).toBe(salesBefore);
     await page.unroute("**/pos");
@@ -58,11 +58,11 @@ test.describe.serial("Auditoría", () => {
     await page.getByRole("dialog").locator("li", { hasText: `Mesa ${table}` }).getByRole("button", { name: "Retomar" }).click();
 
     // Capuccino recién agregado: se corrige sin PIN.
-    await page.locator("li", { hasText: "Capuccino" }).getByRole("button", { name: "Quitar" }).click();
+    await page.locator("li", { hasText: "Capuccino" }).getByRole("button", { name: /de la cuenta$/ }).click();
     await expect(page.locator("li", { hasText: "Capuccino" })).toHaveCount(0);
 
     // Latte con 10 minutos: pide autorización; su propio PIN no basta.
-    await page.locator("li", { hasText: "Latte" }).getByRole("button", { name: "Quitar" }).click();
+    await page.locator("li", { hasText: "Latte" }).getByRole("button", { name: /de la cuenta$/ }).click();
     const dialog = page.getByRole("dialog", { name: "Autorizar corrección" });
     await expect(dialog).toBeVisible();
     await dialog.locator("#tab-correction-pin").fill(PIN.luis);
@@ -140,7 +140,7 @@ test.describe.serial("Auditoría", () => {
     try {
       await page.getByRole("button", { name: "Cobrar" }).click();
       await page.getByRole("button", { name: "Exacto" }).click();
-      await page.getByRole("button", { name: "Confirmar venta" }).click();
+      await page.getByRole("button", { name: /^(Cobrar \$|Faltan \$|Calculando…|Cobrando…)/ }).click();
       await page.waitForURL(/\/\?error=sesion/);
     } finally {
       await db.employee.update({ where: { id: "emp-luis" }, data: { isActive: true } });

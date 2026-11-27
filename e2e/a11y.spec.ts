@@ -127,7 +127,7 @@ test("venta completa solo con teclado", async ({ page }) => {
   await expect(exact).toBeEnabled();
   await exact.focus();
   await page.keyboard.press("Enter");
-  const confirm = page.getByRole("button", { name: "Confirmar venta" });
+  const confirm = page.getByRole("button", { name: /^(Cobrar \$|Faltan \$|Calculando…|Cobrando…)/ });
   await expect(confirm).toBeEnabled();
   await confirm.focus();
   await expect(confirm).toBeFocused();

@@ -301,7 +301,7 @@ test.describe.serial("Mascotas en el perfil y en caja", () => {
     await addProduct(page, TREAT);
     const alert = page.getByRole("alert").filter({ hasText: "Alergias de las mascotas" });
     await expect(alert).toContainText(`${TREAT} contiene pollo (alergia de Rocky)`);
-    await expect(page.getByText("⚠ Alergia — Rocky: pollo")).toBeVisible();
+    await expect(page.getByText("Alergia — Rocky: pollo")).toBeVisible();
 
     // Sin cliente no hay a quién cuidar: el aviso desaparece.
     await page.locator("p", { hasText: `Seleccionado: ${customerName}` }).getByRole("button", { name: "Quitar" }).click();

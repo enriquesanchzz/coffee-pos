@@ -1,6 +1,7 @@
 "use client";
 
 import { useBusinessSettings } from "@/components/layout/business-settings-context";
+import { Alert } from "@/components/ui/alert";
 import { useEffect, useState, useTransition } from "react";
 import { ShiftType } from "@prisma/client";
 import { openShift as openShiftAction } from "@/actions/shift";
@@ -103,9 +104,9 @@ export function ShiftOpenForm({
               onChange={(e) => setConfirmingPin(e.target.value)}
             />
           </div>
-          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+          {error && <Alert variant="error">{error}</Alert>}
           <Button type="submit" disabled={isPending}>
-            {isPending ? "Abriendo..." : "Abrir turno"}
+            {isPending ? "Abriendo…" : "Abrir turno"}
           </Button>
         </form>
       </CardContent>

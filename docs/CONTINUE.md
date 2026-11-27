@@ -66,6 +66,29 @@ Convenciones:
   (`resetSettingsSection`). Las pruebas están en `e2e/configuracion.spec.ts`
   y restauran los valores al terminar.
 
+## Auditoría UI/UX del flujo de venta (noviembre 2026, rama `ui-quick-wins`)
+
+Hechos los 8 quick wins (pruebas en `e2e/ui-quick-wins.spec.ts`):
+
+- Botón final del cobro de 48 px con monto y método ("Cobrar $90.00 en
+  efectivo", "Faltan $12.00", "Cobrar $90.00 en 2 pagos"). En Playwright
+  se busca con `/^(Cobrar \$|Faltan \$|Calculando…|Cobrando…)/`.
+- +/− y papelera del carrito con `aria-label` ("Quitar uno de…", "Agregar
+  uno de…", "Quitar … de la cuenta"); cantidad en 16 px.
+- "Total" del carrito → "Subtotal" (descuentos y propina se aplican al cobrar).
+- Errores de POS/Caja con `<Alert variant="error">`; nada de error en 12 px.
+- Alergias con ícono `TriangleAlert` (sin emoji) y la acción a seguir.
+- "Cancelar cuenta" como botón ghost rojo, separado de "Salir".
+- "Imprimir cuenta" siempre activo: con ronda pendiente pregunta, la agrega
+  y abre la pre-cuenta (la pestaña se abre en el clic por los bloqueadores).
+- Estados de carga con "…" (un carácter). Textos de MC-02/MC-03/MC-04 y del
+  aviso sin conexión.
+
+Pendientes las 5 mejoras de fondo del documento (MF-1 tokens
+`--success/--warning`, MF-2 `SegmentedControl`/`QuantityStepper`/
+`Textarea`/`FieldError`, MF-3 alturas, MF-4 panel de cobro por zonas, MF-5
+cabecera compacta del carrito).
+
 ## Auditoría de seguridad y procesos (noviembre 2026, rama `auditoria-seguridad`)
 
 Corregido (pruebas en `e2e/auditoria.spec.ts` y `e2e/zz-limite-pin.spec.ts`):

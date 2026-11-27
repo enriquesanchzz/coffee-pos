@@ -119,7 +119,7 @@ test.describe("QA-012 domicilio", () => {
     await addProduct(page, "Latte", ["Chico", "Caliente"]);
     await page.getByRole("button", { name: "Cobrar" }).click();
     await page.getByRole("button", { name: "Exacto" }).click();
-    await page.getByRole("button", { name: "Confirmar venta" }).click();
+    await page.getByRole("button", { name: /^(Cobrar \$|Faltan \$|Calculando…|Cobrando…)/ }).click();
     await expect(page.getByText("Captura el domicilio de entrega")).toBeVisible();
   });
 });

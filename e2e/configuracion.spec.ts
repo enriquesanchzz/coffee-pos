@@ -117,7 +117,7 @@ test.describe.serial("Configuración del sistema", () => {
     await page.getByRole("button", { name: "Cobrar" }).click();
     await expect(page.getByText("Incluye IVA (16%)")).toBeVisible();
     await page.getByRole("button", { name: "Exacto" }).click();
-    await page.getByRole("button", { name: "Confirmar venta" }).click();
+    await page.getByRole("button", { name: /^(Cobrar \$|Faltan \$|Calculando…|Cobrando…)/ }).click();
     await expectSaleRegistered(page, "Incluye IVA $5.93");
     const sale = await db.sale.findFirstOrThrow({ orderBy: { createdAt: "desc" } });
     expect(sale.taxAmount.toNumber()).toBeCloseTo(5.93);
@@ -136,8 +136,8 @@ test.describe.serial("Configuración del sistema", () => {
       await addProduct(page, "Latte", ["Chico", "Caliente"]);
       await page.getByRole("button", { name: "Cobrar" }).click();
       await expect(page.getByText("No se permite vender sin insumos suficientes.")).toBeVisible();
-      await expect(page.getByLabel("Vender de todos modos")).toHaveCount(0);
-      await expect(page.getByRole("button", { name: "Confirmar venta" })).toBeDisabled();
+      await expect(page.getByLabel(/^Cobrar de todos modos/)).toHaveCount(0);
+      await expect(page.getByRole("button", { name: /^(Cobrar \$|Faltan \$|Calculando…|Cobrando…)/ })).toBeDisabled();
     } finally {
       await db.inventoryStock.update({
         where: { ingredientId_stockLocationId: MILK },
