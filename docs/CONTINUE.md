@@ -2340,6 +2340,44 @@ CRM-01, CRM-02 y la parte de cumpleaños de CRM-05 del POS híbrido.
 4. Activar los % en Configuración → Lealtad → "Cupones de cumpleaños" y
    capturar lo que contiene cada producto de Pet Shop (pollo, res…).
 
+## Recordatorios por WhatsApp (rama `recordatorios`)
+
+Recordatorios de resurtido del POS híbrido, más un "te extrañamos" para la
+cafetería. Como todavía no hay WhatsApp Business API, **no se mandan
+solos**: Clientes → Recordatorios (`/clientes/recordatorios`, solo admin)
+los lista con el mensaje armado y un link `wa.me`; quien atiende lo manda
+con un clic.
+
+- **Cafetería · Te extrañamos**: cliente con N días (30 por defecto) sin
+  una venta cobrada con algo de Cafetería (paquetes/combos cuentan como
+  Cafetería; comprar en Pet Shop no cuenta como visita).
+- **Pet Shop · Resurtido**: N días (30) después de comprar un producto de
+  Pet Shop. Como no se vende alimento, es un mensaje general para todos los
+  productos; cada producto puede tener sus propios días y mensaje al
+  editarlo en Productos (`Product.reminderDays`/`reminderMessage`; días 0 =
+  nunca, ej. accesorios). Un solo WhatsApp por cliente: los productos con el
+  mensaje general van juntos, y cada uno con mensaje propio agrega el suyo.
+- Marcadores: `{cliente}` (nombre de pila), `{negocio}`, y en Pet Shop
+  `{productos}` y `{mascota}` (sus mascotas, o "tu mascota").
+- Configuración → Recordatorios: días (0 = apagado) y mensajes. Un mensaje
+  igual al de por defecto se guarda como null (sigue al default del código,
+  `lib/settings-shared.ts`).
+- **Sin repetir**: "Enviar por WhatsApp" u "Omitir" crea un
+  `CustomerReminder` (Pet Shop: uno por producto). Solo vuelve a salir
+  cuando el cliente compra otra vez y pasan de nuevo los N días.
+- Se calcula al abrir la pantalla (`lib/reminders.ts`, dos consultas SQL
+  agrupadas); no hay tarea de fondo. El Dashboard de Administración muestra
+  cuántos hay pendientes.
+- Pruebas: `e2e/recordatorios.spec.ts` (motor + pantalla + producto).
+
+### Desplegar
+
+1. Respaldo: `~/.coffee-pos-scripts/backup-db.sh`.
+2. `npx prisma migrate deploy` (`20261127100000_customer_reminders`, solo agrega).
+3. `npx prisma generate && npm run build`, luego `pm2 restart coffee-pos`.
+4. Al abrir Clientes → Recordatorios por primera vez saldrán de una vez
+   todos los clientes que ya llevan 30+ días sin venir: mandar u omitir.
+
 
 
 Fases 1, 2, 3 y 4 están cerradas, más los ajustes "Cambios Punto de Venta",

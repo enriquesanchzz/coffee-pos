@@ -59,6 +59,7 @@ export const CONFIGURACION_SECTIONS: NavChild[] = [
   { href: "/configuracion/impuestos", label: "Impuestos" },
   { href: "/configuracion/descuentos", label: "Descuentos" },
   { href: "/configuracion/lealtad", label: "Lealtad" },
+  { href: "/configuracion/recordatorios", label: "Recordatorios" },
   { href: "/configuracion/inventario", label: "Inventario" },
   { href: "/configuracion/costos", label: "Costos y precios" },
   { href: "/configuracion/seguridad", label: "Seguridad" },

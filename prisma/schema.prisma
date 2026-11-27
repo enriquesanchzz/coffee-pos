@@ -252,12 +252,12 @@ enum PurchaseOrderStatus {
 // =========================================================================
 
 model Branch {
-  id        String   @id @default(cuid())
-  name      String
-  address   String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                    String   @id @default(cuid())
+  name                  String
+  address               String?
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
   // % de costo de alimentos objetivo para el precio sugerido al crear/
   // editar una receta (precio sugerido = costo ÷ este %) — ajustable
   // desde Administración, ver actions/settings.ts. null se trata como 30
@@ -276,65 +276,74 @@ model Branch {
   // ---- Configuración del sistema (lib/settings.ts, actions/settings.ts) ----
   // Negocio. businessName null = "Nomada Café"; timeZone null = la de
   // NEXT_PUBLIC_APP_TIME_ZONE (o America/Mexico_City).
-  businessName String?
-  phone        String?
-  timeZone     String?
+  businessName               String?
+  phone                      String?
+  timeZone                   String?
   // Datos fiscales y de marca para el ticket impreso — no se usan en
   // ningún otro lado del sistema (lib/receipt.ts).
-  razonSocial          String? // nombre fiscal, si es distinto al comercial (businessName)
-  rfc                  String?
-  logoUrl              String? // link https:// — no hay storage de archivos propio
-  ticketFooterMessage  String? // ej. "¡Gracias por tu visita!" — null = frase por default
-  ticketPromoMessage   String? // ej. "10% en tu próxima visita con este ticket"
-  wifiNetwork          String?
-  wifiPassword         String?
+  razonSocial                String? // nombre fiscal, si es distinto al comercial (businessName)
+  rfc                        String?
+  logoUrl                    String? // link https:// — no hay storage de archivos propio
+  ticketFooterMessage        String? // ej. "¡Gracias por tu visita!" — null = frase por default
+  ticketPromoMessage         String? // ej. "10% en tu próxima visita con este ticket"
+  wifiNetwork                String?
+  wifiPassword               String?
   // Cobro
-  tipPercents             Int[]           @default([10, 15, 20])
-  highTipThresholdPercent Int             @default(50) // % del total arriba del cual se confirma la propina
-  paymentMethods          PaymentMethod[] @default([EFECTIVO, TARJETA, TRANSFERENCIA])
-  cashQuickBills          Int[]           @default([20, 50, 100, 200, 500, 1000])
+  tipPercents                Int[]           @default([10, 15, 20])
+  highTipThresholdPercent    Int             @default(50) // % del total arriba del cual se confirma la propina
+  paymentMethods             PaymentMethod[] @default([EFECTIVO, TARJETA, TRANSFERENCIA])
+  cashQuickBills             Int[]           @default([20, 50, 100, 200, 500, 1000])
   // Caja y turnos
-  shiftChangeHour         Int     @default(14) // desde esta hora se sugiere VESPERTINO
-  defaultOpeningCash      Decimal @default(0) @db.Decimal(10, 2)
-  cashDifferenceTolerance Decimal @default(0) @db.Decimal(10, 2) // diferencia de corte permitida sin motivo
+  shiftChangeHour            Int             @default(14) // desde esta hora se sugiere VESPERTINO
+  defaultOpeningCash         Decimal         @default(0) @db.Decimal(10, 2)
+  cashDifferenceTolerance    Decimal         @default(0) @db.Decimal(10, 2) // diferencia de corte permitida sin motivo
   // Lealtad
-  loyaltyStampsPerReward Int  @default(5) // legado: sellos, reemplazado por puntos (ver LoyaltyBalance)
+  loyaltyStampsPerReward     Int             @default(5) // legado: sellos, reemplazado por puntos (ver LoyaltyBalance)
   // Lealtad por puntos (Configuración → Lealtad). Puntos por cada $100
   // cobrados (después de descuentos, sin propina) en cada negocio. En modo
   // SEPARADO cada negocio tiene su saldo y sus niveles; en GLOBAL se suman
   // en un solo saldo. Siempre se llevan los tres saldos (ver
   // lib/loyalty-points.ts), así cambiar de modo no pierde nada.
-  loyaltyMode                LoyaltyMode @default(SEPARADO)
-  loyaltyPointsPer100Cafe    Int         @default(5)
-  loyaltyPointsPer100PetShop Int         @default(1)
+  loyaltyMode                LoyaltyMode     @default(SEPARADO)
+  loyaltyPointsPer100Cafe    Int             @default(5)
+  loyaltyPointsPer100PetShop Int             @default(1)
   // true = al llegar al último nivel los puntos vuelven a 0 (el excedente
   // se conserva) y los niveles se pueden volver a ganar. false = los
   // puntos se acumulan para siempre y el nivel es un estatus.
-  loyaltyResetAtTopLevel     Boolean     @default(false)
-  welcomeCouponPercent   Int  @default(10) // 0 = no se crea cupón de bienvenida
-  welcomeCouponValidDays Int? // null = sin vencimiento
+  loyaltyResetAtTopLevel     Boolean         @default(false)
+  welcomeCouponPercent       Int             @default(10) // 0 = no se crea cupón de bienvenida
+  welcomeCouponValidDays     Int? // null = sin vencimiento
   // Cupones de cumpleaños (lib/birthdays.ts): % para el cliente (en
   // Cafetería) y para su mascota (en Pet Shop, a nombre del dueño). 0 = no
   // se regala. Valen desde el día del cumpleaños durante N días.
-  birthdayCustomerPercent Int @default(0)
-  birthdayPetPercent      Int @default(0)
-  birthdayCouponValidDays Int @default(7)
+  birthdayCustomerPercent    Int             @default(0)
+  birthdayPetPercent         Int             @default(0)
+  birthdayCouponValidDays    Int             @default(7)
   // Días que la fecha de cumpleaños debe llevar registrada antes del
   // festejo para dar cupón (anti-abuso). 0 = basta con que sea antes del día.
-  birthdayLeadDays        Int @default(30)
+  birthdayLeadDays           Int             @default(30)
+  // Recordatorios por WhatsApp (lib/reminders.ts, Clientes → Recordatorios).
+  // Cafetería: "te extrañamos" a quien lleva N días sin comprar café.
+  // Pet Shop: N días después de comprar un producto, salvo que el producto
+  // tenga sus propios días/mensaje (Product.reminderDays/reminderMessage).
+  // 0 días = apagado; mensaje null = el de lib/settings-shared.ts.
+  reminderCafeDays           Int             @default(30)
+  reminderCafeMessage        String?
+  reminderPetShopDays        Int             @default(30)
+  reminderPetShopMessage     String?
   // Descuentos: tope del descuento manual como % del subtotal (null = sin tope)
-  maxManualDiscountPercent Int?
+  maxManualDiscountPercent   Int?
   // Inventario: qué pasa al vender sin insumos suficientes
   // "CONFIRMAR" (cualquiera confirma) | "GERENTE" (solo quien tenga
   // INVENTARIO_AJUSTAR) | "BLOQUEAR" (nunca)
-  shortagePolicy String @default("CONFIRMAR")
+  shortagePolicy             String          @default("CONFIRMAR")
   // Seguridad
-  pinMaxAttempts Int @default(5)
-  pinLockMinutes Int @default(5)
-  sessionHours   Int @default(12)
+  pinMaxAttempts             Int             @default(5)
+  pinLockMinutes             Int             @default(5)
+  sessionHours               Int             @default(12)
   // Impuestos: "NINGUNO" | "INCLUIDO" (precios con IVA incluido; se desglosa)
-  taxMode        String  @default("NINGUNO")
-  taxRatePercent Decimal @default(16) @db.Decimal(5, 2)
+  taxMode                    String          @default("NINGUNO")
+  taxRatePercent             Decimal         @default(16) @db.Decimal(5, 2)
 
   employeeBranches EmployeeBranch[]
   branchProducts   BranchProduct[]
@@ -360,11 +369,11 @@ model StockLocation {
   branchId String?
   branch   Branch?           @relation(fields: [branchId], references: [id])
 
-  stocks    InventoryStock[]
-  batches   IngredientBatch[]
-  movements InventoryMovement[]
-  transfersOut TransferManifest[] @relation("TransferOrigin")
-  transfersIn  TransferManifest[] @relation("TransferDestination")
+  stocks        InventoryStock[]
+  batches       IngredientBatch[]
+  movements     InventoryMovement[]
+  transfersOut  TransferManifest[]  @relation("TransferOrigin")
+  transfersIn   TransferManifest[]  @relation("TransferDestination")
   reorderPoints ReorderPoint[]
 
   @@map("stock_locations")
@@ -388,30 +397,30 @@ model IngredientCategory {
 }
 
 model Ingredient {
-  id                String             @id @default(cuid())
-  name              String
-  categoryId        String
-  category          IngredientCategory @relation(fields: [categoryId], references: [id])
-  kind              IngredientKind     @default(ATOMICO)
-  baseUnit          UnitOfMeasure // unidad en la que se descuenta del inventario
-  purchaseUnit      UnitOfMeasure // unidad en la que normalmente se compra
-  tracksExpiration  Boolean            @default(true)
-  isActive          Boolean            @default(true)
+  id                       String             @id @default(cuid())
+  name                     String
+  categoryId               String
+  category                 IngredientCategory @relation(fields: [categoryId], references: [id])
+  kind                     IngredientKind     @default(ATOMICO)
+  baseUnit                 UnitOfMeasure // unidad en la que se descuenta del inventario
+  purchaseUnit             UnitOfMeasure // unidad en la que normalmente se compra
+  tracksExpiration         Boolean            @default(true)
+  isActive                 Boolean            @default(true)
   // Precio de venta al cliente cuando este ingrediente se agrega como extra
   // libre en el POS ("Agregar otro ingrediente"), por cada unidad de
   // standardDoseUnit (o de baseUnit si no tiene dosis estándar) — ej.
   // $12 por shot. Distinto del costo de proveedor. null = se cobra el costo
   // cotizado ÷ el % de food cost objetivo (ver resolveSaleItems en
   // actions/pos.ts); antes se cobraba el costo tal cual, sin margen.
-  extraUnitPrice    Decimal?           @db.Decimal(12, 4)
+  extraUnitPrice           Decimal?           @db.Decimal(12, 4)
   // Días de anticipación con que se dispara la alerta de caducidad próxima
   // para este ingrediente. Varía por tipo — ej. leche 5 días, jarabe 30 días.
-  expirationAlertDays Int?
+  expirationAlertDays      Int?
   // Si no es null, este ingrediente es un vaso/contenedor con esta
   // capacidad — createSale (actions/pos.ts) lo usa para elegir
   // automáticamente el vaso más chico que alcance según
   // ProductVariant.sizeOz, en vez de que la receta lo liste a mano.
-  cupCapacityOz     Decimal?           @db.Decimal(6, 2)
+  cupCapacityOz            Decimal?           @db.Decimal(6, 2)
   // Dosis estándar para capturar este ingrediente como línea de receta,
   // opción de modificador, o extra libre en el POS — evita pedir mililitros
   // crudos para cosas como "1 pump de vainilla" o "1 splash de leche".
@@ -419,16 +428,16 @@ model Ingredient {
   // convertir al costear/descontar inventario (mismo mecanismo que ya usa
   // toBaseUnit() en actions/pos.ts). null = se sigue capturando en baseUnit,
   // como antes.
-  standardDoseQuantity Decimal?        @db.Decimal(8, 2)
-  standardDoseUnit     UnitOfMeasure?
+  standardDoseQuantity     Decimal?           @db.Decimal(8, 2)
+  standardDoseUnit         UnitOfMeasure?
   // Presentación en la que se compra (ej. "Caja 12 L" = 12000 ml). Las
   // órdenes de compra se capturan en esta presentación y se convierten a
   // baseUnit al guardarlas. null = se usa purchaseUnit con la conversión
   // estándar (L→ml, kg→g...) o, si no hay, baseUnit (ver lib/units.ts).
   purchasePresentationName String?
-  purchasePresentationSize Decimal?     @db.Decimal(12, 4) // en baseUnit
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  purchasePresentationSize Decimal?           @db.Decimal(12, 4) // en baseUnit
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
 
   suppliers          IngredientSupplier[]
   batches            IngredientBatch[]
@@ -457,8 +466,8 @@ model Supplier {
 
   // null = proveedor global (disponible para todas las sucursales).
   // Si tiene valor, es un proveedor local exclusivo de esa sucursal.
-  branchId  String?
-  branch    Branch?  @relation(fields: [branchId], references: [id])
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id])
 
   // Mínimo total de la orden en $, cuando el proveedor lo maneja así.
   // Independiente de IngredientSupplier.minOrderQuantity — un proveedor
@@ -478,15 +487,15 @@ model Supplier {
 // Un ingrediente puede tener varios proveedores, cada uno con su propio
 // costo. `isSelected` marca cuál costo se usa para calcular costo de receta.
 model IngredientSupplier {
-  id           String     @id @default(cuid())
+  id           String        @id @default(cuid())
   ingredientId String
-  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
+  ingredient   Ingredient    @relation(fields: [ingredientId], references: [id])
   supplierId   String
-  supplier     Supplier   @relation(fields: [supplierId], references: [id])
-  cost         Decimal    @db.Decimal(10, 4)
+  supplier     Supplier      @relation(fields: [supplierId], references: [id])
+  cost         Decimal       @db.Decimal(10, 4)
   costUnit     UnitOfMeasure
-  isSelected   Boolean    @default(false) // costo "activo" para cálculo
-  updatedAt    DateTime   @updatedAt
+  isSelected   Boolean       @default(false) // costo "activo" para cálculo
+  updatedAt    DateTime      @updatedAt
 
   // Mínimo de pedido para este ingrediente en particular con este
   // proveedor, cuando aplica (ej. "café: mínimo 20kg"). Independiente de
@@ -505,15 +514,15 @@ model IngredientSupplier {
 // registrado) — en vez de solo sobrescribir, para reportes de "cuánto ha
 // subido este insumo" y como disparador de recálculo de costo de recetas.
 model IngredientCostHistory {
-  id                   String              @id @default(cuid())
+  id                   String             @id @default(cuid())
   ingredientId         String
-  ingredient           Ingredient          @relation(fields: [ingredientId], references: [id])
+  ingredient           Ingredient         @relation(fields: [ingredientId], references: [id])
   ingredientSupplierId String
-  ingredientSupplier   IngredientSupplier  @relation(fields: [ingredientSupplierId], references: [id])
-  previousCost         Decimal?            @db.Decimal(10, 4)
-  newCost              Decimal             @db.Decimal(10, 4)
+  ingredientSupplier   IngredientSupplier @relation(fields: [ingredientSupplierId], references: [id])
+  previousCost         Decimal?           @db.Decimal(10, 4)
+  newCost              Decimal            @db.Decimal(10, 4)
   costUnit             UnitOfMeasure
-  changedAt            DateTime            @default(now())
+  changedAt            DateTime           @default(now())
   source               String? // ej. "entrada de inventario #123"
 
   @@map("ingredient_cost_history")
@@ -522,15 +531,15 @@ model IngredientCostHistory {
 // Lotes por caducidad — el saldo agregado vive en InventoryStock; el lote
 // permite trazabilidad y alertas de caducidad.
 model IngredientBatch {
-  id              String        @id @default(cuid())
-  ingredientId    String
-  ingredient      Ingredient    @relation(fields: [ingredientId], references: [id])
-  stockLocationId String
-  stockLocation   StockLocation @relation(fields: [stockLocationId], references: [id])
-  quantity        Decimal       @db.Decimal(12, 4)
-  unit            UnitOfMeasure
-  expirationDate  DateTime?
-  receivedAt      DateTime      @default(now())
+  id                  String             @id @default(cuid())
+  ingredientId        String
+  ingredient          Ingredient         @relation(fields: [ingredientId], references: [id])
+  stockLocationId     String
+  stockLocation       StockLocation      @relation(fields: [stockLocationId], references: [id])
+  quantity            Decimal            @db.Decimal(12, 4)
+  unit                UnitOfMeasure
+  expirationDate      DateTime?
+  receivedAt          DateTime           @default(now())
   purchaseOrderItemId String?
   purchaseOrderItem   PurchaseOrderItem? @relation(fields: [purchaseOrderItemId], references: [id])
 
@@ -570,34 +579,34 @@ model UnitConversion {
 // Los productos siempre cuelgan de la hoja (categoryId), nunca del padre
 // directamente salvo que el padre no tenga hijas (ej. "Café en grano").
 model ProductCategory {
-  id       String            @id @default(cuid())
-  name     String            @unique // ej. "Café caliente", "Café frío", "Sin café", "Cafe de expendio"
+  id           String            @id @default(cuid())
+  name         String            @unique // ej. "Café caliente", "Café frío", "Sin café", "Cafe de expendio"
   // Nombre de ícono Lucide (ej. "Coffee", "Snowflake") — validado contra
   // una lista fija en components/productos/category-icon-picker.tsx, no
   // cualquier string. null = sin ícono (fallback visual genérico).
-  icon     String?
-  parentId String?
-  parent   ProductCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  icon         String?
+  parentId     String?
+  parent       ProductCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
   // Unidad de negocio (Cafetería / Pet Shop): base de la lealtad por
   // puntos, los cupones por unidad y el desglose de reportes. Se elige en
   // la categoría raíz; las subcategorías la heredan (actions/recipes.ts
   // updateProductCategory la propaga) para no tener que subir de nivel al
   // leerla.
-  businessUnit BusinessUnit @default(CAFE)
-  children ProductCategory[] @relation("CategoryHierarchy")
-  products Product[]
+  businessUnit BusinessUnit      @default(CAFE)
+  children     ProductCategory[] @relation("CategoryHierarchy")
+  products     Product[]
 
   @@map("product_categories")
 }
 
 model Product {
-  id         String          @id @default(cuid())
-  name       String // ej. "Latte", "Capuccino", "Cold Brew"
-  imageUrl   String? // URL externa — no hay storage de archivos configurado
-  categoryId String
-  category   ProductCategory @relation(fields: [categoryId], references: [id])
-  type       ProductType     @default(RECETA)
-  isActive   Boolean         @default(true)
+  id              String          @id @default(cuid())
+  name            String // ej. "Latte", "Capuccino", "Cold Brew"
+  imageUrl        String? // URL externa — no hay storage de archivos configurado
+  categoryId      String
+  category        ProductCategory @relation(fields: [categoryId], references: [id])
+  type            ProductType     @default(RECETA)
+  isActive        Boolean         @default(true)
   // true  -> perecedero: al cancelar una venta ya cobrada, el inventario NO
   //          se reintegra, se registra como pérdida (ej. bebidas, postres,
   //          café en grano). Requiere autorización de gerente + justificación.
@@ -605,28 +614,33 @@ model Product {
   //          automáticamente (ej. merch, tazas). No requiere autorización.
   // Es un flag explícito y no se infiere de `type` porque hay productos de
   // REVENTA_DIRECTA que también son perecederos (café en grano, postres).
-  isPerishable Boolean       @default(true)
+  isPerishable    Boolean         @default(true)
   // Lo que contiene, para las alertas de alergias de mascotas en el POS
   // (lib/allergens.ts), ej. ["pollo", "lácteos"].
-  allergenTags String[]      @default([])
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  allergenTags    String[]        @default([])
+  // Recordatorio de Pet Shop (lib/reminders.ts): null = el de
+  // Configuración → Recordatorios; reminderDays 0 = nunca para este producto.
+  reminderDays    Int?
+  reminderMessage String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   variants       ProductVariant[]
   branchProducts BranchProduct[]
   comboItems     ComboItem[]
+  reminders      CustomerReminder[]
 
   @@map("products")
 }
 
 // Tamaño / variante — cada variante tiene su propia receta independiente.
 model ProductVariant {
-  id        String   @id @default(cuid())
+  id        String  @id @default(cuid())
   productId String
-  product   Product  @relation(fields: [productId], references: [id])
+  product   Product @relation(fields: [productId], references: [id])
   name      String // ej. "Chico", "Mediano", "Grande", "Único", "Por Kilo"
-  price     Decimal  @db.Decimal(10, 2)
-  isActive  Boolean  @default(true)
+  price     Decimal @db.Decimal(10, 2)
+  isActive  Boolean @default(true)
 
   // Eje de temperatura real (antes se inferría parseando el nombre de la
   // variante, ver docs/CONTINUE.md "Mejoras avanzadas de POS") — null si
@@ -636,7 +650,7 @@ model ProductVariant {
   // para elegir automáticamente el vaso (Ingredient.cupCapacityOz) que se
   // descuenta, sin que la receta lo liste como ingrediente. Null si el
   // producto no es una bebida (ej. REVENTA_DIRECTA) o no aplica.
-  sizeOz      Decimal?             @db.Decimal(6, 2)
+  sizeOz      Decimal?            @db.Decimal(6, 2)
   // Solo para merch/souvenirs (ProductType.REVENTA_DIRECTA) — talla/color/
   // nota opcionales, sin uso en bebidas.
   size        String?
@@ -650,11 +664,11 @@ model ProductVariant {
   // gerente ajusta el precio o descarta la alerta.
   costAtLastPriceReview Decimal? @db.Decimal(10, 2)
 
-  recipes           Recipe[]
-  modifierGroups    VariantModifierGroup[]
-  saleItems         SaleItem[]
-  comboItems        ComboItem[]
-  promotionVariants PromotionVariant[]
+  recipes            Recipe[]
+  modifierGroups     VariantModifierGroup[]
+  saleItems          SaleItem[]
+  comboItems         ComboItem[]
+  promotionVariants  PromotionVariant[]
   loyaltyTierRewards LoyaltyTier[]
   discountCodes      DiscountCode[]
 
@@ -688,21 +702,21 @@ model Recipe {
   // ProductVariant sino que se referencia desde RecipeIngredient.composedById
   name             String? // requerido cuando kind = INGREDIENTE_COMPUESTO
 
-  versions RecipeVersion[]
+  versions                   RecipeVersion[]
   usedAsComposedIngredientIn RecipeIngredient[] @relation("ComposedIngredientUsage")
 
   @@map("recipes")
 }
 
 model RecipeVersion {
-  id           String    @id @default(cuid())
-  recipeId     String
-  recipe       Recipe    @relation(fields: [recipeId], references: [id])
+  id            String    @id @default(cuid())
+  recipeId      String
+  recipe        Recipe    @relation(fields: [recipeId], references: [id])
   versionNumber Int
-  isActive     Boolean   @default(true) // sólo una versión activa a la vez por Recipe
-  effectiveFrom DateTime @default(now())
+  isActive      Boolean   @default(true) // sólo una versión activa a la vez por Recipe
+  effectiveFrom DateTime  @default(now())
   effectiveTo   DateTime?
-  notes        String? // ej. "cambio de marca de jarabe", "ajuste sin azúcar"
+  notes         String? // ej. "cambio de marca de jarabe", "ajuste sin azúcar"
 
   ingredients RecipeIngredient[]
   saleItems   SaleItem[] // referencia a qué versión se usó al momento de la venta
@@ -786,16 +800,16 @@ model VariantModifierGroup {
 // (ej. "Shot extra" -> +1 ESPRESSO_SHOT de café; "Leche deslactosada" ->
 // sustituye el ingrediente leche).
 model ModifierOption {
-  id                     String                @id @default(cuid())
-  groupId                String
-  group                  VariantModifierGroup  @relation(fields: [groupId], references: [id])
-  name                   String // ej. "Shot extra", "Leche deslactosada", "Doble carga de chai"
-  priceDelta             Decimal               @default(0) @db.Decimal(10, 2)
-  ingredientId           String?
-  ingredient             Ingredient?           @relation(fields: [ingredientId], references: [id])
-  quantityDelta          Decimal?              @db.Decimal(12, 4) // cantidad a sumar/restar del ingrediente
-  unit                   UnitOfMeasure?
-  isSubstitution         Boolean               @default(false) // true = reemplaza ingrediente base en vez de sumar
+  id             String               @id @default(cuid())
+  groupId        String
+  group          VariantModifierGroup @relation(fields: [groupId], references: [id])
+  name           String // ej. "Shot extra", "Leche deslactosada", "Doble carga de chai"
+  priceDelta     Decimal              @default(0) @db.Decimal(10, 2)
+  ingredientId   String?
+  ingredient     Ingredient?          @relation(fields: [ingredientId], references: [id])
+  quantityDelta  Decimal?             @db.Decimal(12, 4) // cantidad a sumar/restar del ingrediente
+  unit           UnitOfMeasure?
+  isSubstitution Boolean              @default(false) // true = reemplaza ingrediente base en vez de sumar
 
   saleItemModifiers SaleItemModifier[]
 
@@ -807,17 +821,17 @@ model ModifierOption {
 // =========================================================================
 
 model Combo {
-  id        String      @id @default(cuid())
-  name      String
-  price     Decimal     @db.Decimal(10, 2) // precio único del combo (utilidad se calcula agregada)
-  isActive  Boolean     @default(true)
+  id       String  @id @default(cuid())
+  name     String
+  price    Decimal @db.Decimal(10, 2) // precio único del combo (utilidad se calcula agregada)
+  isActive Boolean @default(true)
 
   // Vigencia por día/horario — mismo shape que Promotion, para que las 3
   // categorías del módulo Promociones (Paquetes/2x1/Día temático)
   // compartan una noción de "cuándo aplica". Vacío/null = todo el
   // tiempo. Sin manejo de zona horaria especial — hora del servidor,
   // igual que el resto del sistema (ver docs/CONTINUE.md).
-  daysOfWeek Int[]  @default([]) // 0=domingo…6=sábado, vacío = todos
+  daysOfWeek Int[]   @default([]) // 0=domingo…6=sábado, vacío = todos
   startTime  String? // "HH:mm", null = todo el día
   endTime    String?
 
@@ -861,7 +875,7 @@ model Promotion {
   category PromotionCategory
   isActive Boolean           @default(true)
 
-  daysOfWeek Int[]  @default([]) // 0=domingo…6=sábado, vacío = todos
+  daysOfWeek Int[]   @default([]) // 0=domingo…6=sábado, vacío = todos
   startTime  String? // "HH:mm", null = todo el día
   endTime    String?
 
@@ -900,19 +914,19 @@ model Employee {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  branches           EmployeeBranch[]
-  inventoryMovements InventoryMovement[]
-  sales              Sale[]
-  cashiersShifts     Shift[]              @relation("ShiftCashier")
-  shiftsOpeningConfirmed Shift[]          @relation("ShiftOpeningConfirmedBy")
-  shiftsClosingConfirmed Shift[]          @relation("ShiftClosingConfirmedBy")
-  cashMovements      CashMovement[]
-  purchaseOrders     PurchaseOrder[]
-  physicalCounts     PhysicalCount[]      @relation("CountPerformedBy")
-  approvedCounts     PhysicalCount[]      @relation("CountApprovedBy")
-  manualDiscountsAuthorized ManualDiscount[] @relation("ManualDiscountAuthorizedBy")
-  transfersInitiated TransferManifest[]   @relation("TransferInitiatedBy")
-  transfersReceived  TransferManifest[]   @relation("TransferReceivedBy")
+  branches                  EmployeeBranch[]
+  inventoryMovements        InventoryMovement[]
+  sales                     Sale[]
+  cashiersShifts            Shift[]             @relation("ShiftCashier")
+  shiftsOpeningConfirmed    Shift[]             @relation("ShiftOpeningConfirmedBy")
+  shiftsClosingConfirmed    Shift[]             @relation("ShiftClosingConfirmedBy")
+  cashMovements             CashMovement[]
+  purchaseOrders            PurchaseOrder[]
+  physicalCounts            PhysicalCount[]     @relation("CountPerformedBy")
+  approvedCounts            PhysicalCount[]     @relation("CountApprovedBy")
+  manualDiscountsAuthorized ManualDiscount[]    @relation("ManualDiscountAuthorizedBy")
+  transfersInitiated        TransferManifest[]  @relation("TransferInitiatedBy")
+  transfersReceived         TransferManifest[]  @relation("TransferReceivedBy")
 
   @@map("employees")
 }
@@ -1020,16 +1034,16 @@ model InventoryMovement {
 }
 
 model PhysicalCount {
-  id          String              @id @default(cuid())
-  branchId    String
-  branch      Branch              @relation(fields: [branchId], references: [id])
-  status      PhysicalCountStatus @default(ABIERTO)
+  id            String              @id @default(cuid())
+  branchId      String
+  branch        Branch              @relation(fields: [branchId], references: [id])
+  status        PhysicalCountStatus @default(ABIERTO)
   performedById String
-  performedBy   Employee          @relation("CountPerformedBy", fields: [performedById], references: [id])
+  performedBy   Employee            @relation("CountPerformedBy", fields: [performedById], references: [id])
   approvedById  String?
-  approvedBy    Employee?         @relation("CountApprovedBy", fields: [approvedById], references: [id])
-  startedAt   DateTime            @default(now())
-  closedAt    DateTime?
+  approvedBy    Employee?           @relation("CountApprovedBy", fields: [approvedById], references: [id])
+  startedAt     DateTime            @default(now())
+  closedAt      DateTime?
 
   lines PhysicalCountLine[]
 
@@ -1055,23 +1069,23 @@ model PhysicalCountLine {
 // tipo TRANSFERENCIA_SALIDA / TRANSFERENCIA_ENTRADA) se genera en cada
 // transición de estado, ligado vía TransferLine.
 model TransferManifest {
-  id     String @id @default(cuid())
+  id     String         @id @default(cuid())
   status TransferStatus @default(ENVIADO)
 
   fromStockLocationId String
   fromStockLocation   StockLocation @relation("TransferOrigin", fields: [fromStockLocationId], references: [id])
-  toStockLocationId    String
-  toStockLocation      StockLocation @relation("TransferDestination", fields: [toStockLocationId], references: [id])
+  toStockLocationId   String
+  toStockLocation     StockLocation @relation("TransferDestination", fields: [toStockLocationId], references: [id])
 
   initiatedById String
   initiatedBy   Employee  @relation("TransferInitiatedBy", fields: [initiatedById], references: [id])
   receivedById  String?
   receivedBy    Employee? @relation("TransferReceivedBy", fields: [receivedById], references: [id])
 
-  sentAt       DateTime  @default(now())
-  inTransitAt  DateTime?
-  receivedAt   DateTime?
-  notes        String?
+  sentAt      DateTime  @default(now())
+  inTransitAt DateTime?
+  receivedAt  DateTime?
+  notes       String?
 
   lines TransferLine[]
 
@@ -1091,8 +1105,8 @@ model TransferLine {
   // se captura aquí y el sistema genera automáticamente un InventoryMovement
   // tipo MERMA por la diferencia, con nota visible en la auditoría de la
   // sucursal receptora. receivedQuantity = quantity si no hubo discrepancia.
-  receivedQuantity   Decimal?         @db.Decimal(12, 4)
-  discrepancyNote    String?
+  receivedQuantity Decimal? @db.Decimal(12, 4)
+  discrepancyNote  String?
 
   movements InventoryMovement[]
 
@@ -1136,7 +1150,7 @@ model PurchaseOrder {
 
   // Fecha en que se marcó como pagada (captura manual). Se compara contra
   // createdAt para medir cuántos días tarda el proveedor en surtir.
-  paidAt     DateTime?
+  paidAt DateTime?
 
   items PurchaseOrderItem[]
 
@@ -1150,10 +1164,10 @@ model PurchaseOrderItem {
   ingredientId    String
   ingredient      Ingredient    @relation(fields: [ingredientId], references: [id])
 
-  orderedQuantity  Decimal        @db.Decimal(12, 4)
+  orderedQuantity  Decimal       @db.Decimal(12, 4)
   // null hasta que se registra la recepción; permite recepción parcial
   // (orderedQuantity - receivedQuantity = pendiente).
-  receivedQuantity Decimal?       @db.Decimal(12, 4)
+  receivedQuantity Decimal?      @db.Decimal(12, 4)
   unit             UnitOfMeasure
 
   // Presentación con la que se capturó la línea (copia al momento de crear
@@ -1161,11 +1175,11 @@ model PurchaseOrderItem {
   // baseUnit, y estos campos solo sirven para mostrarlos y capturar la
   // recepción en la misma presentación (ver lib/units.ts).
   presentationName     String?
-  unitsPerPresentation Decimal?       @db.Decimal(12, 4)
+  unitsPerPresentation Decimal? @db.Decimal(12, 4)
 
-  estimatedUnitCost Decimal        @db.Decimal(10, 4)
+  estimatedUnitCost Decimal  @db.Decimal(10, 4)
   // capturado al recibir, para ver variación estimado vs. real
-  actualUnitCost    Decimal?       @db.Decimal(10, 4)
+  actualUnitCost    Decimal? @db.Decimal(10, 4)
 
   batches IngredientBatch[]
 
@@ -1177,13 +1191,13 @@ model PurchaseOrderItem {
 // =========================================================================
 
 model Shift {
-  id         String      @id @default(cuid())
-  branchId   String
-  branch     Branch      @relation(fields: [branchId], references: [id])
-  type       ShiftType
-  status     ShiftStatus @default(ABIERTO)
-  cashierId  String
-  cashier    Employee    @relation("ShiftCashier", fields: [cashierId], references: [id])
+  id        String      @id @default(cuid())
+  branchId  String
+  branch    Branch      @relation(fields: [branchId], references: [id])
+  type      ShiftType
+  status    ShiftStatus @default(ABIERTO)
+  cashierId String
+  cashier   Employee    @relation("ShiftCashier", fields: [cashierId], references: [id])
 
   // Confirmación de apertura: preferentemente gerente, pero puede ser
   // cualquier otro empleado (distinto del cajero) si el gerente no está
@@ -1192,10 +1206,10 @@ model Shift {
   openingConfirmedBy   Employee? @relation("ShiftOpeningConfirmedBy", fields: [openingConfirmedById], references: [id])
   openingConfirmedAt   DateTime?
 
-  openedAt   DateTime    @default(now())
-  closedAt   DateTime?
-  openingCash  Decimal   @default(0) @db.Decimal(10, 2)
-  closingCash  Decimal?  @db.Decimal(10, 2) // conteo físico al corte
+  openedAt    DateTime  @default(now())
+  closedAt    DateTime?
+  openingCash Decimal   @default(0) @db.Decimal(10, 2)
+  closingCash Decimal?  @db.Decimal(10, 2) // conteo físico al corte
 
   // Total esperado (apertura + ventas efectivo - retiros + ingresos),
   // calculado SOLO al momento del corte, nunca en tiempo real.
@@ -1213,23 +1227,23 @@ model Shift {
   closingConfirmedBy   Employee? @relation("ShiftClosingConfirmedBy", fields: [closingConfirmedById], references: [id])
   closingConfirmedAt   DateTime?
 
-  sales               Sale[]
-  cashMovements       CashMovement[]
-  inventoryMovements  InventoryMovement[]
+  sales              Sale[]
+  cashMovements      CashMovement[]
+  inventoryMovements InventoryMovement[]
 
   @@map("shifts")
 }
 
 model CashMovement {
-  id         String            @id @default(cuid())
+  id         String           @id @default(cuid())
   shiftId    String
-  shift      Shift             @relation(fields: [shiftId], references: [id])
+  shift      Shift            @relation(fields: [shiftId], references: [id])
   type       CashMovementType
-  amount     Decimal           @db.Decimal(10, 2)
+  amount     Decimal          @db.Decimal(10, 2)
   reason     String // ej. "compra de hielo"
   employeeId String
-  employee   Employee          @relation(fields: [employeeId], references: [id])
-  createdAt  DateTime          @default(now())
+  employee   Employee         @relation(fields: [employeeId], references: [id])
+  createdAt  DateTime         @default(now())
 
   @@map("cash_movements")
 }
@@ -1252,26 +1266,26 @@ enum PetSpecies {
 
 // Mascota de un cliente (un tutor puede tener varias).
 model Pet {
-  id         String     @id @default(cuid())
-  customerId String
-  customer   Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  name       String
-  species    PetSpecies @default(PERRO)
-  breed      String?
-  weightKg   Decimal?   @db.Decimal(5, 2)
-  birthDate  DateTime?  @db.Date
+  id             String     @id @default(cuid())
+  customerId     String
+  customer       Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  name           String
+  species        PetSpecies @default(PERRO)
+  breed          String?
+  weightKg       Decimal?   @db.Decimal(5, 2)
+  birthDate      DateTime?  @db.Date
   // Cuándo se capturó o cambió birthDate: un cupón de cumpleaños solo se
   // entrega si la fecha ya estaba registrada antes de ese cumpleaños (que
   // no se pueda capturar "hoy" para sacar un cupón, lib/birthdays.ts).
   // null = registrada antes de que existiera este campo.
   birthDateSetAt DateTime?
-  photoUrl   String?
+  photoUrl       String?
   // Alergias y restricciones (ej. "pollo", "lácteos"): el POS avisa si se
   // agrega un producto que las contiene (Product.allergenTags).
-  allergies  String[]   @default([])
-  notes      String?
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  allergies      String[]   @default([])
+  notes          String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 
   birthdayGrants BirthdayGrant[]
 
@@ -1298,10 +1312,39 @@ model BirthdayGrant {
   @@map("birthday_grants")
 }
 
+enum ReminderKind {
+  CAFE_TE_EXTRANAMOS
+  PET_SHOP_RESURTIDO
+}
+
+enum ReminderAction {
+  ENVIADO
+  OMITIDO
+}
+
+// Un recordatorio ya atendido (mandado por WhatsApp u omitido). Uno vuelve
+// a salir solo después de una compra nueva posterior a este registro
+// (lib/reminders.ts). Pet Shop guarda uno por producto; Cafetería sin
+// producto.
+model CustomerReminder {
+  id         String         @id @default(cuid())
+  customerId String
+  customer   Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  kind       ReminderKind
+  productId  String?
+  product    Product?       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  action     ReminderAction
+  employeeId String?
+  createdAt  DateTime       @default(now())
+
+  @@index([customerId, kind])
+  @@map("customer_reminders")
+}
+
 model Customer {
-  id        String    @id @default(cuid())
-  name      String
-  birthDate DateTime?
+  id             String          @id @default(cuid())
+  name           String
+  birthDate      DateTime?
   // Cuándo se capturó o cambió birthDate: un cupón de cumpleaños solo se
   // entrega si la fecha ya estaba registrada antes de ese cumpleaños (que
   // no se pueda capturar "hoy" para sacar un cupón, lib/birthdays.ts).
@@ -1310,20 +1353,21 @@ model Customer {
   // Opcional a propósito — los clientes ya registrados no lo tienen, y no
   // se pide de vuelta a fuerza. Solo para las estadísticas de
   // Administración → Clientes (ver lib/customers.ts getCustomerStats).
-  gender    CustomerGender?
-  email     String?   @unique
-  phone     String?   @unique
-  address   String? // para pedidos "A domicilio"
-  createdAt DateTime  @default(now())
+  gender         CustomerGender?
+  email          String?         @unique
+  phone          String?         @unique
+  address        String? // para pedidos "A domicilio"
+  createdAt      DateTime        @default(now())
 
-  loyaltyCard   LoyaltyCard?
-  sales         Sale[]
-  discountCodes DiscountCode[]
+  loyaltyCard     LoyaltyCard?
+  sales           Sale[]
+  discountCodes   DiscountCode[]
   loyaltyBalances LoyaltyBalance[]
   loyaltyEntries  LoyaltyPointsEntry[]
   tierGrants      LoyaltyTierGrant[]
   pets            Pet[]
   birthdayGrants  BirthdayGrant[]
+  reminders       CustomerReminder[]
 
   @@map("customers")
 }
@@ -1349,20 +1393,20 @@ model LoyaltyCard {
 // puntos en ese programa y, al alcanzarlo, se entrega su recompensa como
 // cupón personal (ver lib/loyalty-points.ts).
 model LoyaltyTier {
-  id             String            @id @default(cuid())
-  program        LoyaltyProgram    @default(CAFE)
-  name           String
-  pointsRequired Int               @default(0)
+  id                String            @id @default(cuid())
+  program           LoyaltyProgram    @default(CAFE)
+  name              String
+  pointsRequired    Int               @default(0)
   // Legado (visitas). Se conserva para que la versión anterior de la app
   // siga cobrando entre `migrate deploy` y el reinicio, y para poder
   // regresar a ella; se quita en una migración posterior.
-  minLifetimeStamps Int            @default(0)
-  benefits       String? // texto libre que ve el cliente
-  rewardType     LoyaltyRewardType @default(NINGUNA)
-  rewardPercent  Int? // CUPON_PORCENTAJE / DESCUENTO_PERMANENTE
-  rewardVariantId String? // PRODUCTO_GRATIS
-  rewardVariant   ProductVariant?  @relation(fields: [rewardVariantId], references: [id])
-  rewardValidDays Int? // cupones de un uso; null = sin vencimiento
+  minLifetimeStamps Int               @default(0)
+  benefits          String? // texto libre que ve el cliente
+  rewardType        LoyaltyRewardType @default(NINGUNA)
+  rewardPercent     Int? // CUPON_PORCENTAJE / DESCUENTO_PERMANENTE
+  rewardVariantId   String? // PRODUCTO_GRATIS
+  rewardVariant     ProductVariant?   @relation(fields: [rewardVariantId], references: [id])
+  rewardValidDays   Int? // cupones de un uso; null = sin vencimiento
 
   cards  LoyaltyCard[] // legado (LoyaltyCard.tierId, de la época de sellos)
   grants LoyaltyTierGrant[]
@@ -1420,10 +1464,10 @@ model LoyaltyTierGrant {
   pointsRequired Int
   cycle          Int
   saleId         String?
-  sale           Sale?         @relation(fields: [saleId], references: [id])
-  discountCodeId String?       @unique
-  discountCode   DiscountCode? @relation(fields: [discountCodeId], references: [id])
-  createdAt      DateTime      @default(now())
+  sale           Sale?          @relation(fields: [saleId], references: [id])
+  discountCodeId String?        @unique
+  discountCode   DiscountCode?  @relation(fields: [discountCodeId], references: [id])
+  createdAt      DateTime       @default(now())
 
   @@unique([customerId, tierId, cycle])
   @@map("loyalty_tier_grants")
@@ -1434,48 +1478,48 @@ model LoyaltyTierGrant {
 // =========================================================================
 
 model Sale {
-  id         String     @id @default(cuid())
-  branchId   String
-  branch     Branch     @relation(fields: [branchId], references: [id])
-  shiftId    String
-  shift      Shift      @relation(fields: [shiftId], references: [id])
-  employeeId String
-  employee   Employee   @relation(fields: [employeeId], references: [id])
-  customerId String?
-  customer   Customer?  @relation(fields: [customerId], references: [id])
-  status     SaleStatus @default(COMPLETADA)
-  orderType  SaleOrderType @default(PARA_LLEVAR)
-  tableNumber String? // solo aplica cuando orderType = CONSUMO_LOCAL ("Mesa")
-  domicilioOrigen DomicilioOrigen? // solo aplica cuando orderType = DOMICILIO
-  subtotal   Decimal    @db.Decimal(10, 2)
-  discountTotal Decimal @default(0) @db.Decimal(10, 2)
-  total      Decimal    @db.Decimal(10, 2) // IVA incluido
+  id                 String           @id @default(cuid())
+  branchId           String
+  branch             Branch           @relation(fields: [branchId], references: [id])
+  shiftId            String
+  shift              Shift            @relation(fields: [shiftId], references: [id])
+  employeeId         String
+  employee           Employee         @relation(fields: [employeeId], references: [id])
+  customerId         String?
+  customer           Customer?        @relation(fields: [customerId], references: [id])
+  status             SaleStatus       @default(COMPLETADA)
+  orderType          SaleOrderType    @default(PARA_LLEVAR)
+  tableNumber        String? // solo aplica cuando orderType = CONSUMO_LOCAL ("Mesa")
+  domicilioOrigen    DomicilioOrigen? // solo aplica cuando orderType = DOMICILIO
+  subtotal           Decimal          @db.Decimal(10, 2)
+  discountTotal      Decimal          @default(0) @db.Decimal(10, 2)
+  total              Decimal          @db.Decimal(10, 2) // IVA incluido
   // Propina: se cobra junto con la venta (los pagos suman total + tipAmount)
   // pero NO es ingreso por ventas — reportes siguen usando `total`.
-  tipAmount  Decimal    @default(0) @db.Decimal(10, 2)
+  tipAmount          Decimal          @default(0) @db.Decimal(10, 2)
   // IVA contenido en `total` cuando la sucursal tiene taxMode INCLUIDO
   // (0 si no se desglosa) — no cambia el total cobrado.
-  taxAmount  Decimal    @default(0) @db.Decimal(10, 2)
-  createdAt  DateTime   @default(now())
-  cancelledAt DateTime?
-  cancelledById String?
+  taxAmount          Decimal          @default(0) @db.Decimal(10, 2)
+  createdAt          DateTime         @default(now())
+  cancelledAt        DateTime?
+  cancelledById      String?
   // Motivo capturado al anular (cancelSale en actions/pos.ts) — obligatorio
   // para auditoría; la anulación exige PIN de alguien con VENTA_CANCELAR.
-  cancelReason String?
+  cancelReason       String?
   // Id que genera el POS por cada intento de cobro y reutiliza en los
   // reintentos: si la red se cae DESPUÉS de que el servidor registró la
   // venta, reintentar con el mismo id regresa la venta existente en vez de
   // cobrar dos veces (QA-015).
-  clientRequestId String? @unique
+  clientRequestId    String?          @unique
   // Id del último "agregar ronda" aplicado a una cuenta abierta
   // (addItemsToTab) — no es única globalmente (solo se compara contra la
   // misma venta): si la red se cae después de aplicar la ronda, reintentar
   // con el mismo id no la vuelve a agregar.
   lastRoundRequestId String?
 
-  items       SaleItem[]
-  payments    SalePayment[]
-  discountCode DiscountCode? @relation(fields: [discountCodeId], references: [id])
+  items          SaleItem[]
+  payments       SalePayment[]
+  discountCode   DiscountCode?        @relation(fields: [discountCodeId], references: [id])
   discountCodeId String?
   manualDiscount ManualDiscount?
   loyaltyEntries LoyaltyPointsEntry[]
@@ -1499,9 +1543,9 @@ model SaleItem {
   lineTotal        Decimal         @db.Decimal(10, 2)
   notes            String? // ej. "sin azúcar", "bien caliente"
 
-  modifiers           SaleItemModifier[]
+  modifiers             SaleItemModifier[]
   ingredientAdjustments SaleItemIngredientAdjustment[]
-  inventoryMovements  InventoryMovement[]
+  inventoryMovements    InventoryMovement[]
 
   @@map("sale_items")
 }
@@ -1525,45 +1569,45 @@ model SaleItemIngredientAdjustment {
 }
 
 model SaleItemModifier {
-  id                 String         @id @default(cuid())
-  saleItemId         String
-  saleItem           SaleItem       @relation(fields: [saleItemId], references: [id])
-  modifierOptionId   String
-  modifierOption     ModifierOption @relation(fields: [modifierOptionId], references: [id])
-  priceDelta         Decimal        @db.Decimal(10, 2)
+  id               String         @id @default(cuid())
+  saleItemId       String
+  saleItem         SaleItem       @relation(fields: [saleItemId], references: [id])
+  modifierOptionId String
+  modifierOption   ModifierOption @relation(fields: [modifierOptionId], references: [id])
+  priceDelta       Decimal        @db.Decimal(10, 2)
 
   @@map("sale_item_modifiers")
 }
 
 model SalePayment {
-  id     String        @id @default(cuid())
-  saleId String
-  sale   Sale          @relation(fields: [saleId], references: [id])
-  method PaymentMethod
-  amount Decimal       @db.Decimal(10, 2) // incluye tipAmount
+  id        String        @id @default(cuid())
+  saleId    String
+  sale      Sale          @relation(fields: [saleId], references: [id])
+  method    PaymentMethod
+  amount    Decimal       @db.Decimal(10, 2) // incluye tipAmount
   // Parte de `amount` que es propina — en pago dividido cada persona deja
   // la suya; permite separar en el corte propinas en efectivo vs tarjeta/
   // transferencia (las que hay que pagar al personal en efectivo).
-  tipAmount Decimal    @default(0) @db.Decimal(10, 2)
-  note   String? // ej. banco/referencia cuando method = TRANSFERENCIA
+  tipAmount Decimal       @default(0) @db.Decimal(10, 2)
+  note      String? // ej. banco/referencia cuando method = TRANSFERENCIA
 
   @@map("sale_payments")
 }
 
 model DiscountCode {
-  id        String       @id @default(cuid())
-  code      String       @unique
-  type      DiscountType
-  value     Decimal      @db.Decimal(10, 2)
-  isActive  Boolean      @default(true)
-  expiresAt DateTime?
+  id         String       @id @default(cuid())
+  code       String       @unique
+  type       DiscountType
+  value      Decimal      @db.Decimal(10, 2)
+  isActive   Boolean      @default(true)
+  expiresAt  DateTime?
   // Si no es null, este código es personal (ej. el cupón de bienvenida
   // que se genera al registrar al cliente, ver actions/customers.ts) —
   // solo se puede aplicar a una venta de ESE cliente, y solo una vez
   // (usedAt). Un código sin customerId sigue siendo genérico/reusable
   // como hasta ahora.
   customerId String?
-  customer   Customer? @relation(fields: [customerId], references: [id])
+  customer   Customer?    @relation(fields: [customerId], references: [id])
   usedAt     DateTime?
 
   // Subcategoría para el módulo Promociones — ver DiscountCodeCategory.
@@ -1571,7 +1615,7 @@ model DiscountCode {
 
   // Alcance (cupones de lealtad y de cumpleaños): solo descuenta las
   // líneas de ese negocio; null = toda la cuenta.
-  businessUnit BusinessUnit?
+  businessUnit     BusinessUnit?
   // Producto gratis: descuenta el precio de una pieza de esta variante si
   // está en la cuenta (type/value no se usan).
   productVariantId String?
@@ -1580,17 +1624,16 @@ model DiscountCode {
   productVariant   ProductVariant? @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
   // Cupón personal reusable (descuento permanente de un nivel): no se
   // marca usado.
-  isReusable Boolean @default(false)
+  isReusable       Boolean         @default(false)
   // Descuento permanente de este programa: uno por cliente; su % y si está
   // activo los decide el nivel actual (syncPermanentDiscounts).
-  loyaltyProgram LoyaltyProgram?
+  loyaltyProgram   LoyaltyProgram?
 
-  sales     Sale[]
-  tierGrant LoyaltyTierGrant?
+  sales         Sale[]
+  tierGrant     LoyaltyTierGrant?
   birthdayGrant BirthdayGrant?
 
   @@unique([customerId, loyaltyProgram])
-
   @@map("discount_codes")
 }
 

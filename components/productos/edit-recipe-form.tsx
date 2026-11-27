@@ -14,6 +14,9 @@ import { useToast } from "@/components/ui/toast";
 import { ImageUpload } from "@/components/ui/image-upload";
 import { TagInput } from "@/components/ui/tag-input";
 import { COMMON_ALLERGENS } from "@/lib/allergens";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { TEXTAREA_CLASS } from "@/components/configuracion/reminder-settings-form";
 
 // Ver lib/action-result.ts: convierte {__actionError} de vuelta en Error.
 const updateVariantRecipe = withActionErrors(updateVariantRecipeAction);
@@ -60,6 +63,9 @@ export function EditRecipeForm({
   const [name, setName] = useState(detail.variantName);
   const [imageUrl, setImageUrl] = useState(detail.productImageUrl ?? "");
   const [allergenTags, setAllergenTags] = useState(detail.productAllergenTags);
+  const isPetShop = detail.productBusinessUnit === "PET_SHOP";
+  const [reminderDays, setReminderDays] = useState(detail.productReminderDays !== null ? String(detail.productReminderDays) : "");
+  const [reminderMessage, setReminderMessage] = useState(detail.productReminderMessage ?? "");
   const [price, setPrice] = useState(String(detail.price));
   const [isActive, setIsActive] = useState(detail.isActive);
   const [temperature, setTemperature] = useState<VariantTemperature | "">(detail.temperature ?? "");
@@ -101,6 +107,12 @@ export function EditRecipeForm({
           lines: lineInputs,
           imageUrl,
           allergenTags,
+          ...(isPetShop
+            ? {
+                reminderDays: reminderDays.trim() === "" ? null : Number(reminderDays),
+                reminderMessage: reminderMessage.trim() || null,
+              }
+            : {}),
           temperature: temperature || undefined,
           sizeOz: sizeOz ? Number(sizeOz) : undefined,
           milkOptions: modifierOptionsToInput(milkOptions),
@@ -144,6 +156,42 @@ export function EditRecipeForm({
             placeholder="ej. pollo — Enter para agregar"
             hint="Si una mascota del cliente es alérgica a algo de aquí, caja muestra un aviso. Aplica a todas las variantes."
           />
+          {isPetShop && (
+            <fieldset className="flex flex-col gap-3 rounded-md border border-border p-3">
+              <legend className="px-1 text-sm font-medium">Recordatorio por WhatsApp (opcional)</legend>
+              <p className="text-xs text-muted-foreground">
+                Vacío = el general de Configuración → Recordatorios. Aplica a todas las variantes.
+              </p>
+              <div className="flex max-w-xs flex-col gap-1">
+                <Label htmlFor="product-reminder-days">Días después de la compra</Label>
+                <Input
+                  id="product-reminder-days"
+                  type="number"
+                  min="0"
+                  max="365"
+                  step="1"
+                  placeholder="el general"
+                  value={reminderDays}
+                  onChange={(e) => setReminderDays(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">0 = nunca recordar este producto.</p>
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="product-reminder-message">Mensaje propio</Label>
+                <textarea
+                  id="product-reminder-message"
+                  className={TEXTAREA_CLASS}
+                  maxLength={500}
+                  placeholder="el general"
+                  value={reminderMessage}
+                  onChange={(e) => setReminderMessage(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Puedes usar {"{cliente} {negocio} {productos} {mascota}"}; {"{productos}"} = el nombre de este producto.
+                </p>
+              </div>
+            </fieldset>
+          )}
 
           <VariantFields
             idPrefix="variant"

@@ -39,6 +39,8 @@ async function routes() {
     "/configuracion/impuestos",
     "/configuracion/descuentos",
     "/configuracion/lealtad",
+    "/configuracion/recordatorios",
+    "/clientes/recordatorios",
     "/configuracion/inventario",
     "/configuracion/costos",
     "/configuracion/seguridad",
