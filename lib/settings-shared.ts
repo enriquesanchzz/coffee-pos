@@ -50,6 +50,12 @@ export type BusinessSettings = {
   birthdayPetPercent: number;
   birthdayCouponValidDays: number;
   birthdayLeadDays: number;
+  // Recordatorios (lib/reminders.ts): días (0 = apagado) y mensaje ya
+  // resuelto (el guardado o el de por defecto).
+  reminderCafeDays: number;
+  reminderCafeMessage: string;
+  reminderPetShopDays: number;
+  reminderPetShopMessage: string;
   maxManualDiscountPercent: number | null;
   shortagePolicy: ShortagePolicy;
   pinMaxAttempts: number;
@@ -66,6 +72,17 @@ export type BusinessSettings = {
   wifiNetwork: string | null;
   wifiPassword: string | null;
 };
+
+// Mensajes de recordatorio por defecto. Marcadores: {cliente} (nombre de
+// pila), {negocio}, y en Pet Shop {productos} y {mascota}.
+export const DEFAULT_REMINDER_CAFE_MESSAGE =
+  "¡Hola, {cliente}! ☕ Hace tiempo que no te vemos por {negocio} y te extrañamos. Te esperamos pronto para tu próximo café.";
+export const DEFAULT_REMINDER_PET_SHOP_MESSAGE =
+  "¡Hola, {cliente}! 🐾 ¿Qué tal le fue a {mascota} con {productos}? Cuando quieras más, en {negocio} te esperamos.";
+export const REMINDER_PLACEHOLDERS = {
+  CAFE: ["{cliente}", "{negocio}"],
+  PET_SHOP: ["{cliente}", "{negocio}", "{productos}", "{mascota}"],
+} as const;
 
 export const DEFAULT_TICKET_FOOTER_MESSAGE = "¡Gracias por su compra!";
 
@@ -94,6 +111,10 @@ export const DEFAULT_SETTINGS: BusinessSettings = {
   birthdayPetPercent: 0,
   birthdayCouponValidDays: 7,
   birthdayLeadDays: 30,
+  reminderCafeDays: 30,
+  reminderCafeMessage: DEFAULT_REMINDER_CAFE_MESSAGE,
+  reminderPetShopDays: 30,
+  reminderPetShopMessage: DEFAULT_REMINDER_PET_SHOP_MESSAGE,
   maxManualDiscountPercent: null,
   shortagePolicy: "CONFIRMAR",
   pinMaxAttempts: 5,

@@ -245,6 +245,20 @@ async function applyModifierGroups(
   }
 }
 
+function productReminderDays(value: number | null) {
+  if (value === null) return null;
+  if (!Number.isInteger(value) || value < 0 || value > 365) {
+    throw new Error("Los días del recordatorio deben ser un número entero entre 0 y 365.");
+  }
+  return value;
+}
+
+function productReminderMessage(value: string | null) {
+  const text = value?.trim() ?? "";
+  if (text.length > 500) throw new Error("El mensaje de recordatorio es muy largo (máximo 500 caracteres).");
+  return text || null;
+}
+
 export type CreateProductWithRecipeInput = {
   employeeId: string;
   productName: string;
@@ -464,6 +478,10 @@ export type UpdateVariantRecipeInput = {
   // dueño de esta variante.
   imageUrl?: string;
   allergenTags?: string[];
+  // Recordatorio de Pet Shop del producto: null = el general de
+  // Configuración → Recordatorios; días 0 = nunca para este producto.
+  reminderDays?: number | null;
+  reminderMessage?: string | null;
 };
 
 // Editar la receta de una variante existente NO sobreescribe las líneas de
@@ -503,12 +521,19 @@ export const updateVariantRecipe = safeAction(async function updateVariantRecipe
       include: { product: true },
     });
 
-    if (input.imageUrl !== undefined || input.allergenTags !== undefined) {
+    if (
+      input.imageUrl !== undefined ||
+      input.allergenTags !== undefined ||
+      input.reminderDays !== undefined ||
+      input.reminderMessage !== undefined
+    ) {
       await tx.product.update({
         where: { id: updatedVariant.productId },
         data: {
           imageUrl: input.imageUrl === undefined ? undefined : normalizeImageUrl(input.imageUrl),
           allergenTags: input.allergenTags === undefined ? undefined : normalizeAllergenTags(input.allergenTags, "Lo que contiene"),
+          reminderDays: input.reminderDays === undefined ? undefined : productReminderDays(input.reminderDays),
+          reminderMessage: input.reminderMessage === undefined ? undefined : productReminderMessage(input.reminderMessage),
         },
       });
     }

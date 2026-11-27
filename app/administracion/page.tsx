@@ -6,6 +6,8 @@ import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { getStatsReport } from "@/lib/reports";
 import { getOpenShift } from "@/lib/catalog";
 import { getInventoryOverview } from "@/lib/inventory";
+import { getBusinessSettings } from "@/lib/settings";
+import { getDueReminders } from "@/lib/reminders";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -40,10 +42,11 @@ export default async function AdministracionPage() {
   const startOfDay = zonedStartOfDay(todayKey);
   const endOfDay = zonedEndOfDay(todayKey);
 
-  const [todayStats, shift, inventory] = await Promise.all([
+  const [todayStats, shift, inventory, reminders] = await Promise.all([
     getStatsReport(startOfDay, endOfDay),
     getOpenShift(DEFAULT_BRANCH_ID),
     getInventoryOverview(),
+    getBusinessSettings().then((settings) => getDueReminders(settings)),
   ]);
 
   const lowStockItems = inventory.filter((item) => item.isLow);
@@ -136,6 +139,23 @@ export default async function AdministracionPage() {
                   </div>
                 </div>
               ))}
+            </CardContent>
+          </Card>
+        )}
+
+        {reminders.length > 0 && (
+          <Card>
+            <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6 text-sm">
+              <span>
+                {reminders.length} recordatorio{reminders.length === 1 ? "" : "s"} por WhatsApp pendiente
+                {reminders.length === 1 ? "" : "s"} (te extrañamos / resurtido).
+              </span>
+              <Link
+                href="/clientes/recordatorios"
+                className={buttonVariants({ variant: "outline", size: "sm", className: "h-9" })}
+              >
+                Ver recordatorios
+              </Link>
             </CardContent>
           </Card>
         )}

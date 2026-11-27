@@ -43,6 +43,10 @@ export async function getBusinessSettings(): Promise<BusinessSettings> {
     birthdayPetPercent: branch.birthdayPetPercent,
     birthdayCouponValidDays: branch.birthdayCouponValidDays,
     birthdayLeadDays: branch.birthdayLeadDays,
+    reminderCafeDays: branch.reminderCafeDays,
+    reminderCafeMessage: branch.reminderCafeMessage?.trim() || d.reminderCafeMessage,
+    reminderPetShopDays: branch.reminderPetShopDays,
+    reminderPetShopMessage: branch.reminderPetShopMessage?.trim() || d.reminderPetShopMessage,
     maxManualDiscountPercent: branch.maxManualDiscountPercent,
     shortagePolicy: SHORTAGE_POLICIES.includes(branch.shortagePolicy as ShortagePolicy)
       ? (branch.shortagePolicy as ShortagePolicy)

@@ -276,6 +276,38 @@ export const updateBirthdaySettings = safeAction(async function updateBirthdaySe
   revalidatePath("/", "layout");
 });
 
+// Recordatorios por WhatsApp (lib/reminders.ts). Un mensaje igual al de
+// por defecto se guarda como null, para que siga al default si cambia.
+export const updateReminderSettings = safeAction(async function updateReminderSettings(input: {
+  reminderCafeDays: number;
+  reminderCafeMessage: string;
+  reminderPetShopDays: number;
+  reminderPetShopMessage: string;
+}) {
+  await requireConfigActor();
+  await prisma.branch.update({
+    where: { id: DEFAULT_BRANCH_ID },
+    data: {
+      reminderCafeDays: wholeNumber(input.reminderCafeDays, "Los días sin venir (Cafetería)", 0, 365),
+      reminderCafeMessage: reminderMessage(input.reminderCafeMessage, DEFAULT_SETTINGS.reminderCafeMessage, "Cafetería"),
+      reminderPetShopDays: wholeNumber(input.reminderPetShopDays, "Los días después de la compra (Pet Shop)", 0, 365),
+      reminderPetShopMessage: reminderMessage(
+        input.reminderPetShopMessage,
+        DEFAULT_SETTINGS.reminderPetShopMessage,
+        "Pet Shop"
+      ),
+    },
+  });
+  revalidatePath("/", "layout");
+});
+
+function reminderMessage(value: string, fallback: string, label: string) {
+  const text = value.trim();
+  if (!text) throw new Error(`Escribe el mensaje de recordatorio de ${label}.`);
+  if (text.length > 500) throw new Error(`El mensaje de recordatorio de ${label} es muy largo (máximo 500 caracteres).`);
+  return text === fallback ? null : text;
+}
+
 // Todo cambio a los ajustes o niveles de lealtad pasa por aquí: valida la
 // combinación resultante y pone al día los descuentos permanentes de todos
 // los clientes, en la misma transacción.
@@ -492,7 +524,7 @@ export const updateTaxSettings = safeAction(async function updateTaxSettings(inp
 
 // Restaura una sección a los valores originales (los @default del schema).
 export const resetSettingsSection = safeAction(async function resetSettingsSection(
-  section: "cobro" | "caja" | "lealtad" | "cumpleanos" | "descuentos" | "inventario" | "seguridad" | "impuestos"
+  section: "cobro" | "caja" | "lealtad" | "cumpleanos" | "recordatorios" | "descuentos" | "inventario" | "seguridad" | "impuestos"
 ) {
   await requireConfigActor();
   const d = DEFAULT_SETTINGS;
@@ -521,6 +553,12 @@ export const resetSettingsSection = safeAction(async function resetSettingsSecti
       birthdayPetPercent: d.birthdayPetPercent,
       birthdayCouponValidDays: d.birthdayCouponValidDays,
       birthdayLeadDays: d.birthdayLeadDays,
+    },
+    recordatorios: {
+      reminderCafeDays: d.reminderCafeDays,
+      reminderCafeMessage: null,
+      reminderPetShopDays: d.reminderPetShopDays,
+      reminderPetShopMessage: null,
     },
     descuentos: { maxManualDiscountPercent: d.maxManualDiscountPercent },
     inventario: { shortagePolicy: d.shortagePolicy },

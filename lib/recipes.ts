@@ -238,6 +238,10 @@ export type VariantRecipeDetail = {
   productName: string;
   productImageUrl: string | null;
   productAllergenTags: string[];
+  // Recordatorio de Pet Shop propio del producto (null = el general).
+  productBusinessUnit: BusinessUnit;
+  productReminderDays: number | null;
+  productReminderMessage: string | null;
   productType: ProductType;
   categoryName: string;
   temperature: VariantTemperature | null;
@@ -311,6 +315,9 @@ export async function getVariantRecipeDetail(
     productName: variant.product.name,
     productImageUrl: variant.product.imageUrl,
     productAllergenTags: variant.product.allergenTags,
+    productBusinessUnit: variant.product.category.businessUnit,
+    productReminderDays: variant.product.reminderDays,
+    productReminderMessage: variant.product.reminderMessage,
     productType: variant.product.type,
     categoryName: variant.product.category.name,
     temperature: variant.temperature,

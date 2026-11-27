@@ -49,6 +49,10 @@ export default async function ClientesPage({
           Por nombre, teléfono, email o código de tarjeta. ·{" "}
           <Link href="/clientes/cumpleanos" className="underline">
             Ver cumpleaños próximos
+          </Link>{" "}
+          ·{" "}
+          <Link href="/clientes/recordatorios" className="underline">
+            Recordatorios por WhatsApp
           </Link>
         </p>
 
