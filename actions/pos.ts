@@ -1237,7 +1237,7 @@ export const openTab = safeAction(async function openTab(input: OpenTabInput) {
   await requirePermission(input.employeeId, input.branchId, "VENTA_REALIZAR");
 
   const alreadyOpened = await findSaleByClientRequestId(input.clientRequestId);
-  if (alreadyOpened) return serializeSale(alreadyOpened);
+  if (alreadyOpened) return { ...serializeSale(alreadyOpened), tableNumber: alreadyOpened.tableNumber };
 
   const sale = await prisma.$transaction(async (tx) => {
     const shift = await tx.shift.findUnique({ where: { id: input.shiftId } });
@@ -1246,21 +1246,31 @@ export const openTab = safeAction(async function openTab(input: OpenTabInput) {
     }
 
     // Dos cuentas en espera con la misma referencia son ambiguas al
-    // retomarlas/cobrarlas — si ya existe una, se le agrega ahí.
-    const tableNumber = input.tableNumber.trim();
-    const existingTab = await tx.sale.findFirst({
-      where: {
-        branchId: input.branchId,
-        status: "ABIERTA",
-        tableNumber: { equals: tableNumber, mode: "insensitive" },
-      },
-    });
-    if (existingTab) {
-      throw new Error(
-        input.orderType === "CONSUMO_LOCAL"
-          ? `La mesa ${tableNumber} ya tiene una cuenta abierta. Retómala desde "Cuentas en espera" para agregarle productos.`
-          : `Ya hay un pedido en espera con esa referencia ("${tableNumber}"). Retómalo desde "Cuentas en espera" o usa una referencia distinta.`
-      );
+    // retomarlas/cobrarlas. Una mesa ocupada se rechaza (hay que retomar su
+    // cuenta); un nombre repetido fuera de Mesa — p. ej. dos pedidos del
+    // mismo cliente, cuya referencia es su nombre — se guarda como
+    // "Nombre (2)", "Nombre (3)"…
+    const baseReference = input.tableNumber.trim();
+    async function referenceTaken(reference: string) {
+      return tx.sale.findFirst({
+        where: {
+          branchId: input.branchId,
+          status: "ABIERTA",
+          tableNumber: { equals: reference, mode: "insensitive" },
+        },
+        select: { id: true },
+      });
+    }
+    let tableNumber = baseReference;
+    if (await referenceTaken(tableNumber)) {
+      if (input.orderType === "CONSUMO_LOCAL") {
+        throw new Error(
+          `La mesa ${tableNumber} ya tiene una cuenta abierta. Retómala desde "Cuentas en espera" para agregarle productos.`
+        );
+      }
+      let n = 2;
+      while (await referenceTaken(`${baseReference} (${n})`)) n += 1;
+      tableNumber = `${baseReference} (${n})`;
     }
 
     // A domicilio: sin cliente con dirección no hay a dónde entregar —
@@ -1310,7 +1320,7 @@ export const openTab = safeAction(async function openTab(input: OpenTabInput) {
   });
 
   revalidatePath("/pos");
-  return serializeSale(sale);
+  return { ...serializeSale(sale), tableNumber: sale.tableNumber };
 });
 
 // Para cerrar una cuenta abierta (closeTab): el descuento de código/manual

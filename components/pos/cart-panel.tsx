@@ -232,9 +232,19 @@ export function CartPanel({
     setTabError(null);
     setShortageMessage(null);
     if (lines.length === 0) return;
-    if (!activeTabId && !tableNumber.trim()) {
+    // Referencia del pedido en espera: el número de mesa; fuera de Mesa, el
+    // nombre del cliente si hay uno elegido (el campo "¿A nombre de
+    // quién?" ni se muestra) o lo que se escribió. Si ya hay otro pedido
+    // con ese nombre, el servidor le agrega " (2)" (ver openTab).
+    const reference =
+      orderType === "CONSUMO_LOCAL" ? tableNumber.trim() : (selectedCustomer?.name ?? tableNumber).trim();
+    if (!activeTabId && !reference) {
       setTabError(
-        orderType === "CONSUMO_LOCAL" ? "Escribe el número de mesa para dejarla en espera." : "Escribe a nombre de quién va el pedido para dejarlo en espera."
+        orderType === "CONSUMO_LOCAL"
+          ? "Escribe el número de mesa para dejarla en espera."
+          : orderType === "DOMICILIO"
+            ? "Elige al cliente para dejar el pedido en espera."
+            : "Escribe a nombre de quién va el pedido (o elige al cliente) para dejarlo en espera."
       );
       return;
     }
@@ -249,15 +259,15 @@ export function CartPanel({
         const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
         const isNewTab = !activeTabId;
         const total = (activeTabSummary?.total ?? 0) + subtotal();
-        const resolvedTableNumber = tableNumber;
+        let resolvedTableNumber = reference;
         if (activeTabId) {
           await addItemsToTab({ saleId: activeTabId, branchId, shiftId, employeeId, items, allowShortage, clientRequestId });
         } else {
-          await openTab({
+          const opened = await openTab({
             branchId,
             shiftId,
             employeeId,
-            tableNumber,
+            tableNumber: reference,
             orderType,
             domicilioOrigen: orderType === "DOMICILIO" ? domicilioOrigen : undefined,
             customerId: selectedCustomer?.id,
@@ -265,6 +275,7 @@ export function CartPanel({
             allowShortage,
             clientRequestId,
           });
+          resolvedTableNumber = opened.tableNumber ?? reference;
         }
         tabRequestIdRef.current = null;
         setTabOfflineRetry(false);

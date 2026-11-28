@@ -138,6 +138,14 @@ del catálogo — `components/pos/order-bar.tsx`:
   `order-customer-store.ts` (zustand, no persistido) para que barra,
   cuenta y cobro compartan el mismo estado.
 
+**Referencia del pedido (rama `pos-referencia-cliente`):** el campo "¿A
+nombre de quién?" solo aparece en Mesa (número de mesa) y en Para llevar
+sin cliente. Con cliente elegido (y A domicilio siempre lo exige), la
+referencia del pedido en espera es su nombre. Si ya hay otro pedido en
+espera con esa referencia fuera de Mesa, `openTab` la guarda como
+"Nombre (2)", "Nombre (3)"… y la regresa al cliente; una mesa ocupada se
+sigue rechazando.
+
 Pendiente MF-3 (alturas de 44/48 px en todo el POS).
 
 ## Auditoría de seguridad y procesos (noviembre 2026, rama `auditoria-seguridad`)
