@@ -16,7 +16,7 @@ test.describe("Fase 4 UX", () => {
     await combobox.fill(customer.name);
     await expect(combobox).toHaveAttribute("aria-expanded", "true");
     await combobox.press("Enter");
-    await expect(page.getByText(`Seleccionado: ${customer.name}`)).toBeVisible();
+    await expect(page.getByText(`Cliente: ${customer.name}`)).toBeVisible();
   });
 
   test("regresar del cobro no pierde lo capturado", async ({ page }) => {

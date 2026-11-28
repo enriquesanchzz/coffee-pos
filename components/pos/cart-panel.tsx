@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Coffee, LogOut, Trash2, TriangleAlert, XCircle } from "lucide-react";
-import type { SaleOrderType, DomicilioOrigen } from "@prisma/client";
 import { useCartStore, lineUnitPrice, cartLineToSaleItemInput } from "./cart-store";
 import { openTab as openTabAction, addItemsToTab as addItemsToTabAction, removeTabItem as removeTabItemAction, updateTabItemQuantity as updateTabItemQuantityAction, type OpenTabDetail, type OpenTabItem } from "@/actions/pos";
 import { useToast } from "@/components/ui/toast";
@@ -10,7 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn, formatCurrency, posAccentClass, unitLabel } from "@/lib/utils";
-import { CustomerPicker } from "./customer-picker";
+import { OrderBar } from "./order-bar";
+import { useOrderCustomerStore } from "./order-customer-store";
+import { useIsTabletUp } from "./use-is-tablet-up";
 import { CheckoutForm, type SaleReceipt } from "./checkout-form";
 import { ReceiptDialog, type TabConfirmation } from "./receipt-dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -19,7 +20,6 @@ import type { ShiftSaleRow } from "@/lib/shift";
 import { isShortageError } from "@/lib/stock";
 import { isAuthorizationRequiredError } from "@/lib/tab-corrections";
 import { Dialog } from "@/components/ui/dialog";
-import { SegmentedControl } from "@/components/ui/segmented-control";
 import { QuantityStepper } from "@/components/ui/quantity-stepper";
 import type { CustomerOption } from "@/lib/customers";
 import { findAllergyConflicts } from "@/lib/allergens";
@@ -38,14 +38,6 @@ const temperatureLabels: Record<string, string> = {
   FRIO: "Frío",
   FRAPPE: "Frappé",
 };
-
-// "Mesa" = CONSUMO_LOCAL (el valor del enum no cambió, solo la etiqueta —
-// punto 8, "Mejoras avanzadas de POS").
-const orderTypes: { value: SaleOrderType; label: string }[] = [
-  { value: "CONSUMO_LOCAL", label: "Mesa" },
-  { value: "PARA_LLEVAR", label: "Para llevar" },
-  { value: "DOMICILIO", label: "A domicilio" },
-];
 
 export function CartPanel({
   branchId,
@@ -120,16 +112,18 @@ export function CartPanel({
   // reemplaza la lista del carrito en el mismo lugar de la pantalla.
   const [view, setView] = useState<"cart" | "checkout">("cart");
 
-  // Cliente/domicilio viven aquí (no en CustomerPicker ni en CheckoutForm)
-  // porque ambos son hermanos que los necesitan: CustomerPicker los
-  // captura, CheckoutForm los lee al confirmar la venta.
-  const [selectedCustomer, setSelectedCustomer] = useState<CustomerOption | null>(null);
-  const [domicilioAddress, setDomicilioAddress] = useState("");
-  const [domicilioOrigen, setDomicilioOrigen] = useState<DomicilioOrigen>("TELEFONO");
-
-  function handleSelectCustomer(customer: CustomerOption | null) {
-    setSelectedCustomer(customer);
-  }
+  // Cliente/domicilio: los captura la barra de la orden (OrderBar, arriba
+  // del catálogo o aquí en celular) y los lee el cobro — ver
+  // order-customer-store.ts.
+  const {
+    selectedCustomer,
+    setSelectedCustomer,
+    domicilioAddress,
+    setDomicilioAddress,
+    domicilioOrigen,
+    resetOrderCustomer,
+  } = useOrderCustomerStore();
+  const isTabletUp = useIsTabletUp();
 
   // Al retomar una cuenta, el cliente (y su domicilio) pasan a ser los de
   // ESA cuenta — o ninguno. Sin esto, pasar de la cuenta de Ana a otra sin
@@ -142,7 +136,7 @@ export function CartPanel({
     shownTabId.current = activeTabSummary.id;
     setSelectedCustomer(activeTabSummary.customer);
     setDomicilioAddress(activeTabSummary.customer?.address ?? "");
-  }, [activeTabSummary, activeTabId]);
+  }, [activeTabSummary, activeTabId, setSelectedCustomer, setDomicilioAddress]);
   // Al cambiar de cuenta (o salir de una, p. ej. si no se pudo cargar), el
   // cliente anterior se quita de inmediato: mientras llega el detalle de la
   // nueva no debe poder cobrarse a nombre de quien estaba antes.
@@ -151,7 +145,7 @@ export function CartPanel({
     setSelectedCustomer(null);
     setDomicilioAddress("");
     if (!activeTabId) shownTabId.current = null;
-  }, [activeTabId]);
+  }, [activeTabId, setSelectedCustomer, setDomicilioAddress]);
 
   // Productos de la cuenta que contienen algo a lo que es alérgica una
   // mascota del cliente (CRM-02). Solo avisa: puede ser para otra mascota.
@@ -182,9 +176,7 @@ export function CartPanel({
   const [tabConfirmation, setTabConfirmation] = useState<TabConfirmation | null>(null);
 
   function resetOrderState() {
-    setSelectedCustomer(null);
-    setDomicilioAddress("");
-    setDomicilioOrigen("TELEFONO");
+    resetOrderCustomer();
     setOrderType("PARA_LLEVAR");
     setTableNumber("");
     setActiveTabId(null);
@@ -425,40 +417,19 @@ export function CartPanel({
         view === "cart" ? "flex" : "hidden"
       )}
     >
-      <div className="flex flex-col gap-3 border-b border-border p-4">
+      {/* Tipo de orden, mesa y cliente: en tablet/escritorio van en la
+          barra de arriba del catálogo (pos-workspace.tsx) para dejarle la
+          columna a los productos; en celular, aquí. */}
+      <div className="flex flex-col gap-3 border-b border-border px-4 py-3">
         <p className="font-semibold">Cuenta actual</p>
-        <SegmentedControl
-          label="Tipo de orden"
-          options={orderTypes}
-          value={orderType}
-          onChange={setOrderType}
-          className="flex-nowrap"
-        />
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="table-number">
-            {orderType === "CONSUMO_LOCAL" ? "Número de mesa" : "¿A nombre de quién?"}
-          </Label>
-          <Input
-            id="table-number"
-            value={tableNumber}
-            onChange={(e) => setTableNumber(e.target.value)}
-            placeholder={orderType === "CONSUMO_LOCAL" ? "Número de mesa" : "Juan, chamarra roja"}
-            className="h-9"
-            disabled={Boolean(activeTabId)}
+        {isTabletUp === false && (
+          <OrderBar
+            variant="panel"
+            customers={customers}
+            employeeId={employeeId}
+            allergenSuggestions={allergenSuggestions}
           />
-        </div>
-        <CustomerPicker
-          customers={customers}
-          employeeId={employeeId}
-          orderType={orderType}
-          selectedCustomer={selectedCustomer}
-          onSelectCustomer={handleSelectCustomer}
-          domicilioAddress={domicilioAddress}
-          onDomicilioAddressChange={setDomicilioAddress}
-          domicilioOrigen={domicilioOrigen}
-          onDomicilioOrigenChange={setDomicilioOrigen}
-          allergenSuggestions={allergenSuggestions}
-        />
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-3">

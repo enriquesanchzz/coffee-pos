@@ -123,8 +123,22 @@ Hechos los 8 quick wins (pruebas en `e2e/ui-quick-wins.spec.ts`):
   reemplazaran el monto) y sin autofoco en "Recibido" (el panel se monta
   oculto junto con el carrito y robaría el foco).
 
-Pendientes MF-3 (alturas de 44/48 px en todo el POS) y MF-5 (cabecera
-compacta del carrito).
+**Barra de la orden (rama `pos-barra-orden`, variante de MF-5):** tipo de
+orden, mesa / "¿A nombre de quién?" y cliente salieron de la cabecera de
+la cuenta (le quitaban casi la mitad de la altura) a la barra de arriba
+del catálogo — `components/pos/order-bar.tsx`:
+
+- Tablet/escritorio (≥ md): fila 1 tipo de orden + botones de caja
+  ("En espera", y Retiro/ingreso y Apertura solo con ícono salvo en 2xl);
+  fila 2 mesa + buscador de cliente; fila 3, solo con cliente, sus datos
+  ("Cliente: X · Quitar · mascotas") y el bloque de domicilio en línea.
+- Celular: igual que antes, dentro de la hoja de la cuenta.
+- Se monta una sola copia según `useIsTabletUp()` (los campos tienen id
+  fijo `#table-number`/`#customer`); el cliente y el domicilio viven en
+  `order-customer-store.ts` (zustand, no persistido) para que barra,
+  cuenta y cobro compartan el mismo estado.
+
+Pendiente MF-3 (alturas de 44/48 px en todo el POS).
 
 ## Auditoría de seguridad y procesos (noviembre 2026, rama `auditoria-seguridad`)
 

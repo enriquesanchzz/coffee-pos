@@ -67,4 +67,19 @@ test.describe("Quick wins UI/UX", () => {
     await page.getByRole("button", { name: /^Cobrar \$[\d,.]+ en efectivo$/ }).click();
     await expectSaleRegistered(page);
   });
+
+  test("tipo de orden, mesa y cliente van arriba del catálogo en tablet y dentro de la cuenta en celular", async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await loginPin(page, PIN.ana);
+    const cuenta = page.locator("section#cuenta");
+    await expect(page.locator("#table-number")).toBeVisible();
+    await expect(cuenta.locator("#table-number")).toHaveCount(0);
+    await expect(cuenta.locator("#customer")).toHaveCount(0);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole("button", { name: /Ver cuenta/ }).click();
+    await expect(cuenta.locator("#table-number")).toBeVisible();
+    await expect(page.locator("#table-number")).toHaveCount(1);
+  });
 });
+

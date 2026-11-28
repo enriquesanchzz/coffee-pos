@@ -233,9 +233,9 @@ test.describe.serial("Lealtad por puntos", () => {
       await page.getByRole("dialog").locator("li", { hasText: `Mesa ${table}` }).getByRole("button", { name: "Retomar" }).click();
     }
     await resume(withCustomer);
-    await expect(page.getByText(`Seleccionado: ${customerName}`)).toBeVisible();
+    await expect(page.getByText(`Cliente: ${customerName}`)).toBeVisible();
     await resume(without); // directo, sin "Salir"
-    await expect(page.getByText(`Seleccionado: ${customerName}`)).toBeHidden();
+    await expect(page.getByText(`Cliente: ${customerName}`)).toBeHidden();
     await payExactCash(page);
 
     const paid = await db.sale.findFirstOrThrow({ where: { tableNumber: without } });

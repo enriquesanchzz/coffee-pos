@@ -10,6 +10,8 @@ import { CatalogBrowser } from "./catalog-browser";
 import { CartPanel } from "./cart-panel";
 import { ProductDialog } from "./product-dialog";
 import { OpenTabsDialog } from "./open-tabs-dialog";
+import { OrderBar } from "./order-bar";
+import { useIsTabletUp } from "./use-is-tablet-up";
 import { useCartStore } from "./cart-store";
 import { getTabDetail as getTabDetailAction, listOpenTabs as listOpenTabsAction, type OpenTabDetail } from "@/actions/pos";
 import { CashMovementDialog } from "@/components/caja/cash-movement-dialog";
@@ -77,6 +79,7 @@ export function PosWorkspace({
   // Celular (< md): la cuenta vive en una hoja inferior que se abre desde
   // la barra fija "Ver cuenta" (QA-005); en tablet/escritorio es columna.
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
+  const isTabletUp = useIsTabletUp();
 
   useEffect(() => {
     if (!mobileCartOpen) return;
@@ -134,17 +137,21 @@ export function PosWorkspace({
     };
   }, [activeTabId]);
 
-  return (
-    // Celular: catálogo a pantalla completa + barra "Ver cuenta" que abre
-    // la hoja inferior. Tablet: cuenta a 360px; pantallas más anchas
-    // 400/440px — el cobro (pago dividido, propinas) necesita espacio. El
-    // drawer de ProductDialog se alinea a ese ancho (components/ui/dialog).
-    <div className="grid h-full grid-rows-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1fr)_360px] md:grid-rows-1 lg:grid-cols-[minmax(0,1fr)_400px] xl:grid-cols-[minmax(0,1fr)_440px]">
-      <div className="flex h-full min-w-0 flex-col">
-        <div className="flex flex-wrap items-center justify-end gap-2 border-b border-border px-3 py-2 sm:px-5">
-          <Button type="button" variant="outline" className="px-3" onClick={() => setOpenTabsDialogOpen(true)}>
+  // Botones de caja de la barra superior. Retiro/ingreso y Apertura, poco
+  // frecuentes, quedan solo con ícono salvo en pantallas muy anchas (2xl,
+  // auditoría UX-08); "Cuentas en espera" se acorta a "En espera".
+  const posActions = (
+    <>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 px-3"
+            onClick={() => setOpenTabsDialogOpen(true)}
+            aria-label={`Cuentas en espera${openTabsCount > 0 ? ` (${openTabsCount})` : ""}`}
+          >
             <ClipboardList className="h-4 w-4" aria-hidden="true" />
-            Cuentas en espera
+            <span className="2xl:hidden">En espera</span>
+            <span className="hidden 2xl:inline">Cuentas en espera</span>
             {openTabsCount > 0 && (
               <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-xs font-semibold text-primary-foreground">
                 {openTabsCount}
@@ -154,22 +161,51 @@ export function PosWorkspace({
           <Button
             type="button"
             variant="outline"
-            className="px-3"
+            className="h-11 px-3"
             onClick={() => setMovementOpen(true)}
+            aria-label="Retiro/ingreso"
             title="Movimiento de caja (retiro o ingreso de efectivo)"
           >
             <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
-            Retiro/ingreso
+            <span className="hidden 2xl:inline">Retiro/ingreso</span>
           </Button>
           <Link
             href={`/caja/turno/${shiftId}/apertura`}
             target="_blank"
-            title="Comprobante de apertura del turno"
-            className={buttonVariants({ variant: "outline", className: "px-3" })}
+            aria-label="Apertura (abre en otra pestaña)"
+            title="Comprobante de apertura del turno (abre en otra pestaña)"
+            className={buttonVariants({ variant: "outline", className: "h-11 px-3" })}
           >
             <FileText className="h-4 w-4" aria-hidden="true" />
-            Apertura
+            <span className="hidden 2xl:inline">Apertura</span>
           </Link>
+    </>
+  );
+
+  return (
+    // Celular: catálogo a pantalla completa + barra "Ver cuenta" que abre
+    // la hoja inferior. Tablet: cuenta a 360px; pantallas más anchas
+    // 400/440px — el cobro (pago dividido, propinas) necesita espacio. El
+    // drawer de ProductDialog se alinea a ese ancho (components/ui/dialog).
+    <div className="grid h-full grid-rows-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1fr)_360px] md:grid-rows-1 lg:grid-cols-[minmax(0,1fr)_400px] xl:grid-cols-[minmax(0,1fr)_440px]">
+      <div className="flex h-full min-w-0 flex-col">
+        {/* Barra de la orden: en tablet/escritorio, tipo de orden, mesa y
+            cliente viven aquí (antes llenaban la cabecera de la cuenta y
+            dejaban poco espacio a los productos); en celular siguen en la
+            hoja de la cuenta. Retiro/ingreso y Apertura, poco frecuentes,
+            quedan solo con ícono hasta xl. */}
+        <div className="border-b border-border px-3 py-2 sm:px-5">
+          {isTabletUp ? (
+            <OrderBar
+              variant="bar"
+              customers={customers}
+              employeeId={employee.id}
+              allergenSuggestions={allergenSuggestions}
+              actions={posActions}
+            />
+          ) : (
+            <div className="flex flex-wrap items-center justify-end gap-2">{posActions}</div>
+          )}
         </div>
         <div className="flex-1 overflow-hidden">
           <CatalogBrowser
