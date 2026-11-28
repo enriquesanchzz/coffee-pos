@@ -21,7 +21,6 @@ export function formatCurrency(amount: number | string) {
 // contrario cambiar el color en Apariencia no se refleja en la pantalla
 // que más usa el cajero.
 export const posAccentClass = "bg-primary text-primary-foreground hover:bg-primary/90";
-export const posAccentBorderClass = "border-primary bg-primary text-primary-foreground";
 
 // Unidades que se cuentan de una en una (piezas, shots, pumps, cucharadas)
 // — un <input type="number"> para estas debe subir/bajar de 1 en 1, no de

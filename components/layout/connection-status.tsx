@@ -52,9 +52,9 @@ export function ConnectionBadge() {
   return (
     <span
       role="status"
-      className="flex flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-amber-500/20 px-2.5 py-1 text-xs font-medium text-amber-400"
+      className="flex flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-warning/20 px-2.5 py-1 text-xs font-medium text-warning dark"
     >
-      <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-amber-400" aria-hidden="true" />
+      <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-warning" aria-hidden="true" />
       Sin conexión
     </span>
   );

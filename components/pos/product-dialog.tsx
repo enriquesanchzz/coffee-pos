@@ -2,11 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Alert } from "@/components/ui/alert";
+import { SegmentedControl, SegmentedButton } from "@/components/ui/segmented-control";
+import { FieldError } from "@/components/ui/field-error";
+import { Textarea } from "@/components/ui/textarea";
 import { Dialog } from "@/components/ui/dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { formatCurrency, cn, posAccentClass, posAccentBorderClass, unitStep, unitLabel } from "@/lib/utils";
+import { formatCurrency, posAccentClass, unitStep, unitLabel } from "@/lib/utils";
 import {
   resolveProductVariant,
   type CatalogModifierOption,
@@ -213,44 +216,24 @@ export function ProductDialog({
         {sizes.length > 1 && (
           <div>
             <p className="mb-2 text-sm font-medium">Tamaño</p>
-            <div className="flex flex-wrap gap-2">
-              {sizes.map((size) => (
-                <button
-                  aria-pressed={sizeLabel === size}
-                  key={size}
-                  type="button"
-                  onClick={() => setSizeLabel(size)}
-                  className={cn(
-                    "min-h-11 rounded-md border border-border px-3 py-2 text-sm",
-                    sizeLabel === size ? posAccentBorderClass : "hover:bg-muted"
-                  )}
-                >
-                  {size}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl
+              label="Tamaño"
+              options={sizes.map((size) => ({ value: size, label: size }))}
+              value={sizeLabel}
+              onChange={setSizeLabel}
+            />
           </div>
         )}
 
         {temperatures.length > 1 && (
           <div>
             <p className="mb-2 text-sm font-medium">Temperatura</p>
-            <div className="flex flex-wrap gap-2">
-              {temperatures.map((temp) => (
-                <button
-                  aria-pressed={temperature === temp}
-                  key={temp}
-                  type="button"
-                  onClick={() => setTemperature(temp)}
-                  className={cn(
-                    "min-h-11 rounded-md border border-border px-3 py-2 text-sm",
-                    temperature === temp ? posAccentBorderClass : "hover:bg-muted"
-                  )}
-                >
-                  {temperatureLabels[temp]}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl
+              label="Temperatura"
+              options={temperatures.map((temp) => ({ value: temp, label: temperatureLabels[temp] }))}
+              value={temperature}
+              onChange={setTemperature}
+            />
           </div>
         )}
 
@@ -268,19 +251,15 @@ export function ProductDialog({
               {group.options.map((option) => {
                 const isSelected = selected[group.id]?.has(option.id) ?? false;
                 return (
-                  <button
-                    aria-pressed={isSelected}
+                  <SegmentedButton
                     key={option.id}
-                    type="button"
+                    selected={isSelected}
+                    className="flex-none"
                     onClick={() => toggleOption(group.id, option, group.allowMultiple)}
-                    className={cn(
-                      "min-h-11 rounded-md border border-border px-3 py-2 text-sm",
-                      isSelected ? posAccentBorderClass : "hover:bg-muted"
-                    )}
                   >
                     {option.name}
                     {option.priceDelta !== 0 && ` (+${formatCurrency(option.priceDelta)})`}
-                  </button>
+                  </SegmentedButton>
                 );
               })}
             </div>
@@ -312,6 +291,7 @@ export function ProductDialog({
                 min="0"
                 aria-label="Cantidad del extra"
                 aria-invalid={extraQtyError ? true : undefined}
+                aria-describedby={extraQtyError ? "extra-qty-error" : undefined}
                 step={unitStep(
                   selectedExtraOption ? selectedExtraOption.standardDoseUnit ?? selectedExtraOption.baseUnit : undefined
                 )}
@@ -334,7 +314,7 @@ export function ProductDialog({
               Agregar
             </Button>
           </div>
-          {extraQtyError && <p role="alert" className="mt-1 text-sm text-destructive">{extraQtyError}</p>}
+          <FieldError id="extra-qty-error">{extraQtyError}</FieldError>
 
           {extras.length > 0 && (
             <ul className="mt-2 flex flex-col gap-1">
@@ -362,10 +342,10 @@ export function ProductDialog({
 
         <div className="flex flex-col gap-1">
           <Label htmlFor="item-notes">Notas (opcional)</Label>
-          <textarea
+          <Textarea
             id="item-notes"
-            className="min-h-[60px] rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            placeholder="ej. sin azúcar, bien caliente"
+            className="min-h-16"
+            placeholder="sin azúcar, bien caliente"
             maxLength={NOTES_MAX}
             aria-describedby="item-notes-count"
             value={notes}

@@ -184,7 +184,7 @@ export function PetsEditor({
                 </p>
                 {pet.allergies.length > 0 && (
                   <p className="text-xs">
-                    <span className="font-medium text-amber-800 dark:text-amber-300">Alergias:</span> {pet.allergies.join(", ")}
+                    <span className="font-medium text-warning">Alergias:</span> {pet.allergies.join(", ")}
                   </p>
                 )}
                 {pet.notes && <p className="break-words text-xs italic text-muted-foreground">{pet.notes}</p>}

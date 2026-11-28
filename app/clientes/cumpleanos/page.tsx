@@ -49,7 +49,7 @@ function whatsAppHref(b: UpcomingBirthday, businessName: string) {
 }
 
 const STATUS_STYLES = {
-  disponible: "text-emerald-700 dark:text-emerald-400",
+  disponible: "text-success",
   usado: "text-muted-foreground",
   vencido: "text-muted-foreground",
   inactivo: "text-muted-foreground",

@@ -175,7 +175,7 @@ export default async function VentaDetallePage({
         </Card>
 
         {voids.length > 0 && (
-          <Card className="border-amber-400/60">
+          <Card className="border-warning/50">
             <CardContent className="flex flex-col gap-2 pt-4 text-sm">
               <h2 className="font-medium">Quitado de la cuenta antes de cobrar</h2>
               <ul className="flex flex-col gap-2">
