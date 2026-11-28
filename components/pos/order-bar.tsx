@@ -52,6 +52,10 @@ export function OrderBar({
   } = useOrderCustomerStore();
   const isBar = variant === "bar";
   const tableLabel = orderType === "CONSUMO_LOCAL" ? "Número de mesa" : "¿A nombre de quién?";
+  // Fuera de Mesa, el nombre solo hace falta si no hay cliente elegido: con
+  // cliente (y A domicilio siempre lo exige) la referencia del pedido es su
+  // nombre — ver handleLeaveOpen en cart-panel.tsx.
+  const showTableField = orderType === "CONSUMO_LOCAL" || (orderType === "PARA_LLEVAR" && !selectedCustomer);
 
   const orderTypeControl = (
     <SegmentedControl
@@ -99,7 +103,7 @@ export function OrderBar({
     return (
       <div className="flex flex-col gap-3">
         {orderTypeControl}
-        {tableField}
+        {showTableField && tableField}
         {customerPicker}
       </div>
     );
@@ -114,7 +118,7 @@ export function OrderBar({
         {actions && <div className="ml-auto flex flex-wrap items-center justify-end gap-2">{actions}</div>}
       </div>
       <div className="flex flex-wrap items-start gap-2">
-        {tableField}
+        {showTableField && tableField}
         {customerPicker}
       </div>
     </div>

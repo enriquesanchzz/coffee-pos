@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { addProduct, db, expectSaleRegistered, loginPin, PIN } from "./helpers";
+import { addProduct, db, expectSaleRegistered, loginPin, pickOption, PIN } from "./helpers";
 
 // Quick wins de la auditoría UI/UX del flujo de venta (noviembre 2026).
 test.describe("Quick wins UI/UX", () => {
@@ -80,6 +80,36 @@ test.describe("Quick wins UI/UX", () => {
     await page.getByRole("button", { name: /Ver cuenta/ }).click();
     await expect(cuenta.locator("#table-number")).toBeVisible();
     await expect(page.locator("#table-number")).toHaveCount(1);
+  });
+
+  test("con cliente no se pide a nombre de quién: su nombre es la referencia y se numera si se repite", async ({ page }) => {
+    const name = `Ref E2E ${Date.now() % 100000}`;
+    const customer = await db.customer.create({ data: { name } });
+    try {
+      await loginPin(page, PIN.ana);
+      await page.reload();
+      await page.getByRole("button", { name: "Para llevar", exact: true }).click();
+      await expect(page.locator("#table-number")).toBeVisible();
+      await page.getByRole("button", { name: "A domicilio", exact: true }).click();
+      await expect(page.locator("#table-number")).toHaveCount(0);
+
+      await page.getByRole("button", { name: "Para llevar", exact: true }).click();
+      for (let i = 0; i < 2; i++) {
+        await pickOption(page.locator("#customer"), name, new RegExp(`^${name}`));
+        await expect(page.locator("#table-number")).toHaveCount(0);
+        await addProduct(page, "Latte", ["Chico", "Caliente"]);
+        await page.getByRole("button", { name: "Dejar en espera" }).click();
+        await expectSaleRegistered(page, "Pedido dejado en espera");
+        await page.getByRole("button", { name: "Para llevar", exact: true }).click();
+      }
+
+      const tabs = await db.sale.findMany({ where: { customerId: customer.id, status: "ABIERTA" }, orderBy: { createdAt: "asc" } });
+      expect(tabs.map((t) => t.tableNumber)).toEqual([name, `${name} (2)`]);
+      await db.sale.updateMany({ where: { customerId: customer.id }, data: { status: "CANCELADA", cancelReason: "e2e" } });
+    } finally {
+      await db.sale.updateMany({ where: { customerId: customer.id }, data: { customerId: null } });
+      await db.customer.delete({ where: { id: customer.id } }).catch(() => {});
+    }
   });
 });
 
