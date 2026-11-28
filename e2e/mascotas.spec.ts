@@ -304,7 +304,7 @@ test.describe.serial("Mascotas en el perfil y en caja", () => {
     await expect(page.getByText("Alergia — Rocky: pollo")).toBeVisible();
 
     // Sin cliente no hay a quién cuidar: el aviso desaparece.
-    await page.locator("p", { hasText: `Seleccionado: ${customerName}` }).getByRole("button", { name: "Quitar" }).click();
+    await page.locator("p", { hasText: `Cliente: ${customerName}` }).getByRole("button", { name: "Quitar" }).click();
     await expect(alert).toBeHidden();
   });
 

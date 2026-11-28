@@ -41,6 +41,7 @@ export function CustomerPicker({
   domicilioOrigen,
   onDomicilioOrigenChange,
   allergenSuggestions = [],
+  compact = false,
 }: {
   customers: CustomerOption[];
   employeeId: string;
@@ -52,6 +53,9 @@ export function CustomerPicker({
   domicilioOrigen: DomicilioOrigen;
   onDomicilioOrigenChange: (value: DomicilioOrigen) => void;
   allergenSuggestions?: string[];
+  // En la barra de la orden (arriba del catálogo): etiqueta solo para
+  // lectores de pantalla y campo de 44 px, alineado con los demás.
+  compact?: boolean;
 }) {
   const [petsOpen, setPetsOpen] = useState(false);
   // "Hoy" en la zona de la sucursal; solo en el navegador (evita un
@@ -144,12 +148,18 @@ export function CustomerPicker({
     });
   }
 
+  // compact: la raíz es `contents` — buscador y detalles se vuelven
+  // elementos de la fila de la barra (OrderBar): el buscador junto a la
+  // mesa y los detalles en una línea completa abajo (basis-full).
   return (
-    <div className="flex flex-col gap-1">
-      <Label htmlFor="customer">Cliente {orderType === "DOMICILIO" ? "(obligatorio)" : "(opcional)"}</Label>
+    <div className={cn(compact ? "contents" : "flex flex-col gap-1")}>
+      <div className={cn(compact ? "flex min-w-48 flex-1 flex-col" : "contents")}>
+      <Label htmlFor="customer" className={cn(compact && "sr-only")}>
+        Cliente {orderType === "DOMICILIO" ? "(obligatorio)" : "(opcional)"}
+      </Label>
       <Combobox
         id="customer"
-        placeholder="Nombre, teléfono o tarjeta…"
+        placeholder={compact ? (orderType === "DOMICILIO" ? "Cliente (obligatorio)…" : "Buscar cliente…") : "Nombre, teléfono o tarjeta…"}
         value={selectedCustomer?.id ?? null}
         onChange={(id) => {
           const customer = allCustomers.find((c) => c.id === id);
@@ -170,27 +180,27 @@ export function CustomerPicker({
           label: (query) => `+ Crear “${query}” como cliente nuevo`,
           onSelect: () => handleOpenNewCustomerForm(),
         }}
-        inputClassName={cn(orderType === "DOMICILIO" && !selectedCustomer && "border-destructive")}
+        inputClassName={cn(compact && "h-11", orderType === "DOMICILIO" && !selectedCustomer && "border-destructive")}
       />
+      </div>
       {selectedCustomer && (
-        <p className="text-xs text-muted-foreground">
-          Seleccionado: {selectedCustomer.name}{" "}
-          <button
-            type="button"
-            onClick={handleClear}
-            className={buttonVariants({ variant: "outline", size: "sm", className: "ml-1 h-8" })}
-          >
-            Quitar
-          </button>
-        </p>
-      )}
-
-      {selectedCustomer && (
-        <SelectedCustomerPets
-          customer={selectedCustomer}
-          todayKey={todayKey}
-          onManagePets={() => setPetsOpen(true)}
-        />
+        <div className={cn(compact ? "flex basis-full flex-wrap items-center gap-2" : "flex flex-col gap-1")}>
+          <p className="text-sm">
+            Cliente: <span className="font-semibold">{selectedCustomer.name}</span>{" "}
+            <button
+              type="button"
+              onClick={handleClear}
+              className={buttonVariants({ variant: "outline", size: "sm", className: "ml-1 h-8" })}
+            >
+              Quitar
+            </button>
+          </p>
+          <SelectedCustomerPets
+            customer={selectedCustomer}
+            todayKey={todayKey}
+            onManagePets={() => setPetsOpen(true)}
+          />
+        </div>
       )}
       {selectedCustomer && (
         <Dialog open={petsOpen} onOpenChange={setPetsOpen} title={`Mascotas de ${selectedCustomer.name}`}>
@@ -209,6 +219,7 @@ export function CustomerPicker({
 
       {justCreatedCustomer && justCreatedCustomer.id === selectedCustomer?.id && (
         <WhatsAppLoyaltyLink
+          className={cn(compact && "basis-full w-fit")}
           phone={selectedCustomer?.phone ?? ""}
           loyaltyCardCode={justCreatedCustomer.loyaltyCardCode}
           welcomeCouponCode={justCreatedCustomer.welcomeCouponCode}
@@ -216,7 +227,7 @@ export function CustomerPicker({
       )}
 
       {showNewCustomerForm && (
-        <div className="mt-1 flex flex-col gap-2 rounded-md border border-border p-3">
+        <div className={cn("mt-1 flex flex-col gap-2 rounded-md border border-border p-3", compact && "mt-0 basis-full")}>
           <p className="text-sm font-medium">Cliente nuevo</p>
           <Input
             aria-label="Nombre del cliente nuevo"
@@ -244,20 +255,26 @@ export function CustomerPicker({
       )}
 
       {orderType === "DOMICILIO" && selectedCustomer && (
-        <div className="mt-1 flex flex-col gap-2 rounded-md border border-border p-3">
-          <p className="text-sm">
+        <div
+          className={cn(
+            "flex gap-2 rounded-md border border-border p-3",
+            compact ? "basis-full flex-wrap items-end" : "mt-1 flex-col"
+          )}
+        >
+          <p className={cn("text-sm", compact && "basis-full")}>
             <span className="text-muted-foreground">Teléfono:</span> {selectedCustomer.phone ?? "sin registrar"}
           </p>
-          <div className="flex flex-col gap-1">
+          <div className={cn("flex flex-col gap-1", compact && "min-w-60 flex-1")}>
             <Label htmlFor="domicilio-address">Domicilio de entrega (obligatorio)</Label>
             <Input
               id="domicilio-address"
               value={domicilioAddress}
               onChange={(e) => onDomicilioAddressChange(e.target.value)}
               placeholder="Calle, número, colonia…"
+              className={cn(compact && "h-11")}
             />
           </div>
-          <div className="flex flex-col gap-1">
+          <div className={cn("flex flex-col gap-1", compact && "min-w-72 flex-1")}>
             <Label>¿Cómo llegó el pedido?</Label>
             <SegmentedControl
               label="¿Cómo llegó el pedido?"
@@ -293,7 +310,7 @@ function SelectedCustomerPets({
       ]
     : [];
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-wrap items-center gap-1">
       {birthdays.map((text) => (
         <p key={text} className="text-xs font-medium">
           🎂 {text}
@@ -331,7 +348,9 @@ function WhatsAppLoyaltyLink({
   phone,
   loyaltyCardCode,
   welcomeCouponCode,
+  className,
 }: {
+  className?: string;
   phone: string;
   loyaltyCardCode: string;
   welcomeCouponCode: string | null;
@@ -355,7 +374,7 @@ function WhatsAppLoyaltyLink({
   if (!href) return null;
 
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "outline", size: "sm", className: "h-9" })}>
+    <a href={href} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "outline", size: "sm", className: cn("h-9", className) })}>
       Enviar tarjeta por WhatsApp
     </a>
   );
