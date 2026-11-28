@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Coffee, LogOut, Minus, Plus, Trash2, TriangleAlert, XCircle } from "lucide-react";
+import { Coffee, LogOut, Trash2, TriangleAlert, XCircle } from "lucide-react";
 import type { SaleOrderType, DomicilioOrigen } from "@prisma/client";
 import { useCartStore, lineUnitPrice, cartLineToSaleItemInput } from "./cart-store";
 import { openTab as openTabAction, addItemsToTab as addItemsToTabAction, removeTabItem as removeTabItemAction, updateTabItemQuantity as updateTabItemQuantityAction, type OpenTabDetail, type OpenTabItem } from "@/actions/pos";
@@ -19,6 +19,8 @@ import type { ShiftSaleRow } from "@/lib/shift";
 import { isShortageError } from "@/lib/stock";
 import { isAuthorizationRequiredError } from "@/lib/tab-corrections";
 import { Dialog } from "@/components/ui/dialog";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { QuantityStepper } from "@/components/ui/quantity-stepper";
 import type { CustomerOption } from "@/lib/customers";
 import { findAllergyConflicts } from "@/lib/allergens";
 import { Alert } from "@/components/ui/alert";
@@ -425,22 +427,13 @@ export function CartPanel({
     >
       <div className="flex flex-col gap-3 border-b border-border p-4">
         <p className="font-semibold">Cuenta actual</p>
-        <div className="flex gap-1.5">
-          {orderTypes.map((type) => (
-            <button
-              aria-pressed={orderType === type.value}
-              key={type.value}
-              type="button"
-              onClick={() => setOrderType(type.value)}
-              className={cn(
-                "min-h-10 flex-1 rounded-full border border-border px-2 py-2 text-xs font-medium",
-                orderType === type.value ? posAccentClass : "hover:bg-muted"
-              )}
-            >
-              {type.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          label="Tipo de orden"
+          options={orderTypes}
+          value={orderType}
+          onChange={setOrderType}
+          className="flex-nowrap"
+        />
         <div className="flex flex-col gap-1">
           <Label htmlFor="table-number">
             {orderType === "CONSUMO_LOCAL" ? "Número de mesa" : "¿A nombre de quién?"}
@@ -546,7 +539,7 @@ export function CartPanel({
                     key={item.id}
                     className={cn(
                       "rounded-xl border p-3",
-                      conflictsByKey.has(item.id) ? "border-amber-500 bg-amber-50/60 dark:bg-amber-950/30" : "border-border"
+                      conflictsByKey.has(item.id) ? "border-warning/60 bg-warning-muted" : "border-border"
                     )}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -574,31 +567,14 @@ export function CartPanel({
                       </button>
                     </div>
                     <div className="mt-2 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="icon"
-                          variant="outline"
-                          className="h-11 w-11 rounded-full"
-                          disabled={isPending}
-                          onClick={() => handleAdjustRegistered(item.id, item.quantity - 1, item)}
-                          aria-label={`Quitar uno de ${item.productName} ${item.productVariantName}`}
-                        >
-                          <Minus className="h-4 w-4" aria-hidden="true" />
-                        </Button>
-                        <span className="w-8 text-center text-base font-semibold tabular-nums" aria-label={`Cantidad: ${item.quantity}`}>
-                          {item.quantity}
-                        </span>
-                        <Button
-                          size="icon"
-                          variant="outline"
-                          className="h-11 w-11 rounded-full"
-                          disabled={isPending}
-                          onClick={() => handleAdjustRegistered(item.id, item.quantity + 1, item)}
-                          aria-label={`Agregar uno de ${item.productName} ${item.productVariantName}`}
-                        >
-                          <Plus className="h-4 w-4" aria-hidden="true" />
-                        </Button>
-                      </div>
+                      <QuantityStepper
+                        value={item.quantity}
+                        min={0}
+                        disabled={isPending}
+                        itemName={`${item.productName} ${item.productVariantName}`}
+                        onDecrement={() => handleAdjustRegistered(item.id, item.quantity - 1, item)}
+                        onIncrement={() => handleAdjustRegistered(item.id, item.quantity + 1, item)}
+                      />
                       <span className="text-sm font-medium">{formatCurrency(item.lineTotal)}</span>
                     </div>
                   </li>
@@ -644,7 +620,7 @@ export function CartPanel({
               key={line.lineId}
               className={cn(
                 "flex gap-3 rounded-xl border p-3",
-                conflictsByKey.has(line.lineId) ? "border-amber-500 bg-amber-50/60 dark:bg-amber-950/30" : "border-border"
+                conflictsByKey.has(line.lineId) ? "border-warning/60 bg-warning-muted" : "border-border"
               )}
             >
               <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
@@ -663,7 +639,7 @@ export function CartPanel({
                       {line.productName} · {line.variantName}
                     </p>
                     {conflictsByKey.has(line.lineId) && (
-                      <p className="flex items-center gap-1 text-sm font-medium text-amber-800 dark:text-amber-300">
+                      <p className="flex items-center gap-1 text-sm font-medium text-warning">
                         <TriangleAlert className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
                         Alergia — {conflictsByKey.get(line.lineId)!.join(" / ")}
                       </p>
@@ -698,29 +674,13 @@ export function CartPanel({
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="icon"
-                      variant="outline"
-                      className="h-11 w-11 rounded-full"
-                      onClick={() => decrementLine(line.lineId)}
-                      aria-label={`Quitar uno de ${line.productName} ${line.variantName}`}
-                    >
-                      <Minus className="h-4 w-4" aria-hidden="true" />
-                    </Button>
-                    <span className="w-8 text-center text-base font-semibold tabular-nums" aria-label={`Cantidad: ${line.quantity}`}>
-                      {line.quantity}
-                    </span>
-                    <Button
-                      size="icon"
-                      variant="outline"
-                      className="h-11 w-11 rounded-full"
-                      onClick={() => incrementLine(line.lineId)}
-                      aria-label={`Agregar uno de ${line.productName} ${line.variantName}`}
-                    >
-                      <Plus className="h-4 w-4" aria-hidden="true" />
-                    </Button>
-                  </div>
+                  <QuantityStepper
+                    value={line.quantity}
+                    min={0}
+                    itemName={`${line.productName} ${line.variantName}`}
+                    onDecrement={() => decrementLine(line.lineId)}
+                    onIncrement={() => incrementLine(line.lineId)}
+                  />
                   <span className="text-sm font-medium">
                     {formatCurrency(lineUnitPrice(line) * line.quantity)}
                   </span>

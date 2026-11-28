@@ -16,7 +16,7 @@ const DURATION_WITH_ACTION_MS = 6000;
 // tarjeta clara) — este flota sobre cualquier contenido, incluida la barra
 // de sesión oscura (SessionBar), donde un fondo translúcido se ve ilegible.
 const TOAST_VARIANTS: Record<ToastVariant, string> = {
-  success: "border-emerald-700 bg-emerald-600 text-white",
+  success: "border-success bg-success text-success-foreground",
   error: "border-destructive bg-destructive text-destructive-foreground",
   info: "border-neutral-700 bg-neutral-800 text-white",
 };

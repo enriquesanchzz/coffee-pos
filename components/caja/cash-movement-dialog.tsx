@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Alert } from "@/components/ui/alert";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { CashMovementType } from "@prisma/client";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -61,24 +62,7 @@ export function CashMovementDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange} title="Movimiento de caja">
       <div className="flex flex-col gap-4">
-        <div className="flex gap-2">
-          {movementTypes.map((m) => (
-            <button
-              aria-pressed={type === m.value}
-              key={m.value}
-              type="button"
-              onClick={() => setType(m.value)}
-              className={
-                "flex-1 rounded-md border border-border px-3 py-2 text-sm " +
-                (type === m.value
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "hover:bg-muted")
-              }
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl label="Tipo de movimiento" options={movementTypes} value={type} onChange={setType} className="flex-nowrap" />
 
         <div className="flex flex-col gap-1">
           <Label htmlFor="amount">Monto</Label>

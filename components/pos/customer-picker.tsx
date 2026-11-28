@@ -2,12 +2,13 @@
 
 import { useBusinessSettings } from "@/components/layout/business-settings-context";
 import { Alert } from "@/components/ui/alert";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useEffect, useState, useTransition } from "react";
 import type { SaleOrderType, DomicilioOrigen } from "@prisma/client";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { cn, posAccentBorderClass, buildWhatsAppLoyaltyLink } from "@/lib/utils";
+import { cn, buildWhatsAppLoyaltyLink } from "@/lib/utils";
 import { createCustomer as createCustomerAction } from "@/actions/customers";
 import type { CustomerOption } from "@/lib/customers";
 import { withActionErrors } from "@/lib/action-result";
@@ -258,27 +259,15 @@ export function CustomerPicker({
           </div>
           <div className="flex flex-col gap-1">
             <Label>¿Cómo llegó el pedido?</Label>
-            <div className="flex gap-2">
-              {(
-                [
-                  { value: "TELEFONO" as const, label: "Teléfono del negocio" },
-                  { value: "APP" as const, label: "App de delivery" },
-                ]
-              ).map((opt) => (
-                <button
-                  aria-pressed={domicilioOrigen === opt.value}
-                  key={opt.value}
-                  type="button"
-                  onClick={() => onDomicilioOrigenChange(opt.value)}
-                  className={cn(
-                    "min-h-11 flex-1 rounded-md border border-border px-3 py-2 text-sm",
-                    domicilioOrigen === opt.value ? posAccentBorderClass : "hover:bg-muted"
-                  )}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl
+              label="¿Cómo llegó el pedido?"
+              options={[
+                { value: "TELEFONO" as const, label: "Teléfono del negocio" },
+                { value: "APP" as const, label: "App de delivery" },
+              ]}
+              value={domicilioOrigen}
+              onChange={onDomicilioOrigenChange}
+            />
           </div>
         </div>
       )}
@@ -316,7 +305,7 @@ function SelectedCustomerPets({
             key={pet.id}
             className={cn(
               "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs",
-              pet.allergies.length > 0 ? "border-amber-500/60 bg-amber-50 text-amber-950 dark:bg-amber-950/40 dark:text-amber-100" : "border-border"
+              pet.allergies.length > 0 ? "border-warning/50 bg-warning-muted text-foreground" : "border-border"
             )}
           >
             <PawPrint className="h-3 w-3" aria-hidden />

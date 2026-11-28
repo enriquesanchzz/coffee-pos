@@ -81,7 +81,7 @@ export function ReceiptDialog({
     >
       <div className="flex flex-col gap-4">
         <div className="flex items-start gap-3">
-          <CheckCircle2 className="mt-0.5 h-8 w-8 flex-shrink-0 text-emerald-600" />
+          <CheckCircle2 className="mt-0.5 h-8 w-8 flex-shrink-0 text-success" />
           <div className="flex flex-1 flex-col gap-1 text-sm">
             {saleReceipt ? (
               <>

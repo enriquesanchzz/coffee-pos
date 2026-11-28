@@ -9,6 +9,8 @@ test.describe("Quick wins UI/UX", () => {
     await expect(page.getByText("Descuentos y propina, al cobrar")).toBeVisible();
     await page.getByRole("button", { name: "Cobrar", exact: true }).click();
 
+    // Sin efectivo capturado el botón explica lo que falta.
+    await expect(page.getByRole("button", { name: /^Faltan \$/ })).toBeDisabled();
     await page.fill("#cash-received", "1");
     await expect(page.getByRole("button", { name: /^Faltan \$/ })).toBeDisabled();
 

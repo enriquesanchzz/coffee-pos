@@ -84,10 +84,28 @@ Hechos los 8 quick wins (pruebas en `e2e/ui-quick-wins.spec.ts`):
 - Estados de carga con "…" (un carácter). Textos de MC-02/MC-03/MC-04 y del
   aviso sin conexión.
 
-Pendientes las 5 mejoras de fondo del documento (MF-1 tokens
-`--success/--warning`, MF-2 `SegmentedControl`/`QuantityStepper`/
-`Textarea`/`FieldError`, MF-3 alturas, MF-4 panel de cobro por zonas, MF-5
-cabecera compacta del carrito).
+**MF-1 y MF-2 (rama `ui-sistema-base`):**
+
+- Tokens `success`/`warning` (+ `-foreground`, `-muted`) en `globals.css`
+  y `tailwind.config.ts`, claro y oscuro, todos ≥ 4.5:1 como texto (el
+  valor propuesto en el documento, `38 92% 45%`, daba 2.5:1 y se ajustó).
+  Cero clases `emerald-*`/`amber-*` en la app: usar `text-success`,
+  `bg-warning-muted`, etc. El aviso "Sin conexión" de la barra de sesión
+  (siempre oscura) lleva `class="dark"` para tomar los valores oscuros.
+- `components/ui/`: `SegmentedControl` + `SegmentedButton` (un solo estilo
+  de seleccionado: `primary/10` + contorno de 2 px), `QuantityStepper`,
+  `Textarea`, `FieldError`. Se usan en tipo de orden, tamaño, temperatura,
+  modificadores, cupones, descuento, propina (también en pago dividido),
+  método de pago, origen del domicilio y tipo de movimiento de caja.
+  `posAccentBorderClass` se eliminó.
+- Desviación del documento: el selector usa botones con `aria-pressed`
+  dentro de `role="group"`, no `role="radio"`, para que las pruebas y
+  `addProduct` sigan encontrándolos como botones.
+- Con efectivo sin capturar, el botón final dice "Faltan $X" (antes decía
+  "Cobrar $X" deshabilitado).
+
+Pendientes MF-3 (alturas de 44/48 px en todo el POS), MF-4 (panel de cobro
+por zonas) y MF-5 (cabecera compacta del carrito).
 
 ## Auditoría de seguridad y procesos (noviembre 2026, rama `auditoria-seguridad`)
 

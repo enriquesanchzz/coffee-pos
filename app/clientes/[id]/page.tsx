@@ -80,7 +80,7 @@ export default async function DetalleClientePage({
                       <span>
                         {c.label} <span className="font-mono text-xs text-muted-foreground">{c.code}</span>
                       </span>
-                      <span className={c.status === "disponible" ? "text-emerald-700 dark:text-emerald-400" : "text-muted-foreground"}>
+                      <span className={c.status === "disponible" ? "text-success" : "text-muted-foreground"}>
                         {c.status}
                       </span>
                     </p>

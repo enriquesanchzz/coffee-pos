@@ -2,6 +2,8 @@
 
 import { useBusinessSettings } from "@/components/layout/business-settings-context";
 import { Alert } from "@/components/ui/alert";
+import { SegmentedControl, SegmentedButton } from "@/components/ui/segmented-control";
+import { FieldError } from "@/components/ui/field-error";
 import { includedTax, PAYMENT_METHOD_LABELS } from "@/lib/settings-shared";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { PaymentMethod, DiscountType, ManualDiscountReason } from "@prisma/client";
@@ -11,7 +13,7 @@ import { ChevronLeft, Trash2, Users } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { cn, formatCurrency, posAccentClass, posAccentBorderClass } from "@/lib/utils";
+import { cn, formatCurrency, posAccentClass } from "@/lib/utils";
 import {
   createSale as createSaleAction,
   closeTab as closeTabAction,
@@ -652,8 +654,10 @@ export function CheckoutForm({
     TRANSFERENCIA: "por transferencia",
   };
   const methodPhrase = METHOD_PHRASE[method] ?? `con ${PAYMENT_METHOD_LABELS[method].toLowerCase()}`;
+  // Sin efectivo capturado también "faltan": el botón explica por qué
+  // está deshabilitado en vez de invitar a cobrar.
   const missingCashCents =
-    !isSplit && method === "EFECTIVO" && cashReceived !== "" ? totalToCollectCents - cashReceivedCents : 0;
+    !isSplit && method === "EFECTIVO" ? totalToCollectCents - (cashReceived === "" ? 0 : cashReceivedCents) : 0;
   const confirmLabel = isPending
     ? "Cobrando…"
     : isPreviewLoading || verifiedSubtotal === null
@@ -700,16 +704,15 @@ export function CheckoutForm({
             {customerCoupons.map((coupon) => {
               const isApplied = discountMode === "CODIGO" && resolvedCode?.id === coupon.id;
               return (
-                <Button
+                <SegmentedButton
                   key={coupon.id}
-                  type="button"
-                  variant={isApplied ? "default" : "outline"}
-                  aria-pressed={isApplied}
+                  selected={isApplied}
+                  className="flex-none"
                   onClick={() => (isApplied ? (setDiscountMode("NINGUNO"), resetDiscountState()) : applyCustomerCoupon(coupon))}
                 >
                   {coupon.label}
                   <span className="font-mono text-xs opacity-70">{coupon.code}</span>
-                </Button>
+                </SegmentedButton>
               );
             })}
           </div>
@@ -718,25 +721,16 @@ export function CheckoutForm({
 
       <div>
         <p className="mb-2 text-sm font-medium">Descuento</p>
-        <div className="flex gap-2">
-          {discountModes.map((mode) => (
-            <button
-              aria-pressed={discountMode === mode.value}
-              key={mode.value}
-              type="button"
-              onClick={() => {
-                setDiscountMode(mode.value);
-                resetDiscountState();
-              }}
-              className={cn(
-                "min-h-11 flex-1 rounded-md border border-border px-3 py-2 text-sm",
-                discountMode === mode.value ? posAccentBorderClass : "hover:bg-muted"
-              )}
-            >
-              {mode.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          label="Descuento"
+          options={discountModes}
+          value={discountMode}
+          onChange={(mode) => {
+            setDiscountMode(mode);
+            resetDiscountState();
+          }}
+          className="flex-nowrap"
+        />
       </div>
 
       {discountMode === "CODIGO" && (
@@ -838,7 +832,7 @@ export function CheckoutForm({
           <span>{formatCurrency(rawSubtotal)}</span>
         </div>
         {appliedPromotions.map((promo) => (
-          <div key={promo.name} className="flex items-center justify-between text-emerald-700">
+          <div key={promo.name} className="flex items-center justify-between text-success">
             <span>Promoción: {promo.name}</span>
             <span>ya incluye −{formatCurrency(promo.saving)}</span>
           </div>
@@ -873,46 +867,26 @@ export function CheckoutForm({
           <p className="text-xs text-muted-foreground">En pago dividido cada persona deja su propina en su renglón (abajo).</p>
         ) : (
         <>
-        <div className="flex flex-wrap gap-2">
-          <button
-            aria-pressed={tipMode === "NINGUNA"}
-            type="button"
-            onClick={() => setTipMode("NINGUNA")}
-            className={cn(
-              "min-h-11 rounded-md border border-border px-3 py-2 text-sm",
-              tipMode === "NINGUNA" ? posAccentBorderClass : "hover:bg-muted"
-            )}
-          >
+        <div role="group" aria-label="Propina" className="flex flex-wrap gap-2">
+          <SegmentedButton selected={tipMode === "NINGUNA"} className="flex-none" onClick={() => setTipMode("NINGUNA")}>
             Sin propina
-          </button>
+          </SegmentedButton>
           {settings.tipPercents.map((pct) => (
-            <button
-              aria-pressed={tipMode === "PORCENTAJE" && tipPercent === pct}
+            <SegmentedButton
               key={pct}
-              type="button"
+              selected={tipMode === "PORCENTAJE" && tipPercent === pct}
+              className="flex-none"
               onClick={() => {
                 setTipMode("PORCENTAJE");
                 setTipPercent(pct);
               }}
-              className={cn(
-                "min-h-11 rounded-md border border-border px-3 py-2 text-sm",
-                tipMode === "PORCENTAJE" && tipPercent === pct ? posAccentBorderClass : "hover:bg-muted"
-              )}
             >
               {pct}%
-            </button>
+            </SegmentedButton>
           ))}
-          <button
-            aria-pressed={tipMode === "MONTO"}
-            type="button"
-            onClick={() => setTipMode("MONTO")}
-            className={cn(
-              "min-h-11 rounded-md border border-border px-3 py-2 text-sm",
-              tipMode === "MONTO" ? posAccentBorderClass : "hover:bg-muted"
-            )}
-          >
+          <SegmentedButton selected={tipMode === "MONTO"} className="flex-none" onClick={() => setTipMode("MONTO")}>
             Monto
-          </button>
+          </SegmentedButton>
         </div>
         {tipMode === "MONTO" && (
           <Input
@@ -930,9 +904,7 @@ export function CheckoutForm({
             }}
           />
         )}
-        {tipMode === "MONTO" && Number(tipCustom) < 0 && (
-          <p role="alert" className="mt-1 text-sm text-destructive">La propina no puede ser negativa.</p>
-        )}
+        {tipMode === "MONTO" && Number(tipCustom) < 0 && <FieldError>La propina no puede ser negativa.</FieldError>}
         </>
         )}
         {isHighTip && (
@@ -963,22 +935,13 @@ export function CheckoutForm({
 
         {!isSplit ? (
           <>
-            <div className="flex gap-2">
-              {paymentMethods.map((m) => (
-                <button
-                  aria-pressed={method === m.value}
-                  key={m.value}
-                  type="button"
-                  onClick={() => setMethod(m.value)}
-                  className={cn(
-                    "min-h-11 flex-1 rounded-md border border-border px-3 py-2 text-sm",
-                    method === m.value ? posAccentBorderClass : "hover:bg-muted"
-                  )}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl
+              label="Método de pago"
+              options={paymentMethods}
+              value={method}
+              onChange={setMethod}
+              className="flex-nowrap"
+            />
             {method === "TRANSFERENCIA" && (
               <Input
                 className="mt-2"
@@ -1062,21 +1025,17 @@ export function CheckoutForm({
                         { key: "MONTO", label: "Monto", active: row.tipMode === "MONTO", patch: { tipMode: "MONTO" } },
                       ] as { key: string; label: string; active: boolean; patch: Partial<SplitRow> }[]
                     ).map((opt) => (
-                      <button
+                      <SegmentedButton
                         key={opt.key}
-                        type="button"
-                        aria-pressed={opt.active}
+                        selected={opt.active}
+                        className="px-1"
                         onClick={() => {
                           updateSplitRow(row.id, opt.patch);
                           setConfirmHighTip(false);
                         }}
-                        className={cn(
-                          "min-h-10 flex-1 rounded-md border border-border px-1 text-xs",
-                          opt.active ? posAccentBorderClass : "hover:bg-muted"
-                        )}
                       >
                         {opt.label}
-                      </button>
+                      </SegmentedButton>
                     ))}
                   </div>
                   {row.tipMode === "MONTO" && (
@@ -1136,7 +1095,7 @@ export function CheckoutForm({
             <div
               className={cn(
                 "flex items-center justify-between text-sm font-medium",
-                splitRemainingCents === 0 ? "text-emerald-700" : "text-destructive"
+                splitRemainingCents === 0 ? "text-success" : "text-destructive"
               )}
             >
               <span>
@@ -1212,9 +1171,7 @@ export function CheckoutForm({
 
       {error && <Alert variant="error">{error}</Alert>}
       {offlineRetry && (
-        <p role="status" className="text-sm text-amber-600">
-          Sin conexión. La venta se envía sola al volver; no la cobres otra vez.
-        </p>
+        <Alert variant="warning">Sin conexión. La venta se envía sola al volver; no la cobres otra vez.</Alert>
       )}
 
       {shortages.length > 0 && (

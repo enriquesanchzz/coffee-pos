@@ -15,6 +15,16 @@
     --destructive: 0 72% 45%;
     --destructive-foreground: 30 20% 98%;
     --border: 24 10% 85%;
+    /* Semánticos (auditoría UI/UX MF-1): `success`/`warning` son color de
+       texto y borde (≥ 4.5:1 sobre background y sobre su -muted),
+       `-muted` es la superficie de avisos y `-foreground` el texto sobre un
+       relleno sólido. No dependen del acento configurable. */
+    --success: 152 60% 28%;
+    --success-foreground: 0 0% 100%;
+    --success-muted: 150 45% 93%;
+    --warning: 30 90% 28%;
+    --warning-foreground: 0 0% 100%;
+    --warning-muted: 45 90% 92%;
     /* Radio base para rounded-sm/md/lg (tailwind.config.ts) — un solo
        número controla botones, inputs, cards y diálogos en toda la app. */
     --radius: 0.75rem;
@@ -34,6 +44,12 @@
     --destructive: 0 62% 55%;
     --destructive-foreground: 30 15% 94%;
     --border: 24 12% 22%;
+    --success: 152 45% 58%;
+    --success-foreground: 150 40% 8%;
+    --success-muted: 152 30% 15%;
+    --warning: 40 90% 62%;
+    --warning-foreground: 30 60% 10%;
+    --warning-muted: 35 45% 15%;
   }
 
   * {
