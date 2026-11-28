@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { addProduct, db, loginPin, PIN } from "./helpers";
+import { addProduct, db, loginAdmin, loginPin, PIN } from "./helpers";
 
 test.describe("Fase 4 UX", () => {
   test("la búsqueda del POS ignora acentos", async ({ page }) => {
@@ -40,7 +40,7 @@ test.describe("Fase 4 UX", () => {
   test("Clientes se puede buscar sin acentos", async ({ page }) => {
     const name = `Íñigo Búsqueda ${Date.now()}`;
     await db.customer.create({ data: { name } });
-    await loginPin(page, PIN.ana);
+    await loginAdmin(page);
     await page.goto("/clientes");
     await page.getByLabel("Buscar clientes").fill("inigo busqueda");
     await page.getByLabel("Buscar clientes").press("Enter");

@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
+import { requireAdminPage } from "@/lib/admin-page";
 import { getPhysicalCountDetail } from "@/lib/counts";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { ComprasLayout } from "@/components/compras/compras-layout";
@@ -19,9 +19,7 @@ export default async function DetalleConteoPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const employee = await getCurrentEmployee();
-  if (!employee) redirect("/");
-  if (resolveRoleName(employee, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
+  const employee = await requireAdminPage("/compras/conteos");
 
   const canManage =
     (await hasPermission(employee.id, DEFAULT_BRANCH_ID, "INVENTARIO_AJUSTAR")) ||

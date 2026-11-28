@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import type { SaleOrderType, SaleStatus } from "@prisma/client";
-import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
+import { requirePasswordSession, resolveRoleName } from "@/lib/session";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { syncAppTimeZone } from "@/lib/settings";
 import { getSalesForExport, parseSalesParams, SALES_EXPORT_LIMIT } from "@/lib/sales";
@@ -32,7 +32,9 @@ function cell(value: string | number | null): string {
 }
 
 export async function GET(request: NextRequest) {
-  const employee = await getCurrentEmployee();
+  // Igual que el resto de Administración: rol ADMINISTRADOR con sesión de
+  // email + password (lib/admin-page.ts).
+  const employee = await requirePasswordSession();
   if (!employee || resolveRoleName(employee, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") {
     return new Response("No autorizado", { status: 403 });
   }

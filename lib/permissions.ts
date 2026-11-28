@@ -1,6 +1,7 @@
 import "server-only";
 import type { Permission } from "@prisma/client";
 import { prisma } from "./prisma";
+import { getSessionAuthLevel, getSessionEmployeeId, SessionExpiredError } from "./session";
 
 // Permiso efectivo = permisos del Role asignado en EmployeeBranch para esa
 // sucursal, con EmployeePermissionOverride encima (override siempre gana
@@ -65,5 +66,15 @@ export async function requireAdminRole(employeeId: string, branchId: string): Pr
   });
   if (employeeBranch?.role.name !== "ADMINISTRADOR") {
     throw new Error("Esta acción es exclusiva del rol ADMINISTRADOR.");
+  }
+  // Los módulos de Administración exigen sesión de email + password, no
+  // PIN (lib/admin-page.ts) — la acción también, para quien opera. (Cuando
+  // se valida a OTRO empleado, p. ej. quien aprueba un conteo con su PIN,
+  // no aplica.)
+  if (employeeId === (await getSessionEmployeeId()) && (await getSessionAuthLevel()) !== "password") {
+    throw new SessionExpiredError(
+      "Necesitas iniciar sesión de Administración (email y password) para hacer esto.",
+      "/administracion/login?error=sesion"
+    );
   }
 }

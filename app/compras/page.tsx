@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
-import { DEFAULT_BRANCH_ID } from "@/lib/constants";
+import { requireAdminPage } from "@/lib/admin-page";
 import { getPurchaseOrders } from "@/lib/purchases";
 import { getInventoryOverview } from "@/lib/inventory";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
@@ -18,9 +16,7 @@ import { buttonVariants } from "@/components/ui/button";
 export const metadata: Metadata = { title: "Compras" };
 
 export default async function ComprasPage() {
-  const employee = await getCurrentEmployee();
-  if (!employee) redirect("/");
-  if (resolveRoleName(employee, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
+  const employee = await requireAdminPage("/compras");
 
   const [orders, inventory] = await Promise.all([getPurchaseOrders(), getInventoryOverview()]);
   const lowStockItems = inventory.filter((item) => item.isLow);

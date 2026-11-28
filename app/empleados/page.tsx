@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { adminLoginHref } from "@/lib/admin-page";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requirePasswordSession, resolveRoleName } from "@/lib/session";
@@ -13,7 +14,7 @@ export const metadata: Metadata = { title: "Empleados" };
 
 export default async function EmpleadosPage() {
   const actor = await requirePasswordSession();
-  if (!actor) redirect("/administracion/login");
+  if (!actor) redirect(adminLoginHref("/empleados"));
   if (resolveRoleName(actor, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
 
   const employees = await getEmployees();

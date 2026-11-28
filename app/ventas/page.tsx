@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import type { PaymentMethod, SaleOrderType, SaleStatus } from "@prisma/client";
-import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
-import { DEFAULT_BRANCH_ID } from "@/lib/constants";
+import { requireAdminPage } from "@/lib/admin-page";
 import { getSalesEmployees, getSalesPage, parseSalesParams, type SalesSearchParams } from "@/lib/sales";
 import { PAYMENT_METHOD_LABELS } from "@/lib/settings-shared";
 import { formatCurrency, pluralize } from "@/lib/utils";
@@ -37,9 +35,7 @@ const ORDER_TYPE_LABELS: Record<SaleOrderType, string> = {
 const METHODS: PaymentMethod[] = ["EFECTIVO", "TARJETA", "TRANSFERENCIA"];
 
 export default async function VentasPage({ searchParams }: { searchParams: Promise<SalesSearchParams> }) {
-  const employee = await getCurrentEmployee();
-  if (!employee) redirect("/");
-  if (resolveRoleName(employee, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
+  const employee = await requireAdminPage("/ventas");
 
   const params = await searchParams;
   // `query` conserva los filtros al paginar, al volver del detalle y al exportar.

@@ -399,7 +399,7 @@ export const saveLoyaltyTier = safeAction(async function saveLoyaltyTier(input: 
   await saveLoyaltyChange((tx) =>
     id ? tx.loyaltyTier.update({ where: { id }, data }) : tx.loyaltyTier.create({ data })
   );
-  revalidatePath("/configuracion/lealtad");
+  revalidatePath("/clientes/lealtad");
 });
 
 // Borrar un nivel: el nivel de cada cliente se calcula al vuelo con los
@@ -411,7 +411,7 @@ export const deleteLoyaltyTier = safeAction(async function deleteLoyaltyTier(id:
     await tx.loyaltyCard.updateMany({ where: { tierId: id }, data: { tierId: null } });
     await tx.loyaltyTier.delete({ where: { id } });
   });
-  revalidatePath("/configuracion/lealtad");
+  revalidatePath("/clientes/lealtad");
 });
 
 export const updateDiscountSettings = safeAction(async function updateDiscountSettings(input: {
@@ -482,7 +482,7 @@ export const updateReorderThresholds = safeAction(async function updateReorderTh
       });
     }
   });
-  revalidatePath("/configuracion/inventario");
+  revalidatePath("/inventario/ajustes");
   revalidatePath("/inventario");
   revalidatePath("/administracion");
 });

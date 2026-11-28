@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useSettingsHeading } from "./settings-heading";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { deleteLoyaltyTier as deleteLoyaltyTierAction, saveLoyaltyTier as saveLoyaltyTierAction } from "@/actions/settings";
@@ -83,6 +84,7 @@ export function LoyaltyTiersEditor({
   const [errorProgram, setErrorProgram] = useState<LoyaltyProgram | null>(null);
   const [isPending, startTransition] = useTransition();
   const notify = useToast();
+  const headingLevel = useSettingsHeading();
 
   function run(task: () => Promise<void>, okMessage: string, after?: () => void) {
     setError(null);
@@ -157,7 +159,7 @@ export function LoyaltyTiersEditor({
         return (
           <Card key={program}>
             <CardHeader>
-              <CardTitle as="h3">Niveles · {label}</CardTitle>
+              <CardTitle as={headingLevel}>Niveles · {label}</CardTitle>
               <p className="text-sm text-muted-foreground">
                 Al juntar los puntos de un nivel con sus compras, el cliente recibe su recompensa como cupón personal; en
                 caja aparece al seleccionarlo. Los cupones de una vez son para quien llegue al nivel de ahora en adelante;

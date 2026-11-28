@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-export function AdminLoginForm({ error, lockMinutes }: { error?: string; lockMinutes: number }) {
+export function AdminLoginForm({ error, next, lockMinutes }: { error?: string; next?: string | null; lockMinutes: number }) {
   return (
     <Card className="w-full max-w-sm">
       <CardHeader>
@@ -14,6 +14,7 @@ export function AdminLoginForm({ error, lockMinutes }: { error?: string; lockMin
       </CardHeader>
       <CardContent>
         <form action={loginAdmin} className="flex flex-col gap-4">
+          {next && <input type="hidden" name="next" value={next} />}
           <div className="flex flex-col gap-1">
             <Label htmlFor="email">Email</Label>
             <Input id="email" name="email" type="email" autoComplete="username" autoFocus />
@@ -40,7 +41,8 @@ export function AdminLoginForm({ error, lockMinutes }: { error?: string; lockMin
           )}
           <Button type="submit">Entrar</Button>
           <p className="text-xs text-muted-foreground">
-            Administración requiere email y password, no el PIN del POS. ¿Olvidaste tu password? Pide a otro
+            Todo lo de Administración (ventas, clientes, reportes, compras, productos, inventario…) requiere email y
+            password, no el PIN del POS. ¿Olvidaste tu password? Pide a otro
             administrador que te asigne uno nuevo en Empleados.
           </p>
           <Link href="/pos" className={buttonVariants({ variant: "outline" })}>

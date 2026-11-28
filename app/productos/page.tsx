@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
-import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
-import { DEFAULT_BRANCH_ID } from "@/lib/constants";
+import { requireAdminPage } from "@/lib/admin-page";
 import {
   getRecipeOverview,
   getProductCategories,
@@ -14,9 +12,7 @@ import { ProductosWorkspace } from "@/components/productos/productos-workspace";
 export const metadata: Metadata = { title: "Productos" };
 
 export default async function ProductosPage() {
-  const employee = await getCurrentEmployee();
-  if (!employee) redirect("/");
-  if (resolveRoleName(employee, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
+  const employee = await requireAdminPage("/productos");
 
   const [products, categories, ingredientOptions, targetFoodCostPercent] = await Promise.all([
     getRecipeOverview(),

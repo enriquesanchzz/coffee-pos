@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
+import { requireAdminPage } from "@/lib/admin-page";
 import { getPhysicalCounts } from "@/lib/counts";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { ComprasLayout } from "@/components/compras/compras-layout";
@@ -15,9 +15,7 @@ import { formatDate } from "@/lib/time";
 export const metadata: Metadata = { title: "Conteos físicos" };
 
 export default async function ConteosPage() {
-  const employee = await getCurrentEmployee();
-  if (!employee) redirect("/");
-  if (resolveRoleName(employee, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
+  const employee = await requireAdminPage("/compras/conteos");
 
   const canManage =
     (await hasPermission(employee.id, DEFAULT_BRANCH_ID, "INVENTARIO_AJUSTAR")) ||

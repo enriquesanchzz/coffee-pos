@@ -126,7 +126,7 @@ test.describe.serial("Configuración del sistema", () => {
 
   test("Inventario: con política de bloqueo no se puede vender sin insumos", async ({ page }) => {
     await loginAdmin(page);
-    await page.goto("/configuracion/inventario");
+    await page.goto("/inventario/ajustes");
     await page.getByLabel("No se permite vender sin insumos").check();
     await save(page);
 
@@ -150,7 +150,7 @@ test.describe.serial("Configuración del sistema", () => {
   test("Inventario: el mínimo de stock marca el insumo como stock bajo", async ({ page }) => {
     const stock = await db.inventoryStock.findUniqueOrThrow({ where: { ingredientId_stockLocationId: MILK } });
     await loginAdmin(page);
-    await page.goto("/configuracion/inventario");
+    await page.goto("/inventario/ajustes");
     await page.getByLabel("Buscar insumo").fill("Leche entera");
     await page.getByLabel(/^Mínimo de Leche entera/).fill(String(stock.quantity.toNumber() + 1));
     await page.getByRole("button", { name: /Guardar mínimos/ }).click();
@@ -162,7 +162,7 @@ test.describe.serial("Configuración del sistema", () => {
 
   test("Lealtad: puntos por negocio, cupón y niveles", async ({ page }) => {
     await loginAdmin(page);
-    await page.goto("/configuracion/lealtad");
+    await page.goto("/clientes/lealtad");
     await page.getByLabel("Puntos por cada $100 en Cafetería").fill("7");
     await page.getByLabel("Cupón de bienvenida (%)").fill("0");
     await expect(page.getByText("14 puntos de Cafetería y 3 de Pet Shop")).toBeVisible();

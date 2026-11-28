@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useSettingsHeading } from "./settings-heading";
 import { updateReorderThresholds as updateReorderThresholdsAction } from "@/actions/settings";
 import { withActionErrors } from "@/lib/action-result";
 import { useToast } from "@/components/ui/toast";
@@ -35,6 +36,7 @@ export function ReorderThresholdsEditor({ rows }: { rows: ThresholdRow[] }) {
   const [error, setError] = useState<string | null>(null);
   const notify = useToast();
   const [isPending, startTransition] = useTransition();
+  const headingLevel = useSettingsHeading();
 
   const original = Object.fromEntries(rows.map((r) => [r.ingredientId, r.threshold === null ? "" : String(r.threshold)]));
   const dirtyIds = rows.map((r) => r.ingredientId).filter((id) => (values[id] ?? "") !== original[id]);
@@ -74,7 +76,7 @@ export function ReorderThresholdsEditor({ rows }: { rows: ThresholdRow[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle as="h3">Mínimos de stock</CardTitle>
+        <CardTitle as={headingLevel}>Mínimos de stock</CardTitle>
         <p className="text-sm text-muted-foreground">
           Al llegar al mínimo, el insumo se marca como &quot;stock bajo&quot; en Inventario y en el Dashboard. Vacío =
           solo se avisa cuando se acaba.

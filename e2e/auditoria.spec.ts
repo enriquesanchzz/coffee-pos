@@ -78,8 +78,8 @@ test.describe.serial("Auditoría", () => {
     expect(voids[1].description).toContain("Latte");
     expect(voids[1].authorizedById).toBe("emp-ana");
 
-    // Se ve en el detalle de la venta (Administración por PIN de Ana).
-    await loginPin(page, PIN.ana);
+    // Se ve en el detalle de la venta (Administración: email y password).
+    await loginAdmin(page);
     await page.goto(`/ventas/${sale.id}`);
     await expect(page.getByText("Quitado de la cuenta antes de cobrar")).toBeVisible();
     await expect(page.getByText("autorizó Ana")).toBeVisible();
@@ -123,6 +123,7 @@ test.describe.serial("Auditoría", () => {
     await addProduct(page, "Latte", ["Chico", "Caliente"]);
     await payExactCash(page);
     const afterSale = await stockOf(ingredientId);
+    await loginAdmin(page);
 
     await page.goto(`/compras/conteos/${count.id}`);
     await page.fill("#confirmingPin", PIN.ana);

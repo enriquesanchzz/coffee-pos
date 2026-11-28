@@ -1,22 +1,18 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { redirect } from "next/navigation";
-import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
-import { DEFAULT_BRANCH_ID } from "@/lib/constants";
+import { requireAdminPage } from "@/lib/admin-page";
 import { getBusinessSettings } from "@/lib/settings";
 import { getDueReminders } from "@/lib/reminders";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ReminderList } from "@/components/clientes/reminder-list";
+import { ReminderSettingsForm } from "@/components/configuracion/reminder-settings-form";
 
 export const metadata: Metadata = { title: "Recordatorios" };
 export const dynamic = "force-dynamic";
 
 export default async function RecordatoriosPage() {
-  const employee = await getCurrentEmployee();
-  if (!employee) redirect("/");
-  if (resolveRoleName(employee, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
+  const employee = await requireAdminPage("/clientes/recordatorios");
 
   const settings = await getBusinessSettings();
   const reminders = await getDueReminders(settings);
@@ -29,10 +25,10 @@ export default async function RecordatoriosPage() {
         <PageHeader title="Recordatorios" />
         <p className="-mt-2 text-sm text-muted-foreground">
           Mensajes listos para mandar por WhatsApp. Al enviarlo u omitirlo sale de la lista, y vuelve a salir solo si el
-          cliente compra otra vez. Días y mensajes en{" "}
-          <Link href="/configuracion/recordatorios" className="underline">
-            Configuración → Recordatorios
-          </Link>
+          cliente compra otra vez. Días y mensajes, abajo en{" "}
+          <a href="#ajustes-recordatorios" className="underline">
+            Ajustes
+          </a>
           .
         </p>
 
@@ -67,6 +63,13 @@ export default async function RecordatoriosPage() {
             <ReminderList reminders={petShop} emptyText="Nadie pendiente." />
           </CardContent>
         </Card>
+
+        {/* Ajustes (antes en Configuración → Recordatorios). Guardar pide
+            sesión de Administración con password. */}
+        <div id="ajustes-recordatorios" className="flex scroll-mt-4 flex-col gap-2">
+          <h2 className="text-lg font-semibold">Ajustes</h2>
+          <ReminderSettingsForm initial={settings} />
+        </div>
       </div>
     </AuthenticatedShell>
   );

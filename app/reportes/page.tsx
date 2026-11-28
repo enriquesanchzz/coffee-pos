@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
+import { requireAdminPage } from "@/lib/admin-page";
 import {
   getProfitReport,
   getInventoryReport,
@@ -39,9 +39,7 @@ export default async function ReportesPage({
 }: {
   searchParams: Promise<{ view?: string; from?: string; to?: string; category?: string; temperature?: string }>;
 }) {
-  const employee = await getCurrentEmployee();
-  if (!employee) redirect("/");
-  if (resolveRoleName(employee, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
+  const employee = await requireAdminPage("/reportes");
 
   const [canUtilidad, canInventario, canEstadisticas] = await Promise.all([
     hasPermission(employee.id, DEFAULT_BRANCH_ID, "REPORTE_UTILIDAD_VER"),
