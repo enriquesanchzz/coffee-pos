@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
+import { requireAdminPage } from "@/lib/admin-page";
 import { getSuppliers } from "@/lib/purchases";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { ComprasLayout } from "@/components/compras/compras-layout";
@@ -15,9 +15,7 @@ import { buttonVariants } from "@/components/ui/button";
 export const metadata: Metadata = { title: "Proveedores" };
 
 export default async function ProveedoresPage() {
-  const employee = await getCurrentEmployee();
-  if (!employee) redirect("/");
-  if (resolveRoleName(employee, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
+  const employee = await requireAdminPage("/compras/proveedores");
 
   const canManage =
     (await hasPermission(employee.id, DEFAULT_BRANCH_ID, "ORDEN_COMPRA_CREAR")) ||

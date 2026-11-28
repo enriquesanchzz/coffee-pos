@@ -11,6 +11,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
 import { TooManyAttemptsError } from "@/lib/rate-limit";
+import { safeNextPath } from "@/lib/admin-page";
 
 // findEmployeeBy* lanzan TooManyAttemptsError al pasar el límite de
 // intentos (lib/rate-limit.ts) — aquí se traduce a un ?error= del login.
@@ -45,14 +46,18 @@ export async function loginWithPin(formData: FormData) {
 export async function loginAdmin(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
+  // Página de Administración que se quería abrir (lib/admin-page.ts); se
+  // conserva en los errores para no perderla al reintentar.
+  const next = safeNextPath(String(formData.get("next") ?? ""));
+  const keepNext = next ? `&next=${encodeURIComponent(next)}` : "";
   const employee =
     email && password ? await lookup(() => findEmployeeByEmailPassword(email, password)) : null;
 
   if (employee === "bloqueado") {
-    redirect("/administracion/login?error=bloqueado");
+    redirect(`/administracion/login?error=bloqueado${keepNext}`);
   }
   if (!employee) {
-    redirect("/administracion/login?error=credenciales");
+    redirect(`/administracion/login?error=credenciales${keepNext}`);
   }
 
   // Administración es exclusiva del rol ADMINISTRADOR (ver resolveRoleName).
@@ -63,11 +68,11 @@ export async function loginAdmin(formData: FormData) {
     include: { branches: { include: { role: { include: { permissions: true } } } } },
   });
   if (!withRole || resolveRoleName(withRole, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") {
-    redirect("/administracion/login?error=rol");
+    redirect(`/administracion/login?error=rol${keepNext}`);
   }
 
   await setSessionEmployee(employee.id, "password");
-  redirect("/administracion");
+  redirect(next ?? "/administracion");
 }
 
 export async function logoutAction() {

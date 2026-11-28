@@ -6,7 +6,9 @@ import type { InventoryOverviewItem, IngredientCategoryOption } from "@/lib/inve
 import { CategoryDrilldown, type DrilldownCategory } from "@/components/catalog/category-drilldown";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { Settings } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { AdjustStockDialog } from "./adjust-stock-dialog";
 import { IngredientFormDialog } from "./ingredient-form-dialog";
 import { CategoryFormDialog } from "./category-form-dialog";
@@ -113,9 +115,16 @@ export function InventoryWorkspace({
           <h1 className="text-lg font-semibold">Inventario</h1>
           <p className="text-sm text-muted-foreground">Insumos, categorías y stock.</p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => setCreatingCategory(true)}>
-          + Nueva categoría
-        </Button>
+        <div className="flex gap-2">
+          {/* Venta con faltantes y mínimos de stock (antes en Configuración). */}
+          <Link href="/inventario/ajustes" className={buttonVariants({ variant: "outline", size: "sm" })}>
+            <Settings className="h-4 w-4" aria-hidden="true" />
+            Ajustes
+          </Link>
+          <Button variant="outline" size="sm" onClick={() => setCreatingCategory(true)}>
+            + Nueva categoría
+          </Button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-hidden">

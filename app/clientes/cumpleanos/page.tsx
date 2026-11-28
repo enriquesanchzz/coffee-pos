@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
-import { DEFAULT_BRANCH_ID } from "@/lib/constants";
+import { requireAdminPage } from "@/lib/admin-page";
 import { getUpcomingBirthdays, type UpcomingBirthday } from "@/lib/birthdays";
 import { getBusinessSettings } from "@/lib/settings";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
@@ -56,9 +54,7 @@ const STATUS_STYLES = {
 } as const;
 
 export default async function CumpleanosPage() {
-  const employee = await getCurrentEmployee();
-  if (!employee) redirect("/");
-  if (resolveRoleName(employee, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
+  const employee = await requireAdminPage("/clientes/cumpleanos");
 
   const [birthdays, settings] = await Promise.all([getUpcomingBirthdays(30), getBusinessSettings()]);
   const couponsOn = settings.birthdayCustomerPercent > 0 || settings.birthdayPetPercent > 0;
@@ -76,8 +72,8 @@ export default async function CumpleanosPage() {
           ) : (
             <>
               Los cupones de cumpleaños están apagados:{" "}
-              <Link href="/configuracion/lealtad" className="underline">
-                actívalos en Configuración → Lealtad
+              <Link href="/clientes/lealtad" className="underline">
+                actívalos en Clientes → Lealtad
               </Link>
               .
             </>

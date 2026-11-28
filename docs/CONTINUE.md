@@ -205,9 +205,16 @@ y su plan de acción, implementados en la rama `claude/cool-maxwell-gud92q`.
   inferior con barra fija "Ver cuenta" y "Confirmar venta" fijo al fondo.
 - **D3 Promociones por horario y día**: los horarios pueden cruzar la
   medianoche (la parte de madrugada cuenta como el día anterior).
-- **D4 Acceso**: todo usa PIN salvo Administración, Empleados y
-  Configuración (candado en el menú; login con email/password y enlace de
-  regreso al POS).
+- **D4 Acceso** (actualizado nov 2026): POS y Caja usan PIN; **todo** lo de
+  la sección Administración del menú (Ventas, Clientes, Códigos de descuento,
+  Promociones, Reportes, Compras, Productos, Inventario, Empleados,
+  Configuración) exige rol ADMINISTRADOR con sesión de email + password —
+  `requireAdminPage(next)` en `lib/admin-page.ts` para páginas,
+  `requireAdminRole` (lib/permissions.ts) también exige password para quien
+  opera, y el login regresa a `?next=`. Lealtad y Recordatorios se movieron
+  de Configuración a Clientes (`/clientes/lealtad`, ajustes al pie de
+  `/clientes/recordatorios`) e Inventario a `/inventario/ajustes`; las rutas
+  viejas redirigen.
 - **D5 Recuperar password**: lo restablece otro administrador en Empleados
   (texto en el login). No hay recuperación por email.
 - **D6 Compras por presentación**: `Ingredient.purchasePresentationName/Size`

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useSettingsHeading } from "./settings-heading";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 
@@ -32,6 +33,7 @@ export function SettingsCard({
   const [error, setError] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const headingLevel = useSettingsHeading();
 
   // Éxito como toast (igual que el resto del sistema); el error se queda
   // en la tarjeta, junto a los campos que hay que corregir.
@@ -51,7 +53,7 @@ export function SettingsCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle as="h3">{title}</CardTitle>
+        <CardTitle as={headingLevel}>{title}</CardTitle>
         {description && <p className="text-sm text-muted-foreground">{description}</p>}
       </CardHeader>
       <CardContent className="flex flex-col gap-4">

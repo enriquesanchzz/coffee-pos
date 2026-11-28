@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
+import { requireAdminPage } from "@/lib/admin-page";
 import { getDiscountCodes } from "@/lib/discounts";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { DiscountCodesWorkspace } from "@/components/descuentos/discount-codes-workspace";
@@ -10,9 +10,7 @@ import { DiscountCodesWorkspace } from "@/components/descuentos/discount-codes-w
 export const metadata: Metadata = { title: "Códigos de descuento" };
 
 export default async function DescuentosPage() {
-  const employee = await getCurrentEmployee();
-  if (!employee) redirect("/");
-  if (resolveRoleName(employee, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
+  const employee = await requireAdminPage("/descuentos");
   if (!(await hasPermission(employee.id, DEFAULT_BRANCH_ID, "DESCUENTO_CODIGO_CREAR"))) {
     redirect("/administracion");
   }

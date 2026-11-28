@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import type { SaleOrderType, SaleStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
+import { requireAdminPage } from "@/lib/admin-page";
 import { getSaleReceiptDetail } from "@/lib/receipt";
 import { getSaleAdminExtras, saleFolio } from "@/lib/sales";
 import { PAYMENT_METHOD_LABELS } from "@/lib/settings-shared";
@@ -37,9 +37,7 @@ export default async function VentaDetallePage({
   params: Promise<{ saleId: string }>;
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const employee = await getCurrentEmployee();
-  if (!employee) redirect("/");
-  if (resolveRoleName(employee, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
+  const employee = await requireAdminPage("/ventas");
 
   const { saleId } = await params;
   const exists = await prisma.sale.findFirst({ where: { id: saleId, branchId: DEFAULT_BRANCH_ID }, select: { id: true } });

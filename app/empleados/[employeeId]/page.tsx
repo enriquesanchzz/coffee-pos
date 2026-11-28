@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { adminLoginHref } from "@/lib/admin-page";
 import { redirect } from "next/navigation";
 import { requirePasswordSession, resolveRoleName } from "@/lib/session";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
@@ -15,7 +16,7 @@ export default async function EditarEmpleadoPage({
   params: Promise<{ employeeId: string }>;
 }) {
   const actor = await requirePasswordSession();
-  if (!actor) redirect("/administracion/login");
+  if (!actor) redirect(adminLoginHref("/empleados"));
   if (resolveRoleName(actor, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
 
   const { employeeId } = await params;

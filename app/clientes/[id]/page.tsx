@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { DEFAULT_BRANCH_ID } from "@/lib/constants";
+import { requireAdminPage } from "@/lib/admin-page";
 import { getCustomerDetail, getKnownAllergenTags } from "@/lib/customers";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,9 +27,7 @@ export default async function DetalleClientePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const employee = await getCurrentEmployee();
-  if (!employee) redirect("/");
-  if (resolveRoleName(employee, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
+  const employee = await requireAdminPage("/clientes");
   if (!(await hasPermission(employee.id, DEFAULT_BRANCH_ID, "CLIENTE_CONFIGURAR"))) {
     redirect("/clientes");
   }

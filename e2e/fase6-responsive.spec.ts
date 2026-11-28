@@ -115,8 +115,8 @@ test.describe("Textos completos en cualquier ancho", () => {
     "/inventario",
     "/configuracion",
     "/configuracion/cobro",
-    "/configuracion/lealtad",
-    "/configuracion/inventario",
+    "/clientes/lealtad",
+    "/inventario/ajustes",
   ];
 
   test.beforeAll(async () => {

@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { getCurrentEmployee, resolveRoleName } from "@/lib/session";
-import { DEFAULT_BRANCH_ID } from "@/lib/constants";
+import { requireAdminPage } from "@/lib/admin-page";
 import { getCustomers } from "@/lib/customers";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -17,9 +15,7 @@ export default async function ClientesPage({
 }: {
   searchParams: Promise<{ q?: string; page?: string }>;
 }) {
-  const employee = await getCurrentEmployee();
-  if (!employee) redirect("/");
-  if (resolveRoleName(employee, DEFAULT_BRANCH_ID) !== "ADMINISTRADOR") redirect("/pos");
+  const employee = await requireAdminPage("/clientes");
 
   const params = await searchParams;
   const query = params.q?.trim() ?? "";
@@ -53,6 +49,10 @@ export default async function ClientesPage({
           ·{" "}
           <Link href="/clientes/recordatorios" className="underline">
             Recordatorios por WhatsApp
+          </Link>{" "}
+          ·{" "}
+          <Link href="/clientes/lealtad" className="underline">
+            Lealtad y niveles
           </Link>
         </p>
 

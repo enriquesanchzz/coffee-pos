@@ -180,7 +180,7 @@ test.describe.serial("Recordatorios (pantalla)", () => {
     const fullName = `Marta ${TAG}-${n}`;
 
     await loginAdmin(page);
-    await page.goto("/configuracion/recordatorios");
+    await page.goto("/clientes/recordatorios");
     await page.getByLabel("Mensaje", { exact: true }).fill("Hola {cliente}, te extrañamos en {negocio}");
     await page.getByRole("button", { name: "Guardar" }).click();
     await expect
