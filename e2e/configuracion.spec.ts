@@ -100,6 +100,7 @@ test.describe.serial("Configuración del sistema", () => {
     await loginPin(page, PIN.ana);
     await addProduct(page, "Latte", ["Chico", "Caliente"]);
     await page.getByRole("button", { name: "Cobrar" }).click();
+    await page.getByRole("button", { name: /^Cupón o descuento/ }).click();
     await page.getByRole("button", { name: "Manual" }).click();
     await page.fill("#manualValue", "50");
     await expect(page.getByText("El descuento manual no puede pasar del 10% del subtotal.")).toBeVisible();
@@ -136,8 +137,8 @@ test.describe.serial("Configuración del sistema", () => {
       await addProduct(page, "Latte", ["Chico", "Caliente"]);
       await page.getByRole("button", { name: "Cobrar" }).click();
       await expect(page.getByText("No se permite vender sin insumos suficientes.")).toBeVisible();
-      await expect(page.getByLabel(/^Cobrar de todos modos/)).toHaveCount(0);
-      await expect(page.getByRole("button", { name: /^(Cobrar \$|Faltan \$|Calculando…|Cobrando…)/ })).toBeDisabled();
+      await page.getByRole("button", { name: "Exacto" }).click();
+      await expect(page.getByRole("button", { name: "No se puede cobrar" })).toBeDisabled();
     } finally {
       await db.inventoryStock.update({
         where: { ingredientId_stockLocationId: MILK },

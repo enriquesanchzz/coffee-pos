@@ -9,7 +9,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { PaymentMethod, DiscountType, ManualDiscountReason } from "@prisma/client";
 import type { DomicilioOrigen } from "@prisma/client";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, Trash2, Users } from "lucide-react";
+import { ChevronDown, ChevronLeft, Trash2, TriangleAlert, Users } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -182,6 +182,10 @@ export function CheckoutForm({
     setOfflineRetry(false);
   }, [lines]);
   const [allowShortage, setAllowShortage] = useState(false);
+  // Zona A: desglose del Total (plegado por defecto). Zona E: cupón o
+  // descuento (plegado; ver adjustVisible).
+  const [showBreakdown, setShowBreakdown] = useState(false);
+  const [adjustOpen, setAdjustOpen] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
   useEffect(() => {
@@ -464,8 +468,12 @@ export function CheckoutForm({
     });
   }
 
-  function handleConfirm() {
+  // overrideShortage: el cajero tocó "Cobrar … de todos modos" (zona G) —
+  // confirma la venta con faltantes de insumo.
+  function handleConfirm(overrideShortage = false) {
     setError(null);
+    const allowShortageNow = allowShortage || overrideShortage;
+    if (overrideShortage) setAllowShortage(true);
 
     // "A domicilio" exige cliente (cambios sección POS) — sin cliente no
     // hay a quién entregarle ni datos de contacto si algo sale mal.
@@ -541,7 +549,7 @@ export function CheckoutForm({
             customerId: selectedCustomer?.id,
             discountCodeId,
             manualDiscount,
-            allowShortage,
+            allowShortage: allowShortageNow,
             clientRequestId,
           });
         } else {
@@ -560,7 +568,7 @@ export function CheckoutForm({
             customerId: selectedCustomer?.id,
             discountCodeId,
             manualDiscount,
-            allowShortage,
+            allowShortage: allowShortageNow,
             clientRequestId,
           });
           saleId = created.id;
@@ -614,11 +622,12 @@ export function CheckoutForm({
   // WiFi nunca se desconectó).
   useEffect(() => {
     if (!offlineRetry) return;
-    const interval = setInterval(handleConfirm, 5000);
-    window.addEventListener("online", handleConfirm);
+    const retry = () => handleConfirm();
+    const interval = setInterval(retry, 5000);
+    window.addEventListener("online", retry);
     return () => {
       clearInterval(interval);
-      window.removeEventListener("online", handleConfirm);
+      window.removeEventListener("online", retry);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [offlineRetry]);
@@ -628,7 +637,7 @@ export function CheckoutForm({
   const confirmDisabled =
     isPending ||
     isPreviewLoading ||
-    (shortages.length > 0 && !allowShortage) ||
+    (shortages.length > 0 && !allowShortage && !canOverrideShortage) ||
     (isHighTip && !confirmHighTip) ||
     (tipMode === "MONTO" && Number(tipCustom) < 0) ||
     verifiedSubtotal === null ||
@@ -658,15 +667,43 @@ export function CheckoutForm({
   // está deshabilitado en vez de invitar a cobrar.
   const missingCashCents =
     !isSplit && method === "EFECTIVO" ? totalToCollectCents - (cashReceived === "" ? 0 : cashReceivedCents) : 0;
+  // Faltantes de insumo: el botón mismo pide la confirmación (zona F/G).
+  const hasUnconfirmedShortage = shortages.length > 0 && !allowShortage;
+  const needsShortageConfirm = hasUnconfirmedShortage && canOverrideShortage;
   const confirmLabel = isPending
     ? "Cobrando…"
     : isPreviewLoading || verifiedSubtotal === null
       ? "Calculando…"
       : missingCashCents > 0
         ? `Faltan ${formatCurrency(missingCashCents / 100)}`
-        : isSplit
-          ? `Cobrar ${formatCurrency(totalToCollect)} en ${splitRows!.length} ${splitRows!.length === 1 ? "pago" : "pagos"}`
-          : `Cobrar ${formatCurrency(totalToCollect)} ${methodPhrase}`;
+        : hasUnconfirmedShortage && !canOverrideShortage
+          ? "No se puede cobrar"
+          : needsShortageConfirm
+            ? `Cobrar ${formatCurrency(totalToCollect)} de todos modos`
+            : isSplit
+              ? `Cobrar ${formatCurrency(totalToCollect)} en ${splitRows!.length} ${splitRows!.length === 1 ? "pago" : "pagos"}`
+              : `Cobrar ${formatCurrency(totalToCollect)} ${methodPhrase}`;
+
+  // Zona A: de qué cuenta se trata.
+  const ORDER_CONTEXT: Record<string, string> = { CONSUMO_LOCAL: "Mesa", PARA_LLEVAR: "Para llevar", DOMICILIO: "A domicilio" };
+  const checkoutContext =
+    orderType === "CONSUMO_LOCAL"
+      ? `Mesa ${tableNumber || "—"}`
+      : `${ORDER_CONTEXT[orderType] ?? ""}${tableNumber ? ` · ${tableNumber}` : ""}${selectedCustomer ? ` · ${selectedCustomer.name}` : ""}`;
+
+  // Zona E: abierta si el cajero la abrió o si hay un descuento a medio
+  // capturar (si se plegara, el botón de cobro quedaría deshabilitado sin
+  // que se vea por qué).
+  const adjustForcedOpen =
+    (discountMode === "CODIGO" && (!resolvedCode || codeError !== null)) ||
+    (discountMode === "MANUAL" && (!authorizingPin || manualDiscountError !== null));
+  const adjustVisible = adjustOpen || adjustForcedOpen;
+  const adjustSummary =
+    discountPreview > 0
+      ? `−${formatCurrency(discountPreview)}${discountMode === "CODIGO" && resolvedCode ? ` · ${resolvedCode.label}` : ""}`
+      : customerCoupons.length > 0
+        ? `${customerCoupons.length} ${customerCoupons.length === 1 ? "cupón disponible" : "cupones disponibles"}`
+        : "";
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     if (e.key !== "Enter") return;
@@ -676,244 +713,92 @@ export function CheckoutForm({
     if (["TEXTAREA", "BUTTON", "A", "SELECT"].includes(target.tagName)) return;
     if (confirmDisabled) return;
     e.preventDefault();
-    handleConfirm();
+    handleConfirm(needsShortageConfirm);
   }
 
   return (
     <div className="flex flex-col gap-4 p-4" onKeyDown={handleKeyDown}>
-      <div className="flex items-center justify-between">
-        <Button type="button" variant="outline" onClick={onCancel} disabled={isPending}>
-          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-          Atrás
-        </Button>
-        <p className="font-semibold">Cobrar</p>
-        <span />
-      </div>
-
-      {activeTabId && (
-        <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
-          Cerrando {orderType === "CONSUMO_LOCAL" ? `cuenta de Mesa ${tableNumber || "—"}` : `pedido en espera${tableNumber ? ` (${tableNumber})` : ""}`} · ya registrado: {formatCurrency(activeTabBaseTotal ?? 0)}
-          {lines.length > 0 && ` + esta ronda: ${formatCurrency(subtotal())}`}
-        </p>
-      )}
-
-      {customerCoupons.length > 0 && (
-        <div className="flex flex-col gap-2 rounded-md border border-primary/40 bg-primary/5 p-3">
-          <p className="text-sm font-medium">Cupones de {selectedCustomer?.name}</p>
-          <div className="flex flex-wrap gap-2">
-            {customerCoupons.map((coupon) => {
-              const isApplied = discountMode === "CODIGO" && resolvedCode?.id === coupon.id;
-              return (
-                <SegmentedButton
-                  key={coupon.id}
-                  selected={isApplied}
-                  className="flex-none"
-                  onClick={() => (isApplied ? (setDiscountMode("NINGUNO"), resetDiscountState()) : applyCustomerCoupon(coupon))}
-                >
-                  {coupon.label}
-                  <span className="font-mono text-xs opacity-70">{coupon.code}</span>
-                </SegmentedButton>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      <div>
-        <p className="mb-2 text-sm font-medium">Descuento</p>
-        <SegmentedControl
-          label="Descuento"
-          options={discountModes}
-          value={discountMode}
-          onChange={(mode) => {
-            setDiscountMode(mode);
-            resetDiscountState();
-          }}
-          className="flex-nowrap"
-        />
-      </div>
-
-      {discountMode === "CODIGO" && (
-        <div className="flex flex-col gap-2 rounded-md border border-border p-3">
-          <div className="flex items-end gap-2">
-            <div className="flex flex-1 flex-col gap-1">
-              <Label htmlFor="code">Código</Label>
-              <Input
-                id="code"
-                value={codeInput}
-                onChange={(e) => {
-                  setCodeInput(e.target.value);
-                  setResolvedCode(null);
-                }}
-                onKeyDown={(e) => {
-                  // Enter aquí valida el código, no intenta cobrar — por
-                  // eso se detiene antes de llegar al onKeyDown del panel.
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (!isCheckingCode && codeInput) handleCheckCode();
-                  }
-                }}
-                placeholder="ej. VERANO10"
-              />
-            </div>
-            <Button type="button" variant="outline" onClick={handleCheckCode} disabled={isCheckingCode || !codeInput}>
-              {isCheckingCode ? "Validando…" : "Validar"}
-            </Button>
-          </div>
-          {codeError && <Alert variant="error">{codeError}</Alert>}
-          {resolvedCode && !codeError && (
-            <p className="text-sm text-muted-foreground">
-              Válido — {resolvedCode.label}
-              {isCodeAmountLoading || codeAmount === null ? ", calculando…" : `, descuento de ${formatCurrency(discountPreview)}`}
-            </p>
-          )}
-        </div>
-      )}
-
-      {discountMode === "MANUAL" && (
-        <div className="flex flex-col gap-2 rounded-md border border-border p-3">
-          <div className="flex gap-2">
-            <div className="flex flex-1 flex-col gap-1">
-              <Label htmlFor="manualType">Tipo</Label>
-              <Select id="manualType" value={manualType} onChange={(e) => setManualType(e.target.value as DiscountType)}>
-                {Object.entries(discountTypeLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="flex w-28 flex-col gap-1">
-              <Label htmlFor="manualValue">Valor</Label>
-              <Input
-                id="manualValue"
-                type="number"
-                min="0"
-                step={manualType === "PORCENTAJE" ? "1" : "0.01"}
-                value={manualValue}
-                onChange={(e) => setManualValue(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="manualReason">Motivo</Label>
-            <Select
-              id="manualReason"
-              value={manualReason}
-              onChange={(e) => setManualReason(e.target.value as ManualDiscountReason)}
+      {/* Zona A (auditoría UI/UX MF-4): fija arriba — Atrás, de qué cuenta se
+          trata y el Total a cobrar, siempre a la vista al capturar el pago.
+          Tocar el Total abre el desglose. */}
+      <div className="sticky top-0 z-10 -mx-4 -mt-4 flex flex-col gap-2 border-b border-border bg-background px-4 pb-3 pt-4">
+        <div className="flex items-center gap-3">
+          <Button type="button" variant="outline" className="h-11" onClick={onCancel} disabled={isPending}>
+            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+            Atrás
+          </Button>
+          <div className="flex min-w-0 flex-1 flex-col items-end">
+            <p className="max-w-full truncate text-sm text-muted-foreground">{checkoutContext}</p>
+            <button
+              type="button"
+              onClick={() => setShowBreakdown((v) => !v)}
+              aria-expanded={showBreakdown}
+              aria-controls="checkout-breakdown"
+              className="flex min-h-11 items-center gap-1 rounded-md text-3xl font-bold tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
             >
-              {Object.entries(manualDiscountReasonLabels).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </Select>
+              <span className="sr-only">Total a cobrar: </span>
+              {isPreviewLoading || verifiedSubtotal === null ? (
+                <span className="inline-block h-8 w-28 animate-pulse rounded-md bg-muted" aria-label="Calculando total" />
+              ) : (
+                formatCurrency(totalToCollect)
+              )}
+              <ChevronDown
+                className={cn("h-5 w-5 text-muted-foreground transition-transform", showBreakdown && "rotate-180")}
+                aria-hidden="true"
+              />
+              <span className="sr-only">{showBreakdown ? "Ocultar desglose" : "Ver desglose"}</span>
+            </button>
           </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="authorizingPin">PIN de quien autoriza</Label>
-            <Input
-              id="authorizingPin"
-              type="password"
-              inputMode="numeric"
-              autoComplete="off"
-              placeholder="PIN de un empleado con permiso"
-              value={authorizingPin}
-              onChange={(e) => setAuthorizingPin(e.target.value)}
-            />
-          </div>
-          {manualDiscountError && <Alert variant="error">{manualDiscountError}</Alert>}
         </div>
-      )}
-
-      <div className="flex flex-col gap-1 border-t border-border pt-2 text-sm">
-        <div className="flex items-center justify-between text-muted-foreground">
-          <span>Subtotal</span>
-          <span>{formatCurrency(rawSubtotal)}</span>
-        </div>
-        {appliedPromotions.map((promo) => (
-          <div key={promo.name} className="flex items-center justify-between text-success">
-            <span>Promoción: {promo.name}</span>
-            <span>ya incluye −{formatCurrency(promo.saving)}</span>
+        {showBreakdown ? (
+          <div id="checkout-breakdown" className="flex flex-col gap-1 text-sm">
+            {activeTabId && (
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>Ya registrado{lines.length > 0 ? " + esta ronda" : ""}</span>
+                <span className="tabular-nums">
+                  {formatCurrency(activeTabBaseTotal ?? 0)}
+                  {lines.length > 0 && ` + ${formatCurrency(subtotal())}`}
+                </span>
+              </div>
+            )}
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span>Subtotal</span>
+              <span className="tabular-nums">{formatCurrency(rawSubtotal)}</span>
+            </div>
+            {appliedPromotions.map((promo) => (
+              <div key={promo.name} className="flex items-center justify-between text-success">
+                <span>Promoción: {promo.name}</span>
+                <span className="tabular-nums">ya incluye −{formatCurrency(promo.saving)}</span>
+              </div>
+            ))}
+            {discountPreview > 0 && (
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>Descuento</span>
+                <span className="tabular-nums">−{formatCurrency(discountPreview)}</span>
+              </div>
+            )}
+            {tipValue > 0 && (
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>Propina</span>
+                <span className="tabular-nums">+{formatCurrency(tipValue)}</span>
+              </div>
+            )}
           </div>
-        ))}
-        {discountPreview > 0 && (
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span>Descuento</span>
-            <span>-{formatCurrency(discountPreview)}</span>
-          </div>
-        )}
-        {tipValue > 0 && (
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span>Propina</span>
-            <span>+{formatCurrency(tipValue)}</span>
-          </div>
-        )}
-        <div className="flex items-center justify-between pt-1">
-          <span className="text-base font-semibold">Total</span>
-          <span className="text-3xl font-bold">{formatCurrency(totalToCollect)}</span>
-        </div>
-        {taxIncluded > 0 && (
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>Incluye IVA ({settings.taxRatePercent}%)</span>
-            <span>{formatCurrency(taxIncluded)}</span>
-          </div>
-        )}
-      </div>
-
-      <div>
-        <p className="mb-2 text-sm font-medium">Propina</p>
-        {isSplit ? (
-          <p className="text-xs text-muted-foreground">En pago dividido cada persona deja su propina en su renglón (abajo).</p>
         ) : (
-        <>
-        <div role="group" aria-label="Propina" className="flex flex-wrap gap-2">
-          <SegmentedButton selected={tipMode === "NINGUNA"} className="flex-none" onClick={() => setTipMode("NINGUNA")}>
-            Sin propina
-          </SegmentedButton>
-          {settings.tipPercents.map((pct) => (
-            <SegmentedButton
-              key={pct}
-              selected={tipMode === "PORCENTAJE" && tipPercent === pct}
-              className="flex-none"
-              onClick={() => {
-                setTipMode("PORCENTAJE");
-                setTipPercent(pct);
-              }}
-            >
-              {pct}%
-            </SegmentedButton>
-          ))}
-          <SegmentedButton selected={tipMode === "MONTO"} className="flex-none" onClick={() => setTipMode("MONTO")}>
-            Monto
-          </SegmentedButton>
-        </div>
-        {tipMode === "MONTO" && (
-          <Input
-            className="mt-2"
-            type="number"
-            min="0"
-            step="0.01"
-            inputMode="decimal"
-            placeholder="Monto de la propina"
-            aria-label="Monto de la propina"
-            value={tipCustom}
-            onChange={(e) => {
-              setTipCustom(e.target.value);
-              setConfirmHighTip(false);
-            }}
-          />
+          (appliedPromotions.length > 0 || discountPreview > 0 || tipValue > 0) && (
+            <p className="text-right text-sm text-muted-foreground">
+              {[
+                ...appliedPromotions.map((promo) => `Promoción: ${promo.name} −${formatCurrency(promo.saving)}`),
+                ...(discountPreview > 0 ? [`Descuento −${formatCurrency(discountPreview)}`] : []),
+                ...(tipValue > 0 ? [`Propina +${formatCurrency(tipValue)}`] : []),
+              ].join(" · ")}
+            </p>
+          )
         )}
-        {tipMode === "MONTO" && Number(tipCustom) < 0 && <FieldError>La propina no puede ser negativa.</FieldError>}
-        </>
-        )}
-        {isHighTip && (
-          <label className="mt-2 flex items-center gap-2 text-sm text-destructive">
-            <input type="checkbox" checked={confirmHighTip} onChange={(e) => setConfirmHighTip(e.target.checked)} />
-            {isSplit
-              ? `Confirmo propinas de más del ${settings.highTipThresholdPercent}% de la parte de alguien`
-              : `Confirmo una propina de ${formatCurrency(tipValue)} (más del ${settings.highTipThresholdPercent}% de la cuenta)`}
-          </label>
+        {taxIncluded > 0 && (
+          <p className="text-right text-sm text-muted-foreground">
+            Incluye IVA ({settings.taxRatePercent}%) <span className="tabular-nums">{formatCurrency(taxIncluded)}</span>
+          </p>
         )}
       </div>
 
@@ -922,11 +807,11 @@ export function CheckoutForm({
           <p className="text-sm font-medium">Método de pago</p>
           {paymentMethods.length > 1 &&
             (isSplit ? (
-              <Button type="button" variant="outline" size="sm" className="h-10" onClick={cancelSplitPayment}>
+              <Button type="button" variant="ghost" className="h-11" onClick={cancelSplitPayment}>
                 Un solo método
               </Button>
             ) : (
-              <Button type="button" variant="outline" size="sm" className="h-10" onClick={startSplitPayment}>
+              <Button type="button" variant="ghost" className="h-11" onClick={startSplitPayment}>
                 <Users className="h-4 w-4" aria-hidden="true" />
                 Dividir el pago
               </Button>
@@ -1160,7 +1045,7 @@ export function CheckoutForm({
           </div>
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Cambio a entregar</span>
-            <span className="text-lg font-semibold">
+            <span className="text-3xl font-bold tabular-nums">
               {cashReceived !== "" && cashReceivedCents >= totalToCollectCents
                 ? formatCurrency((cashReceivedCents - totalToCollectCents) / 100)
                 : "—"}
@@ -1169,47 +1054,246 @@ export function CheckoutForm({
         </div>
       )}
 
-      {error && <Alert variant="error">{error}</Alert>}
-      {offlineRetry && (
-        <Alert variant="warning">Sin conexión. La venta se envía sola al volver; no la cobres otra vez.</Alert>
+      <div>
+        <p className="mb-2 text-sm font-medium">Propina</p>
+        {isSplit ? (
+          <p className="text-xs text-muted-foreground">En pago dividido cada persona deja su propina en su renglón (abajo).</p>
+        ) : (
+        <>
+        <div role="group" aria-label="Propina" className="flex flex-wrap gap-2">
+          <SegmentedButton selected={tipMode === "NINGUNA"} className="flex-none" onClick={() => setTipMode("NINGUNA")}>
+            Sin propina
+          </SegmentedButton>
+          {settings.tipPercents.map((pct) => (
+            <SegmentedButton
+              key={pct}
+              selected={tipMode === "PORCENTAJE" && tipPercent === pct}
+              className="flex-none"
+              onClick={() => {
+                setTipMode("PORCENTAJE");
+                setTipPercent(pct);
+              }}
+            >
+              {pct}%
+            </SegmentedButton>
+          ))}
+          <SegmentedButton selected={tipMode === "MONTO"} className="flex-none" onClick={() => setTipMode("MONTO")}>
+            Monto
+          </SegmentedButton>
+        </div>
+        {tipMode === "MONTO" && (
+          <Input
+            className="mt-2"
+            type="number"
+            min="0"
+            step="0.01"
+            inputMode="decimal"
+            placeholder="Monto de la propina"
+            aria-label="Monto de la propina"
+            value={tipCustom}
+            onChange={(e) => {
+              setTipCustom(e.target.value);
+              setConfirmHighTip(false);
+            }}
+          />
+        )}
+        {tipMode === "MONTO" && Number(tipCustom) < 0 && <FieldError>La propina no puede ser negativa.</FieldError>}
+        </>
+        )}
+        {isHighTip && (
+          <label className="mt-2 flex items-center gap-2 text-sm text-destructive">
+            <input type="checkbox" checked={confirmHighTip} onChange={(e) => setConfirmHighTip(e.target.checked)} />
+            {isSplit
+              ? `Confirmo propinas de más del ${settings.highTipThresholdPercent}% de la parte de alguien`
+              : `Confirmo una propina de ${formatCurrency(tipValue)} (más del ${settings.highTipThresholdPercent}% de la cuenta)`}
+          </label>
+        )}
+      </div>
+
+      {/* Zona E: cupón o descuento, plegado porque es lo menos frecuente.
+          Se queda abierto mientras haya un descuento a medio capturar. */}
+      <div className="rounded-md border border-border">
+        <button
+          type="button"
+          onClick={() => setAdjustOpen((v) => !v)}
+          aria-expanded={adjustVisible}
+          aria-controls="checkout-adjust"
+          disabled={adjustForcedOpen}
+          className="flex min-h-11 w-full items-center justify-between gap-2 rounded-md px-3 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:hover:bg-transparent"
+        >
+          <span>Cupón o descuento</span>
+          <span className="flex items-center gap-2 font-normal text-muted-foreground">
+            {adjustSummary}
+            <ChevronDown className={cn("h-4 w-4 transition-transform", adjustVisible && "rotate-180")} aria-hidden="true" />
+          </span>
+        </button>
+        {adjustVisible && (
+          <div id="checkout-adjust" className="flex flex-col gap-4 border-t border-border p-3">
+      {customerCoupons.length > 0 && (
+        <div className="flex flex-col gap-2 rounded-md border border-primary/40 bg-primary/5 p-3">
+          <p className="text-sm font-medium">Cupones de {selectedCustomer?.name}</p>
+          <div className="flex flex-wrap gap-2">
+            {customerCoupons.map((coupon) => {
+              const isApplied = discountMode === "CODIGO" && resolvedCode?.id === coupon.id;
+              return (
+                <SegmentedButton
+                  key={coupon.id}
+                  selected={isApplied}
+                  className="flex-none"
+                  onClick={() => (isApplied ? (setDiscountMode("NINGUNO"), resetDiscountState()) : applyCustomerCoupon(coupon))}
+                >
+                  {coupon.label}
+                  <span className="font-mono text-xs opacity-70">{coupon.code}</span>
+                </SegmentedButton>
+              );
+            })}
+          </div>
+        </div>
       )}
 
-      {shortages.length > 0 && (
-        <div className="flex flex-col gap-2 rounded-md border border-destructive/50 bg-destructive/5 p-3 text-sm">
-          <p role="alert" className="font-medium text-destructive">Insumos insuficientes según el inventario</p>
-          <ul className="list-disc pl-5 text-muted-foreground">
-            {shortages.map((s) => (
-              <li key={s.ingredientId}>
-                {s.name}: faltan {s.missing} {s.unit}
-              </li>
-            ))}
-          </ul>
-          {canOverrideShortage ? (
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={allowShortage}
-                onChange={(e) => setAllowShortage(e.target.checked)}
+      <div>
+        <p className="mb-2 text-sm font-medium">Descuento</p>
+        <SegmentedControl
+          label="Descuento"
+          options={discountModes}
+          value={discountMode}
+          onChange={(mode) => {
+            setDiscountMode(mode);
+            resetDiscountState();
+          }}
+          className="flex-nowrap"
+        />
+      </div>
+
+      {discountMode === "CODIGO" && (
+        <div className="flex flex-col gap-2 rounded-md border border-border p-3">
+          <div className="flex items-end gap-2">
+            <div className="flex flex-1 flex-col gap-1">
+              <Label htmlFor="code">Código</Label>
+              <Input
+                id="code"
+                value={codeInput}
+                onChange={(e) => {
+                  setCodeInput(e.target.value);
+                  setResolvedCode(null);
+                }}
+                onKeyDown={(e) => {
+                  // Enter aquí valida el código, no intenta cobrar — por
+                  // eso se detiene antes de llegar al onKeyDown del panel.
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!isCheckingCode && codeInput) handleCheckCode();
+                  }
+                }}
+                placeholder="ej. VERANO10"
               />
-              Cobrar de todos modos. Inventario lo verá como faltante para ajustarlo después.
-            </label>
-          ) : (
-            <p className="text-destructive">
-              {settings.shortagePolicy === "BLOQUEAR"
-                ? "No se permite vender sin insumos suficientes. Quita esos productos o registra la entrada de inventario."
-                : "Solo un gerente o administrador puede confirmar esta venta."}
+            </div>
+            <Button type="button" variant="outline" onClick={handleCheckCode} disabled={isCheckingCode || !codeInput}>
+              {isCheckingCode ? "Validando…" : "Validar"}
+            </Button>
+          </div>
+          {codeError && <Alert variant="error">{codeError}</Alert>}
+          {resolvedCode && !codeError && (
+            <p className="text-sm text-muted-foreground">
+              Válido — {resolvedCode.label}
+              {isCodeAmountLoading || codeAmount === null ? ", calculando…" : `, descuento de ${formatCurrency(discountPreview)}`}
             </p>
           )}
         </div>
       )}
 
+      {discountMode === "MANUAL" && (
+        <div className="flex flex-col gap-2 rounded-md border border-border p-3">
+          <div className="flex gap-2">
+            <div className="flex flex-1 flex-col gap-1">
+              <Label htmlFor="manualType">Tipo</Label>
+              <Select id="manualType" value={manualType} onChange={(e) => setManualType(e.target.value as DiscountType)}>
+                {Object.entries(discountTypeLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="flex w-28 flex-col gap-1">
+              <Label htmlFor="manualValue">Valor</Label>
+              <Input
+                id="manualValue"
+                type="number"
+                min="0"
+                step={manualType === "PORCENTAJE" ? "1" : "0.01"}
+                value={manualValue}
+                onChange={(e) => setManualValue(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="manualReason">Motivo</Label>
+            <Select
+              id="manualReason"
+              value={manualReason}
+              onChange={(e) => setManualReason(e.target.value as ManualDiscountReason)}
+            >
+              {Object.entries(manualDiscountReasonLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="authorizingPin">PIN de quien autoriza</Label>
+            <Input
+              id="authorizingPin"
+              type="password"
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="PIN de un empleado con permiso"
+              value={authorizingPin}
+              onChange={(e) => setAuthorizingPin(e.target.value)}
+            />
+          </div>
+          {manualDiscountError && <Alert variant="error">{manualDiscountError}</Alert>}
+        </div>
+      )}
+
+          </div>
+        )}
+      </div>
+
       {/* Fijo al fondo del panel con scroll: en celular el formulario es
           más alto que la pantalla y "Confirmar" quedaba fuera de vista. */}
-      <div className="sticky bottom-0 -mx-4 -mb-4 border-t border-border bg-background p-4">
+      <div className="sticky bottom-0 -mx-4 -mb-4 flex flex-col gap-3 border-t border-border bg-background p-4">
+        {/* Zona F junto a la acción: errores, sin conexión y faltantes de
+            insumo siempre a la vista del botón que los resuelve. */}
+        {error && <Alert variant="error">{error}</Alert>}
+        {offlineRetry && (
+          <Alert variant="warning">Sin conexión. La venta se envía sola al volver; no la cobres otra vez.</Alert>
+        )}
+        {shortages.length > 0 && !allowShortage && (
+          <Alert variant="warning">
+            <p className="flex items-start gap-2">
+              <TriangleAlert className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+              <span>
+                <span className="font-semibold">Insumos insuficientes según el inventario: </span>
+                {shortages.map((s) => `${s.name}: faltan ${s.missing} ${s.unit}`).join(" · ")}.{" "}
+                {canOverrideShortage
+                  ? "Puedes cobrar; Inventario lo verá como faltante para ajustarlo después."
+                  : settings.shortagePolicy === "BLOQUEAR"
+                    ? "No se permite vender sin insumos suficientes. Quita esos productos o registra la entrada de inventario."
+                    : "Solo un gerente o administrador puede confirmar esta venta."}
+              </span>
+            </p>
+          </Alert>
+        )}
         <Button
           size="lg"
-          className={cn("w-full tabular-nums", posAccentClass)}
-          onClick={handleConfirm}
+          className={cn(
+            "w-full tabular-nums",
+            needsShortageConfirm ? "bg-warning text-warning-foreground hover:bg-warning/90" : posAccentClass
+          )}
+          onClick={() => handleConfirm(needsShortageConfirm)}
           disabled={confirmDisabled}
         >
           {confirmLabel}
