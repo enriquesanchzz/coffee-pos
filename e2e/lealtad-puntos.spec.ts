@@ -122,6 +122,7 @@ test.describe.serial("Lealtad por puntos", () => {
     await pickOption(page.locator("#customer"), customerName, new RegExp(`^${customerName}`));
     await addProduct(page, PET_PRODUCT);
     await page.getByRole("button", { name: "Cobrar" }).click();
+    await page.getByRole("button", { name: /^Cupón o descuento/ }).click();
     await page.getByRole("button", { name: new RegExp(couponCode) }).click();
     await expect(page.getByText("Este cupón es solo para productos de Cafetería.")).toBeVisible();
     await page.getByRole("button", { name: "Exacto" }).click();

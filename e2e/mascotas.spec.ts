@@ -347,6 +347,10 @@ test.describe.serial("Mascotas en el perfil y en caja", () => {
     await expect(page.getByText("🎂 ¡Hoy cumple Rocky!")).toBeVisible();
     await addProduct(page, "Latte", ["Chico", "Caliente"]);
     await page.getByRole("button", { name: "Cobrar" }).click();
+    // Plegado, el cobro avisa que hay cupón; al abrirlo aparece.
+    const adjust = page.getByRole("button", { name: /^Cupón o descuento/ });
+    await expect(adjust).toContainText(/cup(ón|ones) disponibles?/);
+    await adjust.click();
     await expect(page.getByRole("button", { name: new RegExp(coupon!.code) })).toBeVisible();
 
     await loginAdmin(page);

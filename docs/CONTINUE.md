@@ -104,8 +104,27 @@ Hechos los 8 quick wins (pruebas en `e2e/ui-quick-wins.spec.ts`):
 - Con efectivo sin capturar, el botón final dice "Faltan $X" (antes decía
   "Cobrar $X" deshabilitado).
 
-Pendientes MF-3 (alturas de 44/48 px en todo el POS), MF-4 (panel de cobro
-por zonas) y MF-5 (cabecera compacta del carrito).
+**MF-4, panel de cobro por zonas (rama `ui-cobro-zonas`)** en
+`checkout-form.tsx`:
+
+- A (fija arriba): Atrás, contexto ("Mesa 4", "Para llevar · Juan") y Total
+  en 30 px; tocarlo abre el desglose (`#checkout-breakdown`). Plegado se
+  resume en una línea (promociones, descuento, propina) e IVA.
+- B método → C efectivo (cambio en 30 px) → D propina → E "Cupón o
+  descuento" plegable (muestra "N cupones disponibles" o el descuento
+  aplicado; se queda abierto mientras haya un código/descuento manual a
+  medio capturar) → G botón fijo abajo.
+- F (errores, sin conexión, faltantes) vive en la barra fija, encima del
+  botón. Los faltantes ya no usan casilla: el botón dice "Cobrar $X de todos
+  modos" (color warning) o "No se puede cobrar" según la política.
+- Criterio verificado en e2e: venta en efectivo en 2 toques (Exacto,
+  Cobrar) con Total y botón a la vista en 1024 × 768.
+- Se mantuvo: billetes rápidos que **suman** (el documento proponía que
+  reemplazaran el monto) y sin autofoco en "Recibido" (el panel se monta
+  oculto junto con el carrito y robaría el foco).
+
+Pendientes MF-3 (alturas de 44/48 px en todo el POS) y MF-5 (cabecera
+compacta del carrito).
 
 ## Auditoría de seguridad y procesos (noviembre 2026, rama `auditoria-seguridad`)
 

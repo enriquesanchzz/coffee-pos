@@ -15,10 +15,8 @@ test.describe("QA-003 stock insuficiente", () => {
       await page.getByRole("button", { name: "Cobrar" }).click();
       await expect(page.getByText("Leche entera: faltan 180 ml")).toBeVisible();
       await page.getByRole("button", { name: "Exacto" }).click();
-      await expect(page.getByRole("button", { name: /^(Cobrar \$|Faltan \$|Calculando…|Cobrando…)/ })).toBeDisabled();
-
-      await page.getByLabel(/^Cobrar de todos modos/).check();
-      await page.getByRole("button", { name: /^(Cobrar \$|Faltan \$|Calculando…|Cobrando…)/ }).click();
+      // Sin casilla: el botón mismo confirma la venta con faltantes.
+      await page.getByRole("button", { name: /^Cobrar \$[\d,.]+ de todos modos$/ }).click();
       await expectSaleRegistered(page);
       expect(await stockOf("ing-leche")).toBe(-180);
 
